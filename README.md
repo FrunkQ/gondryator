@@ -9,7 +9,7 @@ The originals, which you should watch first (and then again):
 - 🚆 **Star Guitar**, The Chemical Brothers (2002): [the official video](https://www.youtube.com/watch?v=0S43IwBF0uM)
 - 🕺 **Around the World**, Daft Punk (1997): [the official video](https://www.youtube.com/watch?v=K0HSD_i2DvA)
 
-🥽 Got a headset? Hit **VR** and take the window seat. Turn your head and the music turns with you: the beats always land wherever you look.
+🥽 Coming in V2: a native VR app on Steam, so you can take the window seat for real. Turn your head and the beats land wherever you look.
 
 Open source, public domain, and dedicated to him. Take it, play with it, make it dance.
 

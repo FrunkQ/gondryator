@@ -41,7 +41,7 @@ Everything is procedural: no textures or models are downloaded.
 - **Light**: physical sky with scattering and clouds that moves from morning to evening, a raking sun with soft shadows that follow the train, reflections from the sky, ACES tone mapping, motion blur on near scenery from the train's real speed, film grain and vignette. Carriage windows have glass with dust, and raindrops that refract the view and streak backwards in breakdowns. Swaying grass tufts beside the line, leafy tree crowns.
 - **Stage pack**: polished dance floor whose tiles light up on the beat, a mirror ball, eight moving heads with coloured beams that sweep in patterns per section and flash on kicks, glowing stair nosings, metal robots.
 - **Effects director** (`src/render/fx.ts`): every section gets a look from the pack's cycle (Star Guitar starts photographic and turns the dial further each section). Kicks punch the frame and bloom the lights, snares split the colours, the palette rolls with the music. Looks: Clean, Prism (RGB split, glow), Trip (surfaces repainted in flowing colour, buildings lean and squash to the beat, a sunburst sky), Kaleidoscope, Liquid (flowing warp, echo, rain), Thermal (posterised false colour), Echo (trails), Fold (the sky mirrors the ground about a tilting horizon). Section changes glitch.
-- **VR**: where the browser supports WebXR (`immersive-vr`), a VR button appears in the bar. On a WebGPU browser it first switches to the WebGL2 renderer (one reload, then tap again), because three's WebXR path needs it. In the headset, head tracking replaces drag-to-look and the refocusing steers the music's objects to wherever you turn; post effects are skipped in the headset.
+- **VR (experimental, browser)**: where the browser supports WebXR (`immersive-vr`), a VR button appears in the bar. On a WebGPU browser it first switches to the WebGL2 renderer (one reload, then tap again), because three's WebXR path needs it. In the headset, head tracking replaces drag-to-look and the refocusing steers the music's objects to wherever you turn; post effects are skipped in the headset.
 - Each pack links to the official video that inspired it (in the credits line).
 - Press **X** or the ✦ button to lock a look. URL switches: `?fx=off`, `?fx=kaleido`, `?noshadow`, `?nosky`, `?plain`, `?ao` (ambient occlusion, off by default). Resolution adapts to keep the frame rate up.
 - Testing: `?virtual` runs the show on a fixed 1/30 s step per frame so slow machines still see every moment; `?start=30` jumps there. `node tools/e2e.mjs --virtual --query "start=30&fx=trip" --shots 33` renders a frame at 33 s.
@@ -74,3 +74,12 @@ Frame rate could not be measured meaningfully here (software rendering: 11 to 40
 - **Real music:** no network access to fetch test music, so everything was tuned on synthetic tracks. Expect lower accuracy on dense real mixes, especially lead notes and snares.
 - `replicate` / `loop-layer` spawn modes, `dolly-forward` / `locked-off` rigs, WebXR, glTF assets in packs. The Around the World troupes are simple box-and-capsule figures; they would benefit from proper modelled characters.
 - **Exports inside the claude.ai viewer:** downloads are blocked there, so the JSON/MIDI buttons only show in the standalone file.
+
+## Roadmap: V2, native VR on Steam
+
+V2 is a native VR app for Steam. What carries over unchanged:
+
+- **Analysis** (`src/analysis/`): plain TypeScript over PCM samples, no DOM or renderer dependencies. It can run in Node, a worker, or be ported.
+- **Score format** (`src/score/types.ts`, JSON and MIDI export): the contract between analysis and any renderer. A native app can read cached `.json` scores or run the same analysis.
+- **Packs** (`src/packs/`): data (layers, mapping rules, rigs, troupes, effect cycles), so a native renderer can load the same `pack.json`.
+- **Look-around and refocusing** (`src/render/spawner.ts`): already driven by head yaw/pitch and its velocity, which is exactly what a headset provides. The browser WebXR button is an experiment towards this.
