@@ -7,6 +7,8 @@ import { Performer } from './render/performer';
 import type { CardInfo, ShowDriver } from './render/driver';
 import { FxDirector, FX_LOOKS, type FxLook } from './render/fx';
 import { VR } from './ui/vr';
+import { SkyLife } from './render/flock';
+import { U as SU } from './render/shaders';
 import { LookController } from './ui/look';
 import { DebugOverlay } from './ui/debug';
 import { Player, toMono } from './audio/player';
@@ -40,6 +42,7 @@ class App {
   look!: LookController;
   fx!: FxDirector;
   vr!: VR;
+  sky!: SkyLife;
   debug: DebugOverlay;
   player = new Player();
   score: Score | null = null;
@@ -94,6 +97,8 @@ class App {
     const locked = this.fx?.locked ?? (FX_LOOKS.includes(params.get('fx') as FxLook) ? params.get('fx') as FxLook : null);
     this.fx = new FxDirector(pack.fx?.cycle ?? ['clean'], pack.fx?.bySection);
     this.fx.locked = locked;
+    this.sky = new SkyLife(this.world.mode === 'stage');
+    this.world.scene.add(this.sky.group);
     this.rig = makeRig(pack.rig);
     this.world.themeForX = x => {
       if (!this.driver) return pack.themeCycle[0];
@@ -318,6 +323,7 @@ class App {
       this.driver.update(s, dt, this.look, score?.final ? Infinity : score?.frontierSec ?? 0, running);
     }
     try {
+      this.sky.update(s, dt, this.score, this.phase === 'run' || this.phase === 'ended', this.world.train.position, SU.energy.value);
       this.fx.update(s, dt, this.phase === 'run' || this.phase === 'ended', this.world.night, this.world.camera.aspect);
       this.world.render();
     } catch (e) {

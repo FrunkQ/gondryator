@@ -55,7 +55,7 @@ for (const at of shots) {
   const st = await page.evaluate(() => window.__gondry);
   const name = `${out}/${String(++i).padStart(2, '0')}-${at}s.png`;
   await page.screenshot({ path: name });
-  console.log(name, JSON.stringify({ phase: st?.phase, s: st?.s?.toFixed(2), fps: st?.fps?.toFixed(0), frontier: st?.frontier, final: st?.final, objects: st?.objects, backend: st?.backend, metric: st?.metric ? `${st.metric.hits}/${st.metric.total} ${JSON.stringify(st.metric.byLayer)}` : null, signalStop: st?.signalStop }));
+  console.log(name, JSON.stringify({ phase: st?.phase, s: st?.s?.toFixed(2), fps: st?.fps?.toFixed(0), frontier: st?.frontier, final: st?.final, objects: st?.objects, backend: st?.backend, metric: st?.metric ? `${st.metric.hits}/${st.metric.total} ${JSON.stringify(st.metric.byLayer)}` : null, signalStop: st?.signalStop, sections: (st?.sections || []).map(x => x.label + '@' + x.t.toFixed(1)).join(' ') }));
 }
 console.log('--- console ---');
 console.log(logs.slice(0, 40).join('\n'));
