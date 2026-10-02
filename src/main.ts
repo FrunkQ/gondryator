@@ -6,6 +6,7 @@ import { Spawner } from './render/spawner';
 import { Performer } from './render/performer';
 import type { CardInfo, ShowDriver } from './render/driver';
 import { FxDirector, FX_LOOKS, type FxLook } from './render/fx';
+import { VR } from './ui/vr';
 import { LookController } from './ui/look';
 import { DebugOverlay } from './ui/debug';
 import { Player, toMono } from './audio/player';
@@ -38,6 +39,7 @@ class App {
   private lastCard: { kind: 'landing' | 'title' | 'end'; x: number; info: CardInfo; opts: { end?: boolean; trackside?: boolean } } | null = null;
   look!: LookController;
   fx!: FxDirector;
+  vr!: VR;
   debug: DebugOverlay;
   player = new Player();
   score: Score | null = null;
@@ -76,7 +78,10 @@ class App {
     // Idle scenery around the first station, before any track is loaded.
     this.attachScore(emptyScore({ title: '', artist: '', album: '', durationSec: 0, art: null, hash: '' }, 0));
     this.showCard('landing', 0, { name: 'Gondryator', line2: 'Drop a music file to depart' });
-    requestAnimationFrame(this.frame);
+    // three drives the loop so a headset can take it over.
+    this.world.renderer.setAnimationLoop(this.frame);
+    this.vr = new VR(() => this.world.renderer, $<HTMLButtonElement>('#vr'), t => this.toast(t, 4000));
+    void this.vr.init();
     if (params.has('demo')) void this.loadDemo();
   }
 
@@ -103,7 +108,14 @@ class App {
       if (params.has('wander')) this.look.wander = true;
     }
     this.onResize();
-    $('#credits').textContent = pack.credits;
+    const cr = $('#credits');
+    cr.textContent = pack.credits + ' ';
+    if (pack.inspiration) {
+      const a = document.createElement('a');
+      a.href = pack.inspiration.url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = `Watch the original ↗`;
+      cr.appendChild(a);
+    }
   }
 
   // ------------------------------------------------------------------ loading
@@ -250,7 +262,6 @@ class App {
 
   // ------------------------------------------------------------------ main loop
   private frame = (now: number) => {
-    requestAnimationFrame(this.frame);
     const dt = this.player.virtual !== null ? 1 / 30 : Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
     this.fps += (1 / Math.max(1e-3, dt) - this.fps) * 0.05;
@@ -260,7 +271,8 @@ class App {
       this.p += 1 / 30;
       this.player.tick(1 / 30);
     } else this.p = now / 1000 - this.t0; // real time: the title clock must not drift when frames are slow
-    this.look.update(dt);
+    const head = this.vr?.headLook(this.world.train);
+    if (head) this.look.setFromHead(head.yaw, head.pitch, dt); else this.look.update(dt);
 
     let s = this.p; // title phase: the rig is driven by the title clock
     const score = this.score;
@@ -288,7 +300,10 @@ class App {
       if (score && score.final && !this.endBuilt && (this.world.mode === 'train' || s > score.track.durationSec)) this.buildEndStation();
     }
 
-    if (this.rig instanceof OrbitRig) {
+    if (head) {
+      if (this.rig instanceof OrbitRig) this.rig.gazeOffset = 0; // in a headset you turn your own head
+      this.world.update(s, this.rig, this.look.yaw, this.look.pitch, true);
+    } else if (this.rig instanceof OrbitRig) {
       // Wraparound packs: looking around walks you round the stage, so the show stays in view.
       this.rig.gazeOffset = this.look.yaw * 2;
       this.world.update(s, this.rig, 0, this.look.pitch * 0.5);

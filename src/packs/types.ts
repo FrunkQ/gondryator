@@ -91,6 +91,8 @@ export interface Pack {
   id: string;
   name: string;
   credits: string;
+  /** The music video this pack pays homage to (official upload). */
+  inspiration?: { title: string; url: string };
   viewpoint: 'fixed-window' | 'wraparound' | 'cockpit';
   rig: RigSpec;
   spawnMode: 'pass-by' | 'replicate' | 'perform' | 'loop-layer';

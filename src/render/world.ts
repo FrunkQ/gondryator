@@ -24,6 +24,7 @@ export class World {
   readonly camera: THREE.PerspectiveCamera;
   /** Moves with the train (camera + carriage), never rotates. */
   readonly train = new THREE.Group();
+  readonly head = new THREE.Group();
   backend = 'unknown';
   private sky!: THREE.Mesh;
   private skyColors!: THREE.BufferAttribute;
@@ -112,8 +113,10 @@ export class World {
       try { this.envRT = this.pmrem!.fromScene(new RoomEnvironment(), 0.04); sc.environment = this.envRT.texture; sc.environmentIntensity = 0.35; } catch { /* no reflections */ }
       this.sunDisc.visible = false; // a stage under lights: no sun in the sky
     }
-    this.train.add(this.camera);
-    this.camera.position.set(0, this.pack.rig.eyeHeight, 0);
+    // The head sits at eye height; the camera turns inside it (a headset drives it directly).
+    this.head.position.set(0, this.pack.rig.eyeHeight, 0);
+    this.head.add(this.camera);
+    this.train.add(this.head);
     sc.add(this.train, this.stations);
   }
 
@@ -538,11 +541,11 @@ export class World {
   }
 
   // ------------------------------------------------------------------ per frame
-  update(s: number, rig: CameraRig, yaw: number, pitch: number) {
+  update(s: number, rig: CameraRig, yaw: number, pitch: number, xr = false) {
     rig.pose(s, tmpPos, tmpQuat);
     this.train.position.copy(tmpPos);
     this.train.quaternion.copy(tmpQuat);
-    this.camera.rotation.set(pitch, -yaw, 0);
+    if (!xr) this.camera.rotation.set(pitch, -yaw, 0); else this.camera.rotation.set(0, 0, 0);
     // Motion blur: travel speed over a 1/60 s shutter, projected (uv per metre of depth).
     if (this.mode === 'train') {
       const v = rig.speedAt(s);
@@ -589,6 +592,7 @@ export class World {
     if (!this.pipeline && !this.pipelineFailed && this.fxEnabled) {
       try { this.pipeline = makePipeline(this.renderer, this.scene, this.camera, { ao: FLAGS.ao ?? false }); } catch (e) { console.warn('effects off:', e); this.pipelineFailed = true; }
     }
+    if (this.renderer.xr?.isPresenting) { this.renderer.render(this.scene, this.camera); return; } // no post in a headset
     if (this.pipeline && this.fxEnabled) {
       try { this.pipeline.render(); return; } catch (e) { console.warn('effects off:', e); this.pipelineFailed = true; this.pipeline = null; }
     }

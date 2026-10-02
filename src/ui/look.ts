@@ -95,6 +95,15 @@ export class LookController implements GazeSource {
     this.prevYaw = this.yaw;
   }
 
+  /** Headset mode: the head is the gaze. */
+  setFromHead(yaw: number, pitch: number, dt: number) {
+    this.yaw = this.targetYaw = yaw;
+    this.pitch = this.targetPitch = pitch;
+    const v = dt > 0 ? (yaw - this.prevYaw) / dt : 0;
+    this.yawVel += (v - this.yawVel) * (1 - Math.exp(-dt * 4));
+    this.prevYaw = yaw;
+  }
+
   predictYaw(ahead: number): number {
     // Where the viewer is heading, damped: people overshoot less than straight extrapolation.
     const p = this.targetYaw + this.yawVel * Math.min(ahead, 0.6) * 0.5;

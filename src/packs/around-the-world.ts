@@ -7,6 +7,7 @@ export const AROUND_THE_WORLD: Pack = {
   id: 'around-the-world',
   name: 'Around the World (stage)',
   credits: "In homage to Michel Gondry's video for Daft Punk's Around the World (1997). All characters are original.",
+  inspiration: { title: 'Daft Punk - Around The World (Official Music Video Remastered)', url: 'https://www.youtube.com/watch?v=K0HSD_i2DvA' },
   viewpoint: 'wraparound',
   rig: { type: 'orbit', orbitRadius: 21, orbitPeriod: 84, lookAtY: 2.2, speed: 0, eyeHeight: 7, maxYaw: 45, maxPitch: 25, fov: 48 },
   spawnMode: 'perform',

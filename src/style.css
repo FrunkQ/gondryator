@@ -82,3 +82,6 @@ body.running.idle #stage { cursor: none; }
   #credits { max-width: 70%; }
 }
 [hidden] { display: none !important; }
+
+#credits a { color: inherit; text-decoration: underline; text-underline-offset: 2px; pointer-events: auto; }
+#vr.on { background: #f2c94c; color: #111; }
