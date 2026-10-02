@@ -293,6 +293,32 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
   'moon': () => merge([T1(SURF.rock, sphere(14, 0, 45, 0, 0xb8b4ac, 1, 1, 1, 20))]),
 
   // --- events that pass over / along the train ------------------------------------------
+  // A French château d'eau: a concrete bowl on a column, seen over the fields.
+  'water-tower': () => merge([
+    T1(SURF.concrete, cyl(1.3, 1.6, 22, 0, 11, 0, 0xd2cec4, 14)),
+    T1(SURF.concrete, lathe([[1.3, 21], [5.5, 25], [7, 28.5], [7, 31], [6.6, 31.6], [0.1, 32]], 0xdcd8cf, 24)),
+    T1(SURF.paint, cyl(7.05, 7.05, 0.6, 0, 30.2, 0, 0x6f8fa8, 24)),
+  ]),
+  // The gravel works: conveyor gantries climbing to a hopper, and the heaps they make.
+  'gravel-works': () => {
+    const parts: Part[] = [];
+    const belt = (len: number, ang: number, x: number, z: number, rotY: number) => {
+      const g = new THREE.BoxGeometry(len, 0.5, 1.1).translate(len / 2, 0, 0);
+      g.applyMatrix4(tmpM.makeRotationFromQuaternion(tmpQ.setFromEuler(tmpE.set(0, rotY, ang))));
+      g.translate(x, 0.6, z);
+      parts.push(T1(SURF.metal, colorize(g, 0x8e9193)));
+      const top = Math.sin(ang) * len;
+      for (let k = 1; k <= 3; k++) {
+        const f = k / 4, h = top * f;
+        parts.push(T1(SURF.metal, box(0.25, h, 0.25, x + Math.cos(rotY) * Math.cos(ang) * len * f, h / 2, z - Math.sin(rotY) * Math.cos(ang) * len * f, 0x6e7275)));
+      }
+    };
+    belt(26, 0.42, -18, 0, 0);
+    belt(20, 0.5, 12, -6, Math.PI * 0.85);
+    parts.push(T1(SURF.metal, box(5, 6, 5, 4, 13, -1, 0xa7a49c)), T1(SURF.metal, cone(2.6, 3, 4, 8.5, -1, 0x8c8a84, 8)));
+    parts.push(...T(SURF.rock, cone(9, 7, -20, 3.5, 4, 0xbdb3a2, 14), cone(7, 5.5, 18, 2.75, 3, 0xc9bfae, 14), cone(5, 4, 30, 2, -4, 0xa99f8f, 12)));
+    return merge(parts);
+  },
   'overpass': () => merge([
     T1(SURF.concrete, box(7, 1.4, 70, 0, 8.2, -20, 0xbdb7aa)),
     box(7.2, 1.0, 0.3, 0, 9.4, 15, 0x9d978a), box(7.2, 1.0, 0.3, 0, 9.4, -55, 0x9d978a),

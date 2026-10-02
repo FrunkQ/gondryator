@@ -21,13 +21,13 @@ export const STAR_GUITAR: Pack = {
       models: { industrial: ['shed', 'container', 'signal-box'], town: ['wall-house', 'shed', 'signal-box'], country: ['hay-bales', 'stone-hut'] },
       tints: { industrial: ['#ffffff', '#d8e0e6', '#e8ddd0'], town: ['#ffffff', '#ffe9d6', '#f0f4ff'], country: ['#ffffff', '#f6ead2'] } },
     { id: 'mid', depth: 38, depthJitter: 3, scale: 0.9, scaleByVel: 0.25, lengthByDur: 0.85,
-      models: { industrial: ['warehouse', 'tank', 'warehouse'], town: ['apartment', 'warehouse'], country: ['farmhouse', 'farmhouse', 'viaduct'] },
+      models: { industrial: ['warehouse', 'tank', 'gravel-works', 'warehouse'], town: ['apartment', 'warehouse'], country: ['farmhouse', 'farmhouse', 'viaduct'] },
       tints: { industrial: ['#ffffff', '#dfe3e0', '#f2e6dc'], town: ['#ffffff', '#ffe4c8', '#ffd9cc', '#f7f0d8'], country: ['#ffffff', '#ffeccc'] } },
     { id: 'row', depth: 62, depthJitter: 2, scale: 1, scaleByVel: 0.1, pitchCenter: 64, heightPerSemitone: 0.09,
       models: { industrial: ['factory-block', 'town-block'], town: ['town-block'], country: ['cypress-row', 'town-block'] },
       tints: { industrial: ['#ffffff', '#e6e2da'], town: ['#ffffff', '#ffe0c0', '#ffd0c0', '#fff2c8', '#e8f0ff'], country: ['#ffffff', '#fff0d0'] } },
     { id: 'far', depth: 170, depthJitter: 30, scale: 1, scaleByVel: 0.3,
-      models: { industrial: ['cooling-tower', 'silo', 'chimney', 'pylon'], town: ['church-tower', 'silo', 'pylon'], country: ['hill', 'church-tower', 'silo'] } },
+      models: { industrial: ['cooling-tower', 'silo', 'chimney', 'pylon', 'water-tower'], town: ['church-tower', 'water-tower', 'silo', 'pylon'], country: ['hill', 'church-tower', 'water-tower'] } },
   ],
   mapping: [
     { match: { stem: 'drums', kind: 'kick' }, layer: 'trackside', tier: 1 },
@@ -58,6 +58,7 @@ export const STAR_GUITAR: Pack = {
   ],
   themeCycle: ['industrial', 'town', 'country'],
   themeBySection: { breakdown: 'country', intro: 'industrial' },
+  haze: 0.6,
   light: [
     { at: 0.0, sky: '#9fb6cf', horizon: '#ecdccb', sun: '#ffdcb8', sunIntensity: 2.0, sunElevation: 14, fog: 0.0016 },
     { at: 0.3, sky: '#8fb2d6', horizon: '#dfe4e6', sun: '#fff4e2', sunIntensity: 2.2, sunElevation: 35 },
@@ -66,7 +67,8 @@ export const STAR_GUITAR: Pack = {
     { at: 1.0, sky: '#6f7fa8', horizon: '#f3a774', sun: '#ff9e60', sunIntensity: 1.3, sunElevation: 4, fog: 0.0018 },
   ],
   title: { template: 'station-board' },
-  // Starts photographic; each new section turns the dial further.
+  // The main window stays photographic, like the original; the looks bloom as you turn round to the
+  // other window (see FxDirector.amount).
   fx: { cycle: ['clean', 'prism', 'trip', 'fold', 'kaleido', 'thermal', 'echo', 'liquid'], bySection: { breakdown: 'liquid', intro: 'clean' } },
   sectionEvents: { onNewSection: 'overpass', onBreakdown: 'train-car' },
   window: { width: 1.25, height: 0.82, bottom: -0.32, pillar: 0.5, distance: 0.75, frame: '#7d8483', wall: '#c4bdac' },

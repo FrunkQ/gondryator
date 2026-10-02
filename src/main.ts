@@ -341,6 +341,8 @@ class App {
     }
     try {
       this.sky.update(s, dt, this.score, this.phase === 'run' || this.phase === 'ended', this.world.train.position, SU.energy.value);
+      // Star Guitar's main window stays true to the video; the looks come in as you turn round.
+      this.fx.amount = this.pack.rig.lookYaw ? ((1 - Math.cos(this.look.yaw)) / 2) ** 2 : 1;
       this.fx.update(s, dt, this.phase === 'run' || this.phase === 'ended', this.world.night, this.world.camera.aspect);
       this.world.render();
     } catch (e) {

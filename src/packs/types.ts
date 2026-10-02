@@ -107,6 +107,8 @@ export interface Pack {
   themeCycle: ThemeName[];
   themeBySection?: Partial<Record<string, ThemeName>>;
   /** Lighting keyframes over track position 0..1. */
+  /** 0..1: how milky the sky is (Star Guitar's bleached summer haze is about 0.6). */
+  haze?: number;
   light: { at: number; sky: string; horizon: string; sun: string; sunIntensity: number; sunElevation: number; fog?: number }[];
   title: { template: 'station-board'; stationPrefix?: string };
   /** Things that happen on structure: overpass at new sections, passing train in breakdowns. */

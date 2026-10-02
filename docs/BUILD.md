@@ -52,6 +52,7 @@ The Star Guitar main window stays close to the original video. Turn round (drag,
 
 - Pack: `src/packs/other-side.ts`; mirrored spawner and starfield: `src/render/otherside.ts`.
 - `?noother` turns it off.
+- The main window stays photographic, like the original: the effects only come in as you turn round (forced looks via `X` or `?fx=` still apply everywhere). A milky summer haze (`haze` in the pack), a gravel works and French water towers bring it closer to the video.
 
 ## Measurements (this container: no GPU, headless Chromium, software rendering)
 

@@ -88,7 +88,7 @@ export class World {
       this.phys = new SkyMesh();
       this.phys.scale.setScalar(6000);
       this.phys.frustumCulled = false;
-      this.phys.cloudCoverage.value = 0.35;
+      this.phys.cloudCoverage.value = 0.35 + 0.25 * (this.pack.haze ?? 0);
       this.phys.cloudDensity.value = 0.5;
       this.phys.cloudScale.value = 0.00025;
       (this.phys.material as any).fog = false;
@@ -178,9 +178,10 @@ export class World {
       const sp = dir.clone();
       for (const k of [this.phys, this.envSky!]) {
         k.sunPosition.value.copy(sp);
-        k.turbidity.value = 2.5 + 6 * u;
-        k.rayleigh.value = 1.2 + 1.8 * u;
-        k.mieCoefficient.value = 0.004 + 0.004 * u;
+        const hz = this.pack.haze ?? 0;
+        k.turbidity.value = 2.5 + 6 * u + 6 * hz;
+        k.rayleigh.value = (1.2 + 1.8 * u) * (1 - 0.55 * hz);
+        k.mieCoefficient.value = 0.004 + 0.004 * u + 0.006 * hz;
         k.mieDirectionalG.value = 0.82;
       }
       if (FLAGS.env && (Math.abs(u - this.lastEnvU) > 0.04 || this.lastEnvU < 0)) {

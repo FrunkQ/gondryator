@@ -132,6 +132,8 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
 export class FxDirector {
   look: FxLook = 'clean';
   locked: FxLook | null = null;
+  /** How much of the look shows, 0..1: a pack can keep one view clean (Star Guitar's main window). */
+  amount = 1;
   private cur: Weights = { fold: 0, rain: 0, ...LOOKS.clean };
   private ptr = 0;
   private lastS = -Infinity;
@@ -193,11 +195,13 @@ export class FxDirector {
     }
     this.hue += dt * (0.01 + 0.03 * energy * this.cur.trip);
     U.kick.value = this.kick; U.snare.value = this.snare; U.hat.value = this.hat;
-    U.energy.value = energy; U.trip.value = this.cur.trip; U.night.value = night;
+    const a = this.locked ? 1 : this.amount;
+    U.energy.value = energy; U.trip.value = this.cur.trip * a; U.night.value = night;
     U.hue.value = this.hue; U.beatPhase.value = phase; U.showTime.value = s;
-    W.fold.value = this.cur.fold ?? 0; U.rain.value = this.cur.rain ?? 0;
-    W.kal.value = this.cur.kal; W.liquid.value = this.cur.liquid; W.rgb.value = this.cur.rgb; W.thermal.value = this.cur.thermal;
-    W.echo.value = this.cur.echo; W.bloom.value = this.cur.bloom; W.punch.value = this.cur.punch; W.glitch.value = this.glitch;
+    W.fold.value = (this.cur.fold ?? 0) * a; U.rain.value = this.cur.rain ?? 0;
+    W.kal.value = this.cur.kal * a; W.liquid.value = this.cur.liquid * a; W.rgb.value = this.cur.rgb * a; W.thermal.value = this.cur.thermal * a;
+    W.echo.value = this.cur.echo * a; W.bloom.value = LOOKS.clean.bloom + (this.cur.bloom - LOOKS.clean.bloom) * a;
+    W.punch.value = this.cur.punch * a; W.glitch.value = this.glitch * a;
     W.aspect.value = aspect; W.kalRot.value += dt * (0.1 + this.kick * 0.6);
     W.segments.value = 6 + 2 * (this.secIdx % 3);
   }
