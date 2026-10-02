@@ -550,6 +550,8 @@ export class World {
 
   // ------------------------------------------------------------------ per frame
   update(s: number, rig: CameraRig, yaw: number, pitch: number, xr = false) {
+    // Turning right round, you lean across the aisle to the other window.
+    if (!xr && this.pack.rig.lookYaw) this.head.position.z = 1.55 * Math.max(0, -Math.cos(yaw)) ** 1.5;
     rig.pose(s, tmpPos, tmpQuat);
     this.train.position.copy(tmpPos);
     this.train.quaternion.copy(tmpQuat);

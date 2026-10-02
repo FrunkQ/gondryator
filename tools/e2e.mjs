@@ -34,8 +34,9 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: Number(arg('w', 1280)), height: Number(arg('h', 720)) } });
 page.setDefaultTimeout(180000);
 const logs = [];
-page.on('console', m => logs.push(`[${m.type()}] ${m.text()}`));
-page.on('pageerror', e => logs.push(`[pageerror] ${e.message}`));
+page.on('console', m => { const l = `[${m.type()}] ${m.text()}`; logs.push(l); if (m.type() === 'error' && !l.includes('404')) console.error(l.slice(0, 400)); });
+page.on('pageerror', e => { logs.push(`[pageerror] ${e.message}`); console.error('[pageerror]', e.message.slice(0, 400)); });
+if (has('progress')) setInterval(async () => { try { const g = await page.evaluate(() => window.__gondry && { p: window.__gondry.phase, s: window.__gondry.s, fps: window.__gondry.fps, o: window.__gondry.objects }); console.error('progress', JSON.stringify(g)); } catch {} }, 15000).unref();
 await page.goto(`http://localhost:${port}/?${query}`);
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `${out}/00-landing.png`, timeout: 180000 });

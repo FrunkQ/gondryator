@@ -49,7 +49,7 @@ export class OtherSide {
     // Space: half a sphere of stars on the far side, and a starry floor to hide the fields.
     const spaceMat = makeSpaceMaterial(this.reveal);
     this.space = new THREE.Mesh(new THREE.SphereGeometry(2400, 48, 24, 0, Math.PI), spaceMat);
-    this.space.rotation.y = -Math.PI / 2; // the half that faces +z
+    // phi 0..π is already the +z half.
     this.space.frustumCulled = false;
     this.space.renderOrder = -6;
     const floorMat = makeSpaceMaterial(this.reveal);
@@ -76,7 +76,7 @@ export class OtherSide {
     const cosmos = running && this.spawner.themeAt(s) === 'cosmos';
     const k = 1 - Math.exp(-dt / 1.2);
     this.reveal.value += ((cosmos ? 1.05 : -0.05) - this.reveal.value) * k;
-    this.trip.value = Math.max(U.trip.value, this.reveal.value * 0.45);
+    this.trip.value = Math.max(U.trip.value, this.reveal.value * 0.3);
     this.space.visible = this.floor.visible = this.reveal.value > 0.01;
     this.space.position.x = this.floor.position.x = trainX;
   }

@@ -53,7 +53,7 @@ const along = (p: any, n: any) => select(abs(n.x).greaterThan(abs(n.z)), p.z, p.
 const aaFade = (uv: any, cell: number) => clamp(float(1).sub(length(fwidth(uv)).mul(1 / cell).mul(2.2)), 0, 1);
 
 export function makeSceneryMaterial(opts: { trip?: any } = {}): THREE.MeshStandardNodeMaterial {
-  const TRIP = opts.trip ?? TRIP;
+  const TRIP = opts.trip ?? U.trip;
   const m = new THREE.MeshStandardNodeMaterial();
   // vertexColors stays off: colorNode multiplies the baked vertex colour itself so the trip layer
   // can replace it; three still multiplies instanceColor (per-object tints) on top.
