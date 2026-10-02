@@ -46,6 +46,13 @@ Everything is procedural: no textures or models are downloaded.
 - Press **X** or the ✦ button to lock a look. URL switches: `?fx=off`, `?fx=kaleido`, `?noshadow`, `?nosky`, `?plain`, `?ao` (ambient occlusion, off by default). Resolution adapts to keep the frame rate up.
 - Testing: `?virtual` runs the show on a fixed 1/30 s step per frame so slow machines still see every moment; `?start=30` jumps there. `node tools/e2e.mjs --virtual --query "start=30&fx=trip" --shots 33` renders a frame at 33 s.
 
+## The other window (round 6)
+
+The Star Guitar main window stays close to the original video. Turn round (drag, arrow keys or a headset; the train pack allows a full 180°) and the window across the aisle plays the same score into invented worlds that alternate by section: Provence (poplars on the kick, sunflowers and hay bales on the snare, lavender rows on the bass, cypresses on the melody, châteaux far off) and Cosmos (asteroids, satellites, space stations, crystals pitched to the melody, gas giants and ringed planets on the pads). A starfield dissolves in over that side of the sky when the train leaves for space.
+
+- Pack: `src/packs/other-side.ts`; mirrored spawner and starfield: `src/render/otherside.ts`.
+- `?noother` turns it off.
+
 ## Measurements (this container: no GPU, headless Chromium, software rendering)
 
 Analysis on synthetic tracks with known ground truth (`tools/eval-analysis.mjs`):

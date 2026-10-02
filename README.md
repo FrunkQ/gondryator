@@ -2,7 +2,9 @@
 
 **All hail the great Michel Gondry. May your visuals play with every track.**
 
-Drop in a song and the world outside the window starts keeping time: poles on the kick, sheds on the snare, a skyline that hums the melody. It is a humble imitation of a genius, made with a lot of love and no small amount of awe.
+*Live inside a Michel Gondry video.*
+
+Drop in a song and the world outside the window starts keeping time: poles on the kick, sheds on the snare, a skyline that hums the melody. Turn round in your seat and the other window has gone somewhere else entirely: lavender fields one section, the space between the planets the next. It is a humble imitation of a genius, made with a lot of love and no small amount of awe.
 
 The originals, which you should watch first (and then again):
 

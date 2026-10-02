@@ -21,7 +21,10 @@ export class LookController implements GazeSource {
   wander = false;
   private wanderT = Math.random() * 100;
 
-  constructor(private el: HTMLElement, private maxYaw: number, private maxPitch: number, private fovPerPixel: () => number) {
+  /** How far the wandering-viewer test roams, degrees (defaults to the look limit). */
+  wanderYaw: number | null = null;
+
+  constructor(private el: HTMLElement, public maxYaw: number, private maxPitch: number, private fovPerPixel: () => number) {
     el.addEventListener('pointerdown', e => {
       if ((e.target as HTMLElement).closest('.ui')) return;
       this.dragging = true; this.lastX = e.clientX; this.lastY = e.clientY;
@@ -83,7 +86,7 @@ export class LookController implements GazeSource {
       // A viewer who keeps glancing around: slow sweeps plus occasional jumps.
       this.wanderT += dt;
       const t = this.wanderT;
-      this.targetYaw = (Math.sin(t * 0.37) * 0.7 + Math.sin(t * 0.91 + 1.3) * 0.3) * this.maxYaw * deg * 0.95;
+      this.targetYaw = (Math.sin(t * 0.37) * 0.7 + Math.sin(t * 0.91 + 1.3) * 0.3) * (this.wanderYaw ?? this.maxYaw) * deg * 0.95;
       this.targetPitch = Math.sin(t * 0.53) * this.maxPitch * deg * 0.6;
     }
     this.clampTarget();

@@ -32,6 +32,7 @@ export const U = {
 
 export const SURF = {
   plaster: 0, brick: 1, concrete: 2, metal: 3, tile: 4, glass: 5, foliage: 6, wood: 7, straw: 8, grass: 9, stone: 10, paint: 11,
+  gas: 12, rock: 13, glow: 14, lavender: 15,
 } as const;
 
 /** Inigo Quilez's cosine palette: smooth rainbow-ish ramps from one phase value. */
@@ -51,7 +52,8 @@ const along = (p: any, n: any) => select(abs(n.x).greaterThan(abs(n.z)), p.z, p.
 /** Pattern contrast that fades as the pattern gets smaller than ~2 pixels. */
 const aaFade = (uv: any, cell: number) => clamp(float(1).sub(length(fwidth(uv)).mul(1 / cell).mul(2.2)), 0, 1);
 
-export function makeSceneryMaterial(): THREE.MeshStandardNodeMaterial {
+export function makeSceneryMaterial(opts: { trip?: any } = {}): THREE.MeshStandardNodeMaterial {
+  const TRIP = opts.trip ?? TRIP;
   const m = new THREE.MeshStandardNodeMaterial();
   // vertexColors stays off: colorNode multiplies the baked vertex colour itself so the trip layer
   // can replace it; three still multiplies instanceColor (per-object tints) on top.
@@ -122,6 +124,13 @@ export function makeSceneryMaterial(): THREE.MeshStandardNodeMaterial {
   // --- grass: hills, mown stripes
   const grassCol = float(0.85).add(big.mul(0.25)).add(sin(p.x.mul(0.25).add(big.mul(2.0))).mul(0.05));
 
+  // --- gas giant: latitude bands that swirl; rocky moons: craters; lavender: purple flower spikes
+  const lat = p.y.mul(0.08).add(mx_noise_float(p.mul(0.05)).mul(1.4));
+  const gasCol = float(0.75).add(sin(lat.mul(9.0)).mul(0.2)).add(sin(lat.mul(23.0).add(1.0)).mul(0.08));
+  const crater = mx_worley_noise_float(p.mul(0.12));
+  const rockCol = float(0.7).add(smoothstep(0.05, 0.3, crater).mul(0.35)).add(fine.mul(0.05).mul(fadeFine));
+  const spikes = mx_noise_float(p.mul(vec3(9.0, 2.0, 9.0))).mul(0.5).add(0.5);
+  const lavCol = float(0.7).add(spikes.mul(0.5));
   const patternF = float(1)
     .add(is(SURF.brick).mul(brickCol.sub(1)))
     .add(is(SURF.stone).mul(stoneCol.sub(1)))
@@ -132,7 +141,10 @@ export function makeSceneryMaterial(): THREE.MeshStandardNodeMaterial {
     .add(is(SURF.foliage).mul(leafCol.sub(1)))
     .add(is(SURF.wood).mul(grain))
     .add(is(SURF.straw).mul(fibre))
-    .add(is(SURF.grass).mul(grassCol.sub(1)));
+    .add(is(SURF.grass).mul(grassCol.sub(1)))
+    .add(is(SURF.gas).mul(gasCol.sub(1)))
+    .add(is(SURF.rock).mul(rockCol.sub(1)))
+    .add(is(SURF.lavender).mul(lavCol.sub(1)));
 
   const base = vertexColor().rgb;
   let real: any = base.mul(patternF);
@@ -149,7 +161,7 @@ export function makeSceneryMaterial(): THREE.MeshStandardNodeMaterial {
   // Stripes ride up the buildings with the beat.
   const stripe = smoothstep(0.42, 0.5, fract(wp.y.mul(0.25).sub(U.beatPhase))).mul(smoothstep(0.58, 0.5, fract(wp.y.mul(0.25).sub(U.beatPhase))));
   const tripCol = mix(trippy, palette(bands.add(0.5)), stripe.mul(0.7));
-  m.colorNode = mix(real, tripCol, U.trip);
+  m.colorNode = mix(real, tripCol, TRIP);
 
   m.roughnessNode = float(0.9)
     .sub(is(SURF.metal).mul(float(0.5).sub(rust.mul(0.35))))
@@ -157,8 +169,8 @@ export function makeSceneryMaterial(): THREE.MeshStandardNodeMaterial {
     .sub(is(SURF.tile).mul(0.25))
     .sub(is(SURF.paint).mul(0.55))
     .add(is(SURF.foliage).mul(0.05))
-    .add(U.trip.mul(0.3)).min(1);
-  m.metalnessNode = is(SURF.metal).mul(float(0.55).sub(rust.mul(0.45))).add(is(SURF.glass).mul(0.9)).mul(float(1).sub(U.trip));
+    .add(TRIP.mul(0.3)).min(1);
+  m.metalnessNode = is(SURF.metal).mul(float(0.55).sub(rust.mul(0.45))).add(is(SURF.glass).mul(0.9)).mul(float(1).sub(TRIP));
 
   const height = float(0)
     .add(is(SURF.brick).mul(brickH))
@@ -167,20 +179,24 @@ export function makeSceneryMaterial(): THREE.MeshStandardNodeMaterial {
     .add(is(SURF.tile).mul(tileH))
     .add(is(SURF.concrete).mul(joint.oneMinus().add(fine.mul(0.2).mul(fadeFine))))
     .add(is(SURF.foliage).mul(leaf))
-    .add(is(SURF.plaster).mul(fine.mul(0.15).mul(fadeFine)));
+    .add(is(SURF.plaster).mul(fine.mul(0.15).mul(fadeFine)))
+    .add(is(SURF.rock).mul(smoothstep(0.0, 0.25, crater)))
+    .add(is(SURF.lavender).mul(spikes));
   m.normalNode = bumpMap(height, 0.035);
   // Trip looks make the scenery dance: a squash on the kick and a wobble that travels up.
   // (positionLocal is already in world-aligned mesh space here, ground at y = 0, so only shear
   // and squash about the ground: no scaling about the far-away mesh origin.)
   const h = positionLocal.y.max(0);
-  const lean = sin(U.beatPhase.mul(6.28318).add(positionLocal.x.mul(0.02))).mul(0.05).mul(U.trip);
-  const sq = U.kick.mul(0.12).mul(U.trip);
+  const lean = sin(U.beatPhase.mul(6.28318).add(positionLocal.x.mul(0.02))).mul(0.05).mul(TRIP);
+  const sq = U.kick.mul(0.12).mul(TRIP);
   m.positionNode = vec3(positionLocal.x.add(h.mul(lean)), positionLocal.y.sub(h.mul(sq)), positionLocal.z.add(h.mul(lean).mul(0.4)));
 
   // Lit windows at dusk; in trip mode surfaces glow with the kick.
   const winGlow = vec3(1.0, 0.72, 0.42).mul(lit).mul(is(SURF.glass)).mul(U.night).mul(1.6);
-  const tripGlow = tripCol.mul(U.trip).mul(float(0.12).add(U.kick.mul(1.2)).add(stripe.mul(1.5)));
-  m.emissiveNode = winGlow.add(tripGlow);
+  const tripGlow = tripCol.mul(TRIP).mul(float(0.12).add(U.kick.mul(1.2)).add(stripe.mul(1.5)));
+  // Glowing parts (beacons, comet tails, stars) light themselves.
+  const selfGlow = base.mul(is(SURF.glow)).mul(3.0);
+  m.emissiveNode = winGlow.add(tripGlow).add(selfGlow);
   return m;
 }
 
@@ -264,6 +280,33 @@ export function makeGrassMaterial(): THREE.MeshStandardNodeMaterial {
   // Sway in the wind (and with the music in trip looks).
   const sway = sin(U.showTime.mul(2.2).add(wp.x.mul(0.6))).mul(0.08).add(U.kick.mul(U.trip).mul(0.2));
   m.positionNode = positionLocal.add(vec3(sway.mul(q.y), 0, sway.mul(q.y).mul(0.5)));
+  return m;
+}
+
+/** The sky beyond the other window when the train crosses into space: stars of several sizes,
+ * slow nebula clouds in the palette, and a dissolve edge that eats the real sky away. */
+export function makeSpaceMaterial(reveal: any): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, fog: false, depthWrite: true });
+  const d = positionLocal.normalize();
+  const stars = (k: number, th: number) => {
+    const c = floor(d.mul(k));
+    const h = hash(c.dot(vec3(1.0, 57.0, 113.0)));
+    const f = fract(d.mul(k)).sub(0.5);
+    return step(th, h).mul(smoothstep(0.35, 0.0, length(f)));
+  };
+  const twinkle = sin(U.showTime.mul(3.0).add(hash(floor(d.mul(400.0)).dot(vec3(3, 7, 11))).mul(40.0))).mul(0.3).add(0.7);
+  const field = stars(400, 0.985).mul(twinkle).add(stars(160, 0.992).mul(1.6)).add(stars(60, 0.996).mul(3.0));
+  const neb = mx_noise_float(d.mul(2.2).add(vec3(0, U.showTime.mul(0.01), 0))).mul(0.5).add(0.5);
+  const neb2 = mx_noise_float(d.mul(5.0).add(7.0)).mul(0.5).add(0.5);
+  const cloud = pow(neb.mul(neb2), 2.2).mul(1.6);
+  const tint = pow(palette(neb.mul(0.6).add(U.hue).add(0.55)), vec3(2.0));
+  const col = vec3(0.004, 0.006, 0.015).add(tint.mul(cloud).mul(float(0.5).add(U.kick.mul(0.4)))).add(vec3(field));
+  // Dissolve: noise threshold sweeps with `reveal`, with a hot glowing edge.
+  const n = mx_noise_float(d.mul(6.0)).mul(0.5).add(0.5);
+  const edge = smoothstep(0.06, 0.0, abs(n.sub(reveal)));
+  m.colorNode = col.add(vec3(1.0, 0.55, 0.9).mul(edge).mul(3.0));
+  m.opacityNode = step(n, reveal);
+  m.alphaTest = 0.5;
   return m;
 }
 

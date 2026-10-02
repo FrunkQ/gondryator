@@ -3,6 +3,8 @@ import * as THREE from 'three/webgpu';
 import { World } from './render/world';
 import { makeRig, OrbitRig, type CameraRig } from './render/rig';
 import { Spawner } from './render/spawner';
+import { OtherSide, ClampedGaze } from './render/otherside';
+import { OTHER_SIDE } from './packs/other-side';
 import { Performer } from './render/performer';
 import type { CardInfo, ShowDriver } from './render/driver';
 import { FxDirector, FX_LOOKS, type FxLook } from './render/fx';
@@ -40,6 +42,8 @@ class App {
   /** The last title/landing/end card, re-shown when the driver is rebuilt. */
   private lastCard: { kind: 'landing' | 'title' | 'end'; x: number; info: CardInfo; opts: { end?: boolean; trackside?: boolean } } | null = null;
   look!: LookController;
+  private other: OtherSide | null = null;
+  private mainGaze: ClampedGaze | null = null;
   fx!: FxDirector;
   vr!: VR;
   sky!: SkyLife;
@@ -112,6 +116,8 @@ class App {
       });
       if (params.has('wander')) this.look.wander = true;
     }
+    this.look.maxYaw = pack.rig.lookYaw ?? pack.rig.maxYaw;
+    this.look.wanderYaw = pack.rig.maxYaw;
     this.onResize();
     const cr = $('#credits');
     cr.textContent = pack.credits + ' ';
@@ -179,6 +185,13 @@ class App {
       ? new Performer(this.pack, this.rig, s, this.world.camera)
       : new Spawner(this.pack, this.rig, s, this.world.camera);
     this.world.scene.add(this.driver.group);
+    // Star Guitar has a second window: invented worlds across the aisle, on the same beat.
+    if (this.other) { this.other.dispose(); this.world.scene.remove(this.other.group); this.other = null; }
+    if (this.pack.rig.lookYaw && this.pack.spawnMode !== 'perform' && !params.has('noother')) {
+      this.other = new OtherSide(OTHER_SIDE, this.rig, s, this.world.camera);
+      this.world.scene.add(this.other.group);
+      this.other.spawner.refreshLeads();
+    }
     this.fx.setScore(placeholder ? null : s);
     this.driver.refreshLeads();
     if (this.lastCard) this.driver.card?.(this.lastCard.kind, this.lastCard.info);
@@ -320,7 +333,11 @@ class App {
     this.world.train.updateMatrixWorld(true);
     if (this.driver) {
       const running = this.phase === 'run' || this.phase === 'ended';
-      this.driver.update(s, dt, this.look, score?.final ? Infinity : score?.frontierSec ?? 0, running);
+      const frontier = score?.final ? Infinity : score?.frontierSec ?? 0;
+      this.mainGaze ??= new ClampedGaze(this.look, 1);
+      this.mainGaze.limit = THREE.MathUtils.degToRad(this.pack.rig.maxYaw);
+      this.driver.update(s, dt, this.mainGaze, frontier, running);
+      this.other?.update(s, dt, this.look, frontier, running, this.world.train.position.x);
     }
     try {
       this.sky.update(s, dt, this.score, this.phase === 'run' || this.phase === 'ended', this.world.train.position, SU.energy.value);
@@ -342,6 +359,7 @@ class App {
     this.rig.go(this.p, RUN_IN);
     this.player.play(-RUN_IN);
     this.driver?.reset(-RUN_IN);
+    this.other?.reset(-RUN_IN);
     this.world.invalidateGround();
     document.body.classList.add('running');
     this.pokeUI();
@@ -376,6 +394,7 @@ class App {
     this.player.seek(t);
     if (!this.player.playing && this.phase === 'ended') { this.phase = 'run'; $('#endcard').classList.add('hidden'); this.player.play(t); }
     this.driver?.reset(t);
+    this.other?.reset(t);
     this.world.invalidateGround();
   }
 
@@ -403,6 +422,7 @@ class App {
     if (this.phase === 'title') this.rig.depart(this.dropAt);
     this.attachScore(this.score ? undefined : emptyScore({ title: '', artist: '', album: '', durationSec: 0, art: null, hash: '' }, 0));
     this.driver!.reset(wasRunning ? s : this.score ? 0 : -1e9);
+    this.other?.reset(wasRunning ? s : this.score ? 0 : -1e9);
     this.endBuilt = false;
     if (this.phase === 'landing' && card) this.showCard('landing', 0, card.info);
     if (this.phase === 'title') this.showCard('title', this.rig.titleTravel(this.titleCross), { name: this.trackInfo.title || 'Untitled', line2: this.trackInfo.artist || ' ', art: this.art }, { trackside: true });
@@ -530,7 +550,7 @@ class App {
       ].filter(Boolean);
     }
     this.debug.draw(sc, s);
-    (window as any).__gondry = { phase: this.phase, s, fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, sections: sc?.sections, signalStop: this.signalStop };
+    (window as any).__gondry = { phase: this.phase, s, yaw: Math.round(this.look.yaw * 57.3), fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, sections: sc?.sections, signalStop: this.signalStop };
   }
 }
 

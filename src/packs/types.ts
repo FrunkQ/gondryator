@@ -83,6 +83,8 @@ export interface RigSpec {
   eyeHeight: number;
   /** Look-around limits, degrees. */
   maxYaw: number;
+  /** How far the viewer may turn, degrees, if more than maxYaw (180: right round to the other window). */
+  lookYaw?: number;
   maxPitch: number;
   fov: number;
 }

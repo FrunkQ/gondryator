@@ -263,9 +263,10 @@ export class World {
     for (const th of this.pack.themes) {
       this.groundMats.set(th.name, FLAGS.procedural ? makeGroundMaterial(this.groundTexture(th)) : new THREE.MeshStandardMaterial({ map: this.groundTexture(th) }));
     }
-    const geo = new THREE.PlaneGeometry(TILE, 2600);
+    // Both sides of the line: the main view (-z) and the other window (+z).
+    const geo = new THREE.PlaneGeometry(TILE, 5200);
     geo.rotateX(-Math.PI / 2);
-    geo.translate(0, 0, -1300 + 40);
+    geo.translate(0, 0, 40);
     for (let i = 0; i < 12; i++) {
       const m = new THREE.Mesh(geo, this.groundMats.values().next().value!);
       m.renderOrder = -5;
@@ -396,6 +397,13 @@ export class World {
       pane.position.set((k - (nWin - 1) / 2) * pitch, (winBottom + winTop) / 2, -W.distance + 0.01);
       pane.renderOrder = 10;
       cabin.add(pane);
+      if (this.pack.rig.lookYaw) {
+        // And across the aisle, the other window.
+        const back = pane.clone();
+        back.position.z = 2.5 - 0.01;
+        back.rotation.y = Math.PI;
+        cabin.add(back);
+      }
     }
     this.train.add(cabin);
   }

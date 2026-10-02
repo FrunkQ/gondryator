@@ -74,10 +74,10 @@ export class Spawner {
 
   private probe: THREE.PerspectiveCamera;
 
-  constructor(private pack: Pack, private rig: CameraRig, private score: Score, camera: THREE.PerspectiveCamera) {
+  constructor(private pack: Pack, private rig: CameraRig, private score: Score, camera: THREE.PerspectiveCamera, material?: THREE.Material) {
     this.camera = camera;
     this.probe = camera.clone();
-    this.pools = new Pools(200);
+    this.pools = new Pools(200, material);
     for (const l of pack.layers) this.layers.set(l.id, { layer: l, events: [], ptr: 0, lead: rig.leadTime(l.depth + (l.depthJitter ?? 0)) });
     const models = new Set<string>();
     for (const l of pack.layers) for (const ms of Object.values(l.models)) ms.forEach(m => models.add(m));

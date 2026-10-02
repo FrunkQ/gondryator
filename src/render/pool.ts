@@ -36,9 +36,9 @@ export class Pools {
   private capacity: number;
   private free: PooledObject[] = [];
 
-  constructor(capacity = 160) {
+  constructor(capacity = 160, material?: THREE.Material) {
     this.capacity = capacity;
-    this.material = sharedScenery ??= FLAGS.procedural ? makeSceneryMaterial() : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
+    this.material = material ?? (sharedScenery ??= FLAGS.procedural ? makeSceneryMaterial() : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
   }
 
   private mesh(model: string): THREE.InstancedMesh {

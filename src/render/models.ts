@@ -126,6 +126,21 @@ function canopy(x: number, y: number, z: number, r: number, color: number, seed:
   return T(SURF.foliage, ...out);
 }
 
+/** A lumpy rock: an icosphere with its vertices pushed in and out (deterministic). */
+function rockBlob(r: number, seed: number, color: number, x: number, y: number, z: number): Part {
+  const g = new THREE.IcosahedronGeometry(r, 1);
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+    const n = Math.sin(vx * 3.1 + seed) * Math.cos(vy * 2.7 + seed * 1.7) * Math.sin(vz * 3.7 + seed * 0.3);
+    const k = 1 + 0.35 * n;
+    pos.setXYZ(i, vx * k * 1.3, vy * k * 0.8, vz * k);
+  }
+  g.computeVertexNormals();
+  g.translate(x, y, z);
+  return colorize(g, color, 0.7);
+}
+
 export const MODELS: Record<string, () => THREE.BufferGeometry> = {
   // --- trackside -----------------------------------------------------------------
   'catenary-pole': () => merge([
@@ -235,6 +250,47 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
   'cypress': () => merge([cone(0.9, 8, 0, 4.4, 0, 0x2d4628, 7), cyl(0.15, 0.15, 0.5, 0, 0.25, 0, 0x4a3828, 5)]),
   'bush': () => merge(canopy(0, 0.8, 0, 1.3, 0x6d8442, 5, 0.6)),
   'far-hill': () => merge([T1(SURF.grass, sphere(120, 0, -10, 0, 0x93a46a, 2.2, 0.45, 1, 16))]),
+
+  // --- the other window: Provence ---------------------------------------------------------
+  'poplar': () => merge([cyl(0.18, 0.3, 2.5, 0, 1.25, 0, 0x6b5a45, 6), ...T(SURF.foliage,
+    sphere(1.4, 0, 6.5, 0, 0x4f6e32, 1, 3.4, 1, 9), sphere(1.1, 0.4, 9.5, 0.2, 0x5a7a38, 1, 2.6, 1, 8), sphere(0.9, -0.3, 4.2, -0.2, 0x46642c, 1, 1.8, 1, 7))]),
+  'lavender-row': () => merge([
+    ...[-4, -2, 0, 2, 4].map(z => T1(SURF.lavender, colorize(new THREE.CylinderGeometry(0.55, 0.55, 12, 10, 1).rotateZ(Math.PI / 2).scale(1, 0.75, 1).translate(0, 0.2, z), 0x8f78c9, 0.6))),
+    ...[-3, -1, 1, 3].map(z => box(12, 0.02, 1.2, 0, 0.01, z, 0x9b7d5a)),
+  ]),
+  'chateau': () => merge([
+    box(14, 9, 8, 0, 4.5, 0, 0xe8dcc0), ...T(SURF.tile, roof(14.4, 8.6, 4, 0, 9, 0, 0x55606e)),
+    ...[-7.5, 7.5].flatMap(x => [cyl(2.4, 2.4, 13, x, 6.5, 0, 0xe2d4b6, 14), T1(SURF.tile, cone(2.8, 6, x, 16, 0, 0x4d5866, 14))]),
+    ...windowsOnFace(14, 9, 4.0, 2, 5, 1.2, 0x3a4450),
+  ]),
+  'sunflowers': () => merge([
+    ...Array.from({ length: 18 }, (_, i) => {
+      const x = (i % 6) * 1.6 - 4, z = Math.floor(i / 6) * 1.6 - 1.6, h = 1.6 + ((i * 7) % 5) * 0.12;
+      return [cyl(0.04, 0.05, h, x, h / 2, z, 0x4e6b2a, 4), T1(SURF.glow, cyl(0.32, 0.32, 0.08, x, h, z + 0.1, 0x8a6a10, 10).rotateX(Math.PI / 2.4)), cyl(0.14, 0.14, 0.1, x, h, z + 0.15, 0x3a2410, 8).rotateX(Math.PI / 2.4)];
+    }).flat(),
+  ]),
+
+  // --- the other window: Cosmos -------------------------------------------------------------
+  'asteroid': () => merge([T1(SURF.rock, rockBlob(1.6, 7, 0x8a8076, 0, 3.2, 0))]),
+  'beacon': () => merge([T1(SURF.glow, sphere(0.18, 0, 1.6, 0, 0x6fd8ff, 1, 1, 1, 8)), T1(SURF.metal, cyl(0.03, 0.03, 1.2, 0, 0.9, 0, 0x7d8286, 4))]),
+  'satellite': () => merge([
+    T1(SURF.metal, box(1.6, 1.6, 1.6, 0, 7, 0, 0xc9b26a)),
+    ...[-1, 1].map(sx => T1(SURF.glass, box(4, 0.06, 1.6, sx * 2.9, 7, 0, 0x2a3a7a))),
+    T1(SURF.glow, sphere(0.15, 0, 8.1, 0, 0xff4f6b, 1, 1, 1, 6)),
+  ]),
+  'space-station': () => merge([
+    T1(SURF.metal, colorize(new THREE.TorusGeometry(6, 0.7, 10, 40).rotateX(Math.PI / 2.6).translate(0, 16, 0), 0xd6d8dc)),
+    ...[0, 1, 2, 3].map(k => T1(SURF.metal, colorize(new THREE.CylinderGeometry(0.18, 0.18, 12, 6).rotateZ(Math.PI / 2).rotateY(k * Math.PI / 4).rotateX(Math.PI / 2.6 - Math.PI / 2).translate(0, 16, 0), 0xa9adb3))),
+    T1(SURF.glow, sphere(1.6, 0, 16, 0, 0xffd27a, 1, 1, 1, 12)),
+  ]),
+  'crystal': () => merge([T1(SURF.glass, colorize(new THREE.OctahedronGeometry(2.2, 0).scale(1, 3.5, 1).translate(0, 9, 0), 0x6fb8ff)),
+    T1(SURF.glow, colorize(new THREE.OctahedronGeometry(0.7, 0).scale(1, 3, 1).translate(0, 9, 0), 0x9fe8ff))]),
+  'gas-giant': () => merge([T1(SURF.gas, sphere(38, 0, 75, 0, 0xd99a5e, 1, 0.94, 1, 32))]),
+  'ringed-planet': () => merge([
+    T1(SURF.gas, sphere(26, 0, 85, 0, 0xe0c890, 1, 0.95, 1, 28)),
+    T1(SURF.rock, colorize(new THREE.RingGeometry(34, 52, 64, 1).rotateX(-Math.PI / 2.3).translate(0, 85, 0), 0xcab89a)),
+  ]),
+  'moon': () => merge([T1(SURF.rock, sphere(14, 0, 45, 0, 0xb8b4ac, 1, 1, 1, 20))]),
 
   // --- events that pass over / along the train ------------------------------------------
   'overpass': () => merge([
