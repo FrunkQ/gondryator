@@ -1,0 +1,11 @@
+import { chromium } from 'playwright-core';
+import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+const server = http.createServer((req, res) => { let p = decodeURIComponent(new URL(req.url, 'http://x').pathname); if (p.endsWith('/')) p += 'index.html'; const f = path.join('dist', p); if (!fs.existsSync(f)) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'content-type': p.endsWith('.js') ? 'text/javascript' : p.endsWith('.css')?'text/css':'text/html' }); fs.createReadStream(f).pipe(res); }).listen(0);
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--enable-unsafe-swiftshader','--use-angle=swiftshader','--enable-unsafe-webgpu'] });
+const page = await browser.newPage();
+const logs=[]; page.on('console', m => logs.push(m.type()+': '+m.text().slice(0,200))); page.on('pageerror', e => logs.push('ERR '+e.message.slice(0,200)));
+await page.goto(`http://localhost:${server.address().port}/?debug`);
+await page.waitForTimeout(6000);
+console.log(page.url()); console.log(await page.evaluate(()=>JSON.stringify({b: window.app?.world?.backend, g: !!window.__gondry})));
+console.log([...new Set(logs)].slice(0,10).join('\n'));
+await browser.close(); server.close();

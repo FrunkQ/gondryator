@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Gondryator</title>
+  <meta name="description" content="A music visualiser: every beat and note becomes something passing the window, exactly when it sounds." />
+</head>
+<body>
+  <div id="stage">
+    <canvas id="view"></canvas>
+    <div class="grain"></div>
+
+    <div id="drop" class="ui card">
+      <p class="lead">Drop a music file anywhere to depart.</p>
+      <p class="small">MP3, WAV, FLAC, OGG or M4A. It stays on your machine. Add a MIDI file of the same track for the sharpest sync.</p>
+      <div class="row">
+        <button id="choose">Choose a file</button>
+        <button id="demo" class="ghost">Play a generated demo</button>
+      </div>
+      <input id="file" type="file" accept="audio/*,.mid,.midi,.flac,.m4a" multiple hidden />
+    </div>
+
+    <div id="status" class="ui"></div>
+    <div id="toast" class="ui"></div>
+
+    <div id="endcard" class="ui card hidden">
+      <p class="lead">Terminus.</p>
+      <div class="row">
+        <button id="again">Ride again</button>
+        <button id="another" class="ghost">Load another track</button>
+      </div>
+    </div>
+
+    <div id="bar" class="ui">
+      <button id="play" title="Play / pause (space)">▶</button>
+      <span id="time"></span>
+      <div class="scrubwrap"><div id="analysed"></div><input id="scrub" type="range" min="0" max="1000" value="0" /></div>
+      <select id="pack" title="Scenery pack"></select>
+      <button id="center" class="ghost" title="Look straight out (C)">◎</button>
+      <button id="gyro" class="ghost" title="Look around with the phone's gyroscope">⟲</button>
+      <button id="dbg" class="ghost" title="Debug overlay (D)">D</button>
+      <button id="json" class="ghost" title="Export the score as JSON">JSON</button>
+      <button id="mid" class="ghost" title="Export the score as a type-1 MIDI file">MIDI</button>
+      <button id="fx" class="ghost" title="Effects: auto. Click or press X to pick a look">✦</button>
+      <button id="fs" class="ghost" title="Fullscreen (F)">⛶</button>
+    </div>
+    <div id="credits" class="ui"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
