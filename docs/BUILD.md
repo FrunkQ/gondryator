@@ -60,6 +60,12 @@ Press `T` (or the 🎛 button, or open with `?tune`) to see what the music parse
 
 Every parser setting (`src/analysis/tuning.ts`) is a slider: move one and the track is re-parsed in place. "Apply to the show" restarts the ride with those settings (they are saved in the browser; tuned scores are not cached). "Copy" puts them on the clipboard as JSON.
 
+## The frame analyser
+
+Press `P` (or the ⏱ button, or open with `?perf`) for a picture-in-picture strip of frame times against the show clock. Bars are green inside the display's frame budget, amber up to two frames, red beyond. Every frame carries marks for what happened in it: section, scenery, other-window and look changes, a model's first appearance, shaders compiled, new GPU geometry and textures, the sky reflections being re-baked, fireworks, station boards, score updates from the analyser, and long main-thread tasks (Chromium). Stutters show their marks; "Copy report" puts a plain-text report on the clipboard with every stutter, totals per cause, and frames counted against frames expected at the display's refresh rate.
+
+Pace fixes that came out of it: the sky reflections are re-baked into the same render target (a fresh texture made every material rebuild its shader), every shader the ride will need is compiled before departure (`World.warmup`: all ground themes, every pooled model, the space sky), and the renderer asks for the high-performance GPU. Browsers do not let a page reserve GPU memory up front; pre-building everything is the closest equivalent. On laptops with two GPUs the OS setting wins (Windows: Settings > Display > Graphics > browser > High performance).
+
 ## Measurements (this container: no GPU, headless Chromium, software rendering)
 
 Analysis on synthetic tracks with known ground truth (`tools/eval-analysis.mjs`):

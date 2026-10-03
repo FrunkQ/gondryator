@@ -4,6 +4,7 @@ import * as THREE from 'three/webgpu';
 import { getModel } from './models';
 import { makeSceneryMaterial } from './shaders';
 import { FLAGS } from './flags';
+import { perf } from '../ui/frames';
 
 export interface PooledObject {
   model: string;
@@ -71,6 +72,7 @@ export class Pools {
       model, slot: -1, x: 0, y: 0, z: 0, sx: 1, sy: 1, sz: 1, rotY: 0, color: new THREE.Color(1, 1, 1), grow: 1, vx: 0, t0: 0, tag: 0,
     };
     o.model = model;
+    if (!m.userData.used) { m.userData.used = true; perf.mark(`first ${model}`); }
     o.slot = m.count;
     o.grow = 1; o.vx = 0; o.t0 = 0; o.rotY = 0; o.y = 0;
     o.color.setRGB(1, 1, 1);

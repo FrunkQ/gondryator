@@ -7,6 +7,7 @@
 import * as THREE from 'three/webgpu';
 import type { Score, ScoreEvent } from '../score/types';
 import { instanceColor, vec3 } from 'three/tsl';
+import { perf } from '../ui/frames';
 
 const BIRDS = 260;
 const SPARKS = 900;
@@ -110,6 +111,7 @@ export class SkyLife {
   }
 
   private celebrate(viewer: THREE.Vector3, shells: number) {
+    perf.mark(this.stage ? 'confetti' : 'fireworks');
     for (let k = 0; k < shells; k++) {
       const col = this.colors[(Math.random() * 5) | 0];
       if (this.stage) this.burst(v.set((Math.random() - 0.5) * 12, 15, (Math.random() - 0.5) * 12), 260, 5, col);

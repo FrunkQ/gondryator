@@ -68,6 +68,9 @@ export class OtherSide {
     this.spawner.refreshLeads();
   }
 
+  /** Objects hidden until the train leaves for space (for shader warm-up). */
+  get hidden(): THREE.Object3D[] { return [this.space, this.floor]; }
+
   reset(s: number) { this.spawner.reset(s); }
 
   update(s: number, dt: number, gaze: GazeSource, frontier: number, running: boolean, trainX: number) {

@@ -25,6 +25,7 @@ import AnalysisWorker from './analysis/worker?worker&inline';
 import { Analyzer } from './analysis/analyzer';
 import { DEFAULT_TUNING, isDefaultTuning, type Tuning } from './analysis/tuning';
 import { TuningScreen } from './ui/tuning';
+import { FrameAnalyser, perf } from './ui/frames';
 
 function savedTuning(): Tuning {
   try { return { ...DEFAULT_TUNING, ...JSON.parse(localStorage.getItem('gondryator.tuning') ?? '{}') }; } catch { return { ...DEFAULT_TUNING }; }
@@ -80,6 +81,9 @@ class App {
   private audioBuf: AudioBuffer | null = null;
   private lastFile: { buf: ArrayBuffer; name: string } | null = null;
   private tuner!: TuningScreen;
+  private frames!: FrameAnalyser;
+  /** What was on screen last frame, so the frame analyser can say what changed. */
+  private seen = { sec: -1, theme: '', other: '', look: '' };
 
   constructor() {
     this.stage = $('#stage');
@@ -210,11 +214,30 @@ class App {
     this.driver.refreshLeads();
     if (this.lastCard) this.driver.card?.(this.lastCard.kind, this.lastCard.info);
     this.world.invalidateGround();
+    // Build every shader now rather than when each thing first appears mid-ride.
+    if (!params.has('nowarm')) this.world.warmup(this.other?.hidden ?? []);
+  }
+
+  /** Tell the frame analyser about section, scenery and look changes this frame. */
+  private markChanges(s: number) {
+    const sc = this.score, seen = this.seen;
+    if (sc && sc.sections.length) {
+      let i = -1;
+      for (let k = 0; k < sc.sections.length; k++) if (sc.sections[k].t <= s) i = k;
+      if (i !== seen.sec) { if (i >= 0) perf.mark(`section → ${sc.sections[i].label}`); seen.sec = i; }
+    }
+    const theme = this.driver?.themeAt(s) ?? '';
+    if (theme !== seen.theme) { if (seen.theme) perf.mark(`scenery → ${theme}`); seen.theme = theme; }
+    const other = this.other?.spawner.themeAt(s) ?? '';
+    if (other !== seen.other) { if (seen.other) perf.mark(`other window → ${other}`); seen.other = other; }
+    const look = this.fx.locked ?? this.fx.look;
+    if (look !== seen.look) { if (seen.look) perf.mark(`look → ${look}`); seen.look = look; }
   }
 
   /** A landing, title or end card: a station board on the line, or whatever the pack's show uses. */
   private showCard(kind: 'landing' | 'title' | 'end', x: number, info: CardInfo, opts: { end?: boolean; trackside?: boolean } = {}) {
     this.lastCard = { kind, x, info, opts };
+    perf.mark(`${kind} board`);
     if (this.driver?.card?.(kind, info)) return;
     this.world.stationBoard(x, info, opts);
   }
@@ -237,6 +260,7 @@ class App {
           d.events.forEach((e, i) => { if (!e.id) e.id = 'm' + (midiPtr + i); });
         }
         applyDelta(this.score, d);
+        perf.mark(`score update (+${d.events.length} events)`);
         if (d.final) {
           this.score.final = true;
           if (isDefaultTuning(this.tuning)) void saveScore(this.score);
@@ -358,7 +382,9 @@ class App {
       // Star Guitar's main window stays true to the video; the looks come in as you turn round.
       this.fx.amount = this.pack.rig.lookYaw ? ((1 - Math.cos(this.look.yaw)) / 2) ** 2 : 1;
       this.fx.update(s, dt, this.phase === 'run' || this.phase === 'ended', this.world.night, this.world.camera.aspect);
+      if (perf.on) this.markChanges(s);
       if (!this.tuner?.isOpen) this.world.render(); // the tuning screen covers the view
+      this.frames?.frame(s);
     } catch (e) {
       // Some browsers expose WebGPU but lack features three.js needs: fall back to WebGL2.
       if (this.world.backend === 'WebGPU' && !params.has('webgl') && this.phase === 'landing') {
@@ -526,11 +552,17 @@ class App {
       },
     }, this.tuning);
     document.body.appendChild(this.tuner.el);
+    // The frame analyser: frame times against the show clock, each stutter labelled with its cause.
+    this.frames = new FrameAnalyser(() => this.world?.renderer);
+    this.stage.appendChild(this.frames.el);
+    $('#perf').addEventListener('click', () => this.frames.toggle());
+    if (params.has('perf')) this.frames.toggle(true);
     $('#tune').addEventListener('click', () => this.tuner.toggle());
     if (params.has('tune')) this.tuner.toggle(true);
     window.addEventListener('keydown', e => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
       if (e.key === 't' || e.key === 'T') this.tuner.toggle();
+      if (e.key === 'p' || e.key === 'P') this.frames.toggle();
       if (this.tuner.isOpen) { if (e.key === ' ') { e.preventDefault(); (this.tuner.el.querySelector('.tn-play') as HTMLElement).click(); } return; }
       if (e.key === ' ') { e.preventDefault(); this.togglePause(); }
       if (e.key === 'd' || e.key === 'D') this.debug.toggle();

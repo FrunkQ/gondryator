@@ -11,6 +11,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeGroundMaterial, makeWindowGlassMaterial, makeGrassMaterial, U as SU } from './shaders';
 import { makePipeline, FX_UNIFORMS } from './fx';
 import { FLAGS } from './flags';
+import { perf } from '../ui/frames';
 
 export interface StationInfo { name: string; line2: string; line3?: string; art?: HTMLImageElement | null }
 
@@ -62,7 +63,7 @@ export class World {
   }
 
   async init(canvas: HTMLCanvasElement, forceWebGL: boolean, renderer?: THREE.WebGPURenderer) {
-    this.renderer = renderer ?? new THREE.WebGPURenderer({ canvas, antialias: true, forceWebGL });
+    this.renderer = renderer ?? new THREE.WebGPURenderer({ canvas, antialias: true, forceWebGL, powerPreference: 'high-performance' } as any);
     if (!renderer) await this.renderer.init();
     this.backend = (this.renderer.backend as any).isWebGPUBackend ? 'WebGPU' : 'WebGL2';
     this.renderer.setPixelRatio(this.pixelRatio = Math.min(window.devicePixelRatio, 1.5));
@@ -187,9 +188,11 @@ export class World {
       if (FLAGS.env && (Math.abs(u - this.lastEnvU) > 0.04 || this.lastEnvU < 0)) {
         this.lastEnvU = u;
         try {
-          this.envRT?.dispose();
-          this.envRT = this.pmrem!.fromScene(this.envScene, 0.02);
-          this.scene.environment = this.envRT.texture;
+          // Re-bake into the same target: a new texture would make every material rebuild its shader.
+          const reuse = this.envRT && this.lastEnvU >= 0 && this.scene.environment === this.envRT.texture ? this.envRT : null;
+          this.envRT = this.pmrem!.fromScene(this.envScene, 0.02, 0.1, 100, { renderTarget: reuse } as any);
+          if (this.scene.environment !== this.envRT.texture) this.scene.environment = this.envRT.texture;
+          perf.mark('sky reflections re-baked');
           this.scene.environmentIntensity = 0.5;
         } catch { /* reflections stay as they were */ }
       }
@@ -592,9 +595,65 @@ export class World {
       if (tile.index !== idx) {
         tile.index = idx;
         tile.mesh.position.x = idx * TILE + TILE / 2;
-        tile.mesh.material = this.groundMats.get(this.themeForX(idx * TILE + TILE / 2)) ?? tile.mesh.material;
+        const mat = this.groundMats.get(this.themeForX(idx * TILE + TILE / 2)) ?? tile.mesh.material;
+        if (mat !== tile.mesh.material) { tile.mesh.material = mat; perf.mark('ground re-themed'); }
       }
     }
+  }
+
+  /**
+   * Build every shader the show will need ahead of time, so nothing compiles mid-ride. In three,
+   * each InstancedMesh gets its own shader build, so a model's first appearance used to cost a
+   * full build of the scenery material: the stutters at scene changes. Warm-up goes through every
+   * pooled model, each ground theme and anything hidden until later (the other window's sky), one
+   * object per frame so the landing and title cards stay smooth while it works.
+   */
+  warmup(extra: THREE.Object3D[] = []) {
+    const jobs: (() => Promise<void>)[] = [];
+    const compile = (o: THREE.Object3D) => this.renderer.compileAsync(o, this.camera, this.scene).catch(() => {});
+    this.scene.traverse(o => {
+      const m = o as THREE.InstancedMesh;
+      if (!m.isInstancedMesh || m.userData.warm) return;
+      jobs.push(async () => {
+        if (m.userData.warm || !m.parent) return;
+        m.userData.warm = true;
+        const n = m.count;
+        if (n === 0) { m.setMatrixAt(0, new THREE.Matrix4().makeScale(0, 0, 0)); m.instanceMatrix.needsUpdate = true; m.count = 1; }
+        await compile(m);
+        if (n === 0 && m.count === 1 && !m.userData.used) m.count = 0;
+      });
+    });
+    const tile = this.tiles[0]?.mesh;
+    if (tile) for (const mat of this.groundMats.values()) jobs.push(async () => {
+      if (mat.userData.warm) return;
+      mat.userData.warm = true;
+      const was = tile.material;
+      tile.material = mat;
+      await compile(tile);
+      tile.material = was;
+    });
+    for (const o of extra) jobs.push(async () => {
+      if (o.userData.warm) return;
+      o.userData.warm = true;
+      const was = o.visible;
+      o.visible = true;
+      await compile(o);
+      o.visible = was;
+    });
+    this.warmJobs.push(...jobs);
+  }
+  private warmJobs: (() => Promise<void>)[] = [];
+  private warming = false;
+  /** Run the next warm-up job, if the last one has finished. Called once a frame. */
+  private stepWarmup() {
+    if (this.warming || !this.warmJobs.length) return;
+    this.warming = true;
+    const job = this.warmJobs.shift()!;
+    const t0 = performance.now();
+    void job().finally(() => {
+      this.warming = false;
+      perf.mark(`warm-up ${Math.round(performance.now() - t0)} ms (${this.warmJobs.length} left)`);
+    });
   }
 
   /** Re-theme ground tiles (after a seek or when sections arrive). */
@@ -602,6 +661,7 @@ export class World {
 
   /** Renders through the effects pipeline; falls back to a plain render if it cannot be built. */
   render() {
+    this.stepWarmup();
     if (!this.pipeline && !this.pipelineFailed && this.fxEnabled) {
       try { this.pipeline = makePipeline(this.renderer, this.scene, this.camera, { ao: FLAGS.ao ?? false }); } catch (e) { console.warn('effects off:', e); this.pipelineFailed = true; }
     }
