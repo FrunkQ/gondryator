@@ -54,7 +54,11 @@ export class LookController implements GazeSource {
     this.targetPitch = Math.max(-mp, Math.min(mp, this.targetPitch));
   }
 
-  center() { this.targetYaw = 0; this.targetPitch = 0; }
+  /** The resting view, radians: where the view starts and where centring returns to. */
+  restYaw = 0;
+  restPitch = 0;
+  setRest(yaw: number, pitch: number) { this.restYaw = yaw; this.restPitch = pitch; this.yaw = this.targetYaw = yaw; this.pitch = this.targetPitch = pitch; this.prevYaw = yaw; }
+  center() { this.targetYaw = this.restYaw; this.targetPitch = this.restPitch; }
 
   async enableGyro(): Promise<boolean> {
     const DOE = (window as any).DeviceOrientationEvent;

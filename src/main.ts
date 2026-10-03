@@ -23,6 +23,12 @@ import { PACKS } from './packs';
 import type { Pack } from './packs/types';
 import AnalysisWorker from './analysis/worker?worker&inline';
 import { Analyzer } from './analysis/analyzer';
+import { DEFAULT_TUNING, isDefaultTuning, type Tuning } from './analysis/tuning';
+import { TuningScreen } from './ui/tuning';
+
+function savedTuning(): Tuning {
+  try { return { ...DEFAULT_TUNING, ...JSON.parse(localStorage.getItem('gondryator.tuning') ?? '{}') }; } catch { return { ...DEFAULT_TUNING }; }
+}
 
 const params = new URLSearchParams(location.search);
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -69,6 +75,11 @@ class App {
   private endedAt: number | null = null;
   private art: HTMLImageElement | null = null;
   private trackInfo = { title: '', artist: '', album: '' };
+  /** The music parser's settings (Tuning screen), and the track to re-parse with them. */
+  private tuning = savedTuning();
+  private audioBuf: AudioBuffer | null = null;
+  private lastFile: { buf: ArrayBuffer; name: string } | null = null;
+  private tuner!: TuningScreen;
 
   constructor() {
     this.stage = $('#stage');
@@ -118,6 +129,7 @@ class App {
     }
     this.look.maxYaw = pack.rig.lookYaw ?? pack.rig.maxYaw;
     this.look.wanderYaw = pack.rig.maxYaw;
+    this.look.setRest(THREE.MathUtils.degToRad(pack.rig.startYaw ?? 0), THREE.MathUtils.degToRad(pack.rig.startPitch ?? 0));
     this.onResize();
     const cr = $('#credits');
     cr.textContent = pack.credits + ' ';
@@ -146,6 +158,7 @@ class App {
   }
 
   private async loadAudio(buf: ArrayBuffer, name: string) {
+    this.lastFile = { buf: buf.slice(0), name };
     if (this.phase !== 'landing') this.resetForNewTrack();
     $('#drop').classList.add('hidden');
     void this.player.ctx.resume();
@@ -162,8 +175,9 @@ class App {
     }, { trackside: true });
     const hash = await hashFile(buf);
     const audioBuf = await this.player.decode(buf.slice(0));
+    this.audioBuf = audioBuf;
     const track = { title: tags.title, artist: tags.artist, album: tags.album, durationSec: audioBuf.duration, art: null, hash };
-    const cached = this.midi ? null : await loadScore(hash);
+    const cached = this.midi || !isDefaultTuning(this.tuning) ? null : await loadScore(hash);
     if (cached && cached.final) {
       this.score = cached;
       this.analysedSec = cached.track.durationSec;
@@ -225,7 +239,7 @@ class App {
         applyDelta(this.score, d);
         if (d.final) {
           this.score.final = true;
-          void saveScore(this.score);
+          if (isDefaultTuning(this.tuning)) void saveScore(this.score);
         }
       }
     };
@@ -233,7 +247,7 @@ class App {
     const onMainThread = () => {
       // Workers can be blocked (strict sandboxes): analyse on the main thread in small slices.
       this.worker = null;
-      const a = new Analyzer(pcm, buf.sampleRate, { chunkSec: 1.5 });
+      const a = new Analyzer(pcm, buf.sampleRate, { chunkSec: 1.5, tuning: this.tuning });
       const t0 = performance.now();
       const tick = () => {
         if (this.score?.track.durationSec !== buf.duration) return; // a new track replaced this one
@@ -250,7 +264,7 @@ class App {
       let alive = false;
       w.onmessage = (ev: MessageEvent) => { alive = true; onMessage(ev.data); };
       w.onerror = () => { if (!alive) { w.terminate(); onMainThread(); } };
-      w.postMessage({ type: 'start', pcm: pcm.slice(), sampleRate: buf.sampleRate, throttleMsPerSec: throttle });
+      w.postMessage({ type: 'start', pcm: pcm.slice(), sampleRate: buf.sampleRate, throttleMsPerSec: throttle, tuning: this.tuning });
     } catch {
       onMainThread();
     }
@@ -344,7 +358,7 @@ class App {
       // Star Guitar's main window stays true to the video; the looks come in as you turn round.
       this.fx.amount = this.pack.rig.lookYaw ? ((1 - Math.cos(this.look.yaw)) / 2) ** 2 : 1;
       this.fx.update(s, dt, this.phase === 'run' || this.phase === 'ended', this.world.night, this.world.camera.aspect);
-      this.world.render();
+      if (!this.tuner?.isOpen) this.world.render(); // the tuning screen covers the view
     } catch (e) {
       // Some browsers expose WebGPU but lack features three.js needs: fall back to WebGL2.
       if (this.world.backend === 'WebGPU' && !params.has('webgl') && this.phase === 'landing') {
@@ -495,8 +509,29 @@ class App {
     $('#json').addEventListener('click', () => this.score && download(new Blob([JSON.stringify(this.score)], { type: 'application/json' }), slug(this.trackInfo.title) + '.score.json'));
     $('#mid').addEventListener('click', () => this.score && download(new Blob([scoreToMidi(this.score) as BlobPart], { type: 'audio/midi' }), slug(this.trackInfo.title) + '.mid'));
     $('#fs').addEventListener('click', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+    // The tuning screen: a piano roll of what the parser heard, with all its settings.
+    this.tuner = new TuningScreen({
+      audio: () => this.audioBuf,
+      player: this.player,
+      togglePlay: () => {
+        if (this.phase === 'run' || this.phase === 'ended') this.togglePause();
+        else if (this.player.playing) this.player.pause();
+        else if (this.audioBuf && this.phase === 'landing') this.player.play(Math.max(0, this.player.time));
+      },
+      apply: t => {
+        this.tuning = t;
+        try { localStorage.setItem('gondryator.tuning', JSON.stringify(t)); } catch { /* private window */ }
+        if (this.lastFile) void this.loadAudio(this.lastFile.buf, this.lastFile.name);
+        this.toast(isDefaultTuning(t) ? 'Parser back on its default settings' : 'Re-parsing the track with your tuning', 3000);
+      },
+    }, this.tuning);
+    document.body.appendChild(this.tuner.el);
+    $('#tune').addEventListener('click', () => this.tuner.toggle());
+    if (params.has('tune')) this.tuner.toggle(true);
     window.addEventListener('keydown', e => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      if (e.key === 't' || e.key === 'T') this.tuner.toggle();
+      if (this.tuner.isOpen) { if (e.key === ' ') { e.preventDefault(); (this.tuner.el.querySelector('.tn-play') as HTMLElement).click(); } return; }
       if (e.key === ' ') { e.preventDefault(); this.togglePause(); }
       if (e.key === 'd' || e.key === 'D') this.debug.toggle();
       if (e.key === 'g' || e.key === 'G') { this.look.wander = !this.look.wander; this.toast(this.look.wander ? 'Wandering-viewer test on (refocus metric in debug view)' : 'Wandering-viewer test off'); }

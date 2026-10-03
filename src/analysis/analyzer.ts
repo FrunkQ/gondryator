@@ -8,6 +8,7 @@
 //
 // It is pure TypeScript with no DOM dependency so it runs in a Web Worker and in Node tests.
 
+import { DEFAULT_TUNING, type Tuning } from './tuning';
 import { FFT, biquad, clamp, decimate, halve, hzToMidi, percentile, yin } from './dsp';
 import type { Beat, EventKind, Phrase, ScoreDelta, ScoreEvent, Section, Stem } from '../score/types';
 
@@ -30,6 +31,8 @@ export interface AnalyzerOptions {
   chunkSec?: number;
   /** Artificial slow-down for testing the frontier guard (wall-clock ms per audio second). */
   throttleMsPerSec?: number;
+  /** The parser's knobs (Tuning screen). */
+  tuning?: Partial<Tuning>;
 }
 
 export class Analyzer {
@@ -98,12 +101,14 @@ export class Analyzer {
   private envDrums: number[] = [];
   private startWall = 0;
   private opts: Required<AnalyzerOptions>;
+  private k: Tuning;
 
   /** Calibrated onset offset (seconds) so event times land on the audible attack. */
   static ONSET_OFFSET = 0;
 
   constructor(pcm: Float32Array, sampleRate: number, opts: AnalyzerOptions = {}) {
-    this.opts = { chunkSec: 4, throttleMsPerSec: 0, ...opts };
+    this.opts = { chunkSec: 4, throttleMsPerSec: 0, tuning: {}, ...opts };
+    const k = this.k = { ...DEFAULT_TUNING, ...opts.tuning };
     let x = pcm;
     let sr = sampleRate;
     while (sr > 30000) { x = halve(x); sr /= 2; }
@@ -120,18 +125,18 @@ export class Analyzer {
     this.odf = new Float32Array(F);
 
     // Band signals for pitch tracking.
-    let b = biquad(x, sr, 'lp', 220);
-    b = biquad(b, sr, 'lp', 220);
+    let b = biquad(x, sr, 'lp', k.bassCutHz);
+    b = biquad(b, sr, 'lp', k.bassCutHz);
     this.bassSr = sr / 8;
     this.bassSig = decimate(b, 8);
-    let l = biquad(x, sr, 'hp', 200);
-    l = biquad(l, sr, 'lp', 1800);
-    l = biquad(l, sr, 'lp', 1800);
+    let l = biquad(x, sr, 'hp', k.leadLowHz);
+    l = biquad(l, sr, 'lp', k.leadHighHz);
+    l = biquad(l, sr, 'lp', k.leadHighHz);
     this.leadSr = sr / 2;
     this.leadSig = decimate(l, 2);
 
-    this.bass = { pitch: new Float32Array(F), energy: this.dbLow, active: null, done: [], stem: 'bass', minFrames: 7 };
-    this.lead = { pitch: new Float32Array(F), energy: this.dbMid, active: null, done: [], stem: 'other', minFrames: 5 };
+    this.bass = { pitch: new Float32Array(F), energy: this.dbLow, active: null, done: [], stem: 'bass', minFrames: Math.max(1, Math.round(k.bassMinNote / this.hopSec)) };
+    this.lead = { pitch: new Float32Array(F), energy: this.dbMid, active: null, done: [], stem: 'other', minFrames: Math.max(1, Math.round(k.leadMinNote / this.hopSec)) };
   }
 
   get finished() { return this.framesDone >= this.frames && this.committedSec >= this.duration - 1e-6; }
@@ -192,11 +197,11 @@ export class Analyzer {
     // Pitch (YIN) on band signals, gated by band energy.
     const center = (f * HOP + N / 2) / this.sr;
     if (this.dbLow[f] > -42) {
-      const fr = yin(this.bassSig, Math.round(center * this.bassSr), 200, Math.floor(this.bassSr / 330), Math.ceil(this.bassSr / 35), this.bassSr, 0.15, this.yinScratch);
+      const fr = yin(this.bassSig, Math.round(center * this.bassSr), 200, Math.floor(this.bassSr / 330), Math.ceil(this.bassSr / 35), this.bassSr, this.k.bassYin, this.yinScratch);
       this.bass.pitch[f] = fr > 0 ? hzToMidi(fr) : 0;
     }
     if (this.dbMid[f] > -45) {
-      const fr = yin(this.leadSig, Math.round(center * this.leadSr), 400, Math.floor(this.leadSr / 1500), Math.ceil(this.leadSr / 160), this.leadSr, 0.2, this.yinScratch);
+      const fr = yin(this.leadSig, Math.round(center * this.leadSr), 400, Math.floor(this.leadSr / 1500), Math.ceil(this.leadSr / 160), this.leadSr, this.k.leadYin, this.yinScratch);
       this.lead.pitch[f] = fr > 0 ? hzToMidi(fr) : 0;
     }
   }
@@ -215,26 +220,27 @@ export class Analyzer {
     for (let f = this.onsetScanned; f < until; f++) {
       const lo = this.fluxLow, mi = this.fluxMid, hi = this.fluxHigh;
       const lowPeakDb = Math.max(this.dbLow[f], this.dbLow[f + 1] ?? -200, this.dbLow[f + 2] ?? -200);
-      const kick = this.isPeak(lo, f, 0.35 * this.p95.low) && lowPeakDb > lowRef - 15 && this.kickDecay(f);
+      const K = this.k;
+      const kick = this.isPeak(lo, f, K.kickFloor * this.p95.low) && lowPeakDb > lowRef - 15 && this.kickDecay(f);
       const midRise = (this.dbMid[f + 1] ?? -200) - (this.dbMid[f - 2] ?? -200);
-      const snare = !kick && this.isPeak(mi, f, 0.4 * this.p95.mid) && this.flatAround(f) > 0.2 && hi[f] > 0.3 * this.p95.high && midRise > 2;
-      const snareWithKick = kick && this.isPeak(mi, f, 0.45 * this.p95.mid) && this.flatAround(f) > 0.3 && hi[f] > 0.5 * this.p95.high;
-      const hat = !snare && !snareWithKick && this.isPeak(hi, f, 0.2 * this.p95.high, 1.25) && mi[f] < 0.8 * this.p95.mid;
+      const snare = !kick && this.isPeak(mi, f, K.snareFloor * this.p95.mid) && this.flatAround(f) > K.snareNoise && hi[f] > 0.3 * this.p95.high && midRise > 2;
+      const snareWithKick = kick && this.isPeak(mi, f, (K.snareFloor + 0.05) * this.p95.mid) && this.flatAround(f) > K.snareNoise + 0.1 && hi[f] > 0.5 * this.p95.high;
+      const hat = !snare && !snareWithKick && this.isPeak(hi, f, K.hatFloor * this.p95.high, K.hatPeak) && mi[f] < 0.8 * this.p95.mid;
       const t = this.frameTime(f);
       let accent = 0;
-      if (kick && f - this.lastOnsetFrame.kick > 0.09 / this.hopSec) {
+      if (kick && f - this.lastOnsetFrame.kick > K.kickGap / this.hopSec) {
         const vel = clamp(lo[f] / this.p95.low, 0.05, 1);
         this.onsets.push({ frame: f, t, kind: 'kick', vel });
         this.lastOnsetFrame.kick = f;
         accent += 2 * vel;
       }
-      if ((snare || snareWithKick) && f - this.lastOnsetFrame.snare > 0.09 / this.hopSec) {
+      if ((snare || snareWithKick) && f - this.lastOnsetFrame.snare > K.snareGap / this.hopSec) {
         const vel = clamp(mi[f] / this.p95.mid, 0.05, 1);
         this.onsets.push({ frame: f, t, kind: 'snare', vel });
         this.lastOnsetFrame.snare = f;
         accent += vel;
       }
-      if (hat && f - this.lastOnsetFrame.hat > 0.05 / this.hopSec) {
+      if (hat && f - this.lastOnsetFrame.hat > K.hatGap / this.hopSec) {
         this.onsets.push({ frame: f, t, kind: 'hat', vel: clamp(hi[f] / this.p95.high, 0.05, 1) });
         this.lastOnsetFrame.hat = f;
       }
@@ -261,7 +267,7 @@ export class Analyzer {
     let peak = -200;
     for (let k = f; k <= f + 3 && k < this.framesDone; k++) peak = Math.max(peak, this.dbLow[k]);
     const later = this.dbLow[Math.min(this.framesDone - 1, f + 9)];
-    return peak - later > 3.5;
+    return peak - later > this.k.kickDecayDb;
   }
 
   private flatAround(f: number) {
@@ -282,7 +288,7 @@ export class Analyzer {
       const act = tr.active;
       if (act) {
         const cur = act.pitchSum / act.count;
-        const changed = p > 0 && Math.abs(p - cur) > 0.7 && Math.abs((tr.pitch[f + 1] ?? 0) - cur) > 0.7;
+        const changed = p > 0 && Math.abs(p - cur) > this.k.pitchBend && Math.abs((tr.pitch[f + 1] ?? 0) - cur) > this.k.pitchBend;
         if (p === 0) act.lowDbRun++; else act.lowDbRun = 0;
         // Re-articulation: energy dropped and came back up.
         const dipped = db < act.peakDb - 9;
@@ -491,7 +497,7 @@ export class Analyzer {
     let best = 0, bestV = -Infinity;
     for (let L = minL; L <= maxL; L++) {
       const bpm = 60 / (L * this.hopSec);
-      const w = Math.exp(-0.5 * (Math.log2(bpm / 120) / 0.8) ** 2);
+      const w = Math.exp(-0.5 * (Math.log2(bpm / this.k.tempoCentre) / this.k.tempoWidth) ** 2);
       // Reward periods whose double also correlates (metrical support).
       const v = (ac[L] + 0.5 * (ac[2 * L] ?? 0)) * w;
       if (v > bestV) { bestV = v; best = L; }
@@ -628,7 +634,7 @@ export class Analyzer {
         const n0 = this.noveltyAt(b);
         const n1 = b + 1 <= F.length ? this.noveltyAt(b + 1) : 0;
         const nm = this.noveltyAt(b - 1);
-        boundary = n0 > 1.0 && n0 >= n1 && n0 > nm;
+        boundary = n0 > this.k.sectionNovelty && n0 >= n1 && n0 > nm;
       }
       if (boundary || b - this.phraseStart >= 4) {
         if (b > this.phraseStart) this.emitPhrase(this.phraseStart, b - 1);
@@ -693,7 +699,7 @@ export class Analyzer {
     let max = 0, arg = 0, sum = 0;
     for (let j = 0; j < 12; j++) { sum += c[j]; if (c[j] > max) { max = c[j]; arg = j; } }
     const peaky = sum > 0 ? max / (sum / 12) : 0;
-    if (peaky > 2.2 && f.db[1] > -38) {
+    if (peaky > this.k.padPeakiness && f.db[1] > -38) {
       const bt = this.frameTime(f.fs), et = this.frameTime(f.fe);
       this.padEvents.push({ id: '', t: bt, dur: Math.max(0.5, et - bt), stem: 'other', kind: 'note', pitch: 48 + arg, vel: clamp((f.db[1] + 40) / 30, 0.1, 1), bar: b, step: 0 });
     }

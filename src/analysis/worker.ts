@@ -10,7 +10,7 @@ self.onmessage = async (ev: MessageEvent) => {
   if (msg.type !== 'start') return;
   cancelled = false;
   const pcm: Float32Array = msg.pcm;
-  const a = new Analyzer(pcm, msg.sampleRate, { chunkSec: 3 });
+  const a = new Analyzer(pcm, msg.sampleRate, { chunkSec: 3, tuning: msg.tuning });
   const throttle: number = msg.throttleMsPerSec ?? 0;
   const t0 = performance.now();
   while (!a.finished && !cancelled) {

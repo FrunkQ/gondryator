@@ -54,6 +54,12 @@ The Star Guitar main window stays close to the original video. Turn round (drag,
 - `?noother` turns it off.
 - The main window stays photographic, like the original: the effects only come in as you turn round (forced looks via `X` or `?fx=` still apply everywhere). A milky summer haze (`haze` in the pack), a gravel works and French water towers bring it closer to the video.
 
+## The tuning screen
+
+Press `T` (or the 🎛 button, or open with `?tune`) to see what the music parser heard: a Synthesia-style piano roll where every detected hit falls onto the "now" line as it sounds. Drums get their own lanes (kick, snare, hat); bass, melody, pads and vocals fall onto a keyboard at their pitch. Hover a block for its instrument, note name, MIDI number and frequency, start time, length, velocity and bar position. Bars, beats, sections and the tempo are drawn too.
+
+Every parser setting (`src/analysis/tuning.ts`) is a slider: move one and the track is re-parsed in place. "Apply to the show" restarts the ride with those settings (they are saved in the browser; tuned scores are not cached). "Copy" puts them on the clipboard as JSON.
+
 ## Measurements (this container: no GPU, headless Chromium, software rendering)
 
 Analysis on synthetic tracks with known ground truth (`tools/eval-analysis.mjs`):

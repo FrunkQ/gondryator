@@ -373,21 +373,23 @@ export class World {
       for (const sx of [-1, 1]) add(endW, W.height, 0.08, sx * (halfLen - endW / 2), (winBottom + winTop) / 2, zc, wall);
       for (let k = 0; k < nWin; k++) {
         const cx = (k - (nWin - 1) / 2) * pitch;
-        const t = 0.05;
-        add(W.width, t, 0.1, cx, winBottom + t / 2, zc + 0.02 * sign, frame);
-        add(W.width, t, 0.1, cx, winTop - t / 2, zc + 0.02 * sign, frame);
-        add(t, W.height, 0.1, cx - W.width / 2 + t / 2, (winBottom + winTop) / 2, zc + 0.02 * sign, frame);
-        add(t, W.height, 0.1, cx + W.width / 2 - t / 2, (winBottom + winTop) / 2, zc + 0.02 * sign, frame);
+        // Slim rubber-mounted frames, nearly flush with the wall, like a real carriage window.
+        const t = 0.035;
+        add(W.width, t, 0.05, cx, winBottom + t / 2, zc + 0.01 * sign, frame);
+        add(W.width, t, 0.05, cx, winTop - t / 2, zc + 0.01 * sign, frame);
+        add(t, W.height, 0.05, cx - W.width / 2 + t / 2, (winBottom + winTop) / 2, zc + 0.01 * sign, frame);
+        add(t, W.height, 0.05, cx + W.width / 2 - t / 2, (winBottom + winTop) / 2, zc + 0.01 * sign, frame);
       }
       // Window ledge.
-      add(halfLen * 2, 0.04, 0.2, 0, winBottom - 0.02, zc + 0.1 * sign, dark);
+      add(halfLen * 2, 0.03, 0.07, 0, winBottom - 0.015, zc + 0.035 * sign, dark);
     };
     wallSide(-W.distance, 1);
     wallSide(2.5, -1);
     // Floor, ceiling, end walls.
-    add(halfLen * 2, 0.05, 3.4, 0, floorY, 0.85, dark);
-    add(halfLen * 2, 0.05, 3.4, 0, ceilY, 0.85, wall);
-    for (const sx of [-1, 1]) add(0.1, ceilY - floorY, 3.4, sx * halfLen, (ceilY + floorY) / 2, 0.85, wall);
+    const depth = 2.5 + W.distance + 0.1, mid = (2.5 - W.distance) / 2;
+    add(halfLen * 2, 0.05, depth, 0, floorY, mid, dark);
+    add(halfLen * 2, 0.05, depth, 0, ceilY, mid, wall);
+    for (const sx of [-1, 1]) add(0.1, ceilY - floorY, depth, sx * halfLen, (ceilY + floorY) / 2, mid, wall);
     // A small fold-down table under the centre window.
     add(0.7, 0.04, 0.4, 0, winBottom - 0.25, -W.distance + 0.25, dark);
     for (const [m, gs] of parts) cabin.add(new THREE.Mesh(mergeGeometries(gs, false)!, m));

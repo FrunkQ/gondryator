@@ -51,5 +51,5 @@ export const OTHER_SIDE: Pack = {
   themeBySection: { intro: 'provence' },
   light: [],
   title: { template: 'station-board' },
-  window: { width: 1.25, height: 0.82, bottom: -0.32, pillar: 0.5, distance: 0.75, frame: '#7d8483', wall: '#c4bdac' },
+  window: { width: 1.6, height: 1.0, bottom: -0.42, pillar: 0.26, distance: 1.0, frame: '#7d8483', wall: '#c4bdac' },
 };

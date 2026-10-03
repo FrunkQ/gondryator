@@ -85,6 +85,9 @@ export interface RigSpec {
   maxYaw: number;
   /** How far the viewer may turn, degrees, if more than maxYaw (180: right round to the other window). */
   lookYaw?: number;
+  /** Where the view rests, degrees (positive yaw looks ahead along the line). */
+  startYaw?: number;
+  startPitch?: number;
   maxPitch: number;
   fov: number;
 }

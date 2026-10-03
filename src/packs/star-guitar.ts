@@ -10,7 +10,7 @@ export const STAR_GUITAR: Pack = {
   credits: "In homage to Michel Gondry's Star Guitar for The Chemical Brothers (2002). All scenery is original.",
   inspiration: { title: 'The Chemical Brothers - Star Guitar (Official Music Video)', url: 'https://www.youtube.com/watch?v=0S43IwBF0uM' },
   viewpoint: 'fixed-window',
-  rig: { type: 'lateral-rail', speed: 24, speedByEnergy: 0.25, eyeHeight: 2.7, maxYaw: 70, lookYaw: 180, maxPitch: 28, fov: 52 },
+  rig: { type: 'lateral-rail', speed: 24, speedByEnergy: 0.25, eyeHeight: 2.7, maxYaw: 70, lookYaw: 180, startYaw: 10, startPitch: -3, maxPitch: 28, fov: 52 },
   spawnMode: 'pass-by',
   layers: [
     { id: 'fence', depth: 4.6, depthJitter: 0.1, scale: 0.9, scaleByVel: 0.3,
@@ -71,5 +71,5 @@ export const STAR_GUITAR: Pack = {
   // other window (see FxDirector.amount).
   fx: { cycle: ['clean', 'prism', 'trip', 'fold', 'kaleido', 'thermal', 'echo', 'liquid'], bySection: { breakdown: 'liquid', intro: 'clean' } },
   sectionEvents: { onNewSection: 'overpass', onBreakdown: 'train-car' },
-  window: { width: 1.25, height: 0.82, bottom: -0.32, pillar: 0.5, distance: 0.75, frame: '#7d8483', wall: '#c4bdac' },
+  window: { width: 1.6, height: 1.0, bottom: -0.42, pillar: 0.26, distance: 1.0, frame: '#7d8483', wall: '#c4bdac' },
 };
