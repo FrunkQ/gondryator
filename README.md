@@ -24,7 +24,7 @@ Open source, public domain, and dedicated to him. Take it, play with it, make it
 
 The ride is free and always will be. If it made you grin and you fancy buying the crew a coffee, there's a [Ko-fi](https://ko-fi.com/frunkq). No pressure at all.
 
-It stands on the shoulders of [three.js](https://threejs.org) and the MaterialX noise functions, which keep their own licences: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+It stands on the shoulders of [three.js](https://threejs.org), the MaterialX noise functions and Spotify's [Basic Pitch](https://github.com/spotify/basic-pitch-ts), which keep their own licences: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 

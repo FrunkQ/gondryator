@@ -84,6 +84,17 @@ Kaleidoscopes go deep in two ways. A scene can fold the base pattern's plane up 
 
 Around the World is hidden from the menu while it waits for its twist; `?pack=around-the-world` still opens it.
 
+## Deep listen
+
+The fast parser (`analyzer.ts`) is hand-made DSP: it gets the drums, beats and sections right and is far faster than real time, but its melody tracker only hears one note at a time. After it finishes, "deep listen" runs Spotify's Basic Pitch, a small neural network (about 900 KB of model, Apache 2.0) that transcribes polyphonic music into notes, in its own worker on TensorFlow.js (WebGL when the worker can get it, plain JavaScript otherwise).
+
+- The song is resampled to 22050 Hz mono by the browser and processed in 20 s windows (1 s pre-roll, 2 s post-roll, notes kept only if they start inside the window). It starts with the first window 20 s ahead of the playhead, runs to the end, then goes back for the start.
+- Its notes are shaped like the fast parser's: per chord (notes within 40 ms), the lowest note under E3 is the bass, the top note is the melody, and one held note (1.2 s or more) becomes a pad. Notes quieter than 0.25 or shorter than 60 ms are dropped. Bar and step come from the beat grid.
+- A window is spliced into the live score only if it starts at least 20 s ahead of the playhead, so nothing already scheduled changes under the renderers. When every window is done, a fully upgraded copy is cached (engine `... + basic-pitch 1.0.1`), so the next ride is deep from the first note. Drums, beats, sections and envelopes still come from the fast parser.
+- **Only on machines that can take it.** First a free check before anything is downloaded: phones and tablets, fewer than four cores, or under 4 GB of memory skip it. Then the worker times itself on four seconds of the song (after a warm-up run that builds the GPU programs) and carries on only if it ran at least 1.5× faster than real time. A quiet 🎧 note in the play bar says which happened (checking…, deep listen 40%, deep listen, or quick listen), with the reason in its tooltip.
+- Skipped when a MIDI file is loaded, in the single-file build (no model file), and with `?nodeep`; `?deep` skips the device precheck and `?deep=force` skips the speed check too (for tests). The D overlay shows its progress, backend and measured speed.
+- On a CPU in Node it took about 37 s per 20 s of audio; on synthetic tests it got every lead and bass note's pitch right (41/41 and 39/39).
+
 ## Install as an app
 
 The site is a progressive web app (`public/manifest.webmanifest`, `public/sw.js`). In Chrome or Edge, use the ⤓ Install link in the corner (or the install icon in the address bar) and it gets its own window and a desktop icon, keeps working offline after the first visit, and can open music files straight from the desktop ("Open with Gondryator"). Safari: Share → Add to Dock / Home Screen. The service worker caches only the app's own files; pages are fetched network-first, so a new deploy shows up on the next load. The single-file build skips all of this. The commit and build date show in the D overlay, the console and the GitHub link's tooltip.

@@ -24,6 +24,7 @@ import { PACKS, HIDDEN_PACKS } from './packs';
 import type { Pack } from './packs/types';
 import AnalysisWorker from './analysis/worker?worker&inline';
 import { Analyzer } from './analysis/analyzer';
+import { DeepListen, deepPrecheck } from './analysis/deep';
 import { DEFAULT_TUNING, isDefaultTuning, type Tuning } from './analysis/tuning';
 import type { AutoTuneResult } from './analysis/autotune';
 import { TuningScreen } from './ui/tuning';
@@ -92,6 +93,7 @@ class App {
   private trackTuning = this.tuning;
   private trackHash = '';
   private tuneWorker: Worker | null = null;
+  private deep: DeepListen | null = null;
   private audioBuf: AudioBuffer | null = null;
   private lastFile: { buf: ArrayBuffer; name: string } | null = null;
   private tuner!: TuningScreen;
@@ -213,6 +215,7 @@ class App {
       this.analysedSec = cached.track.durationSec;
       this.attachScore();
       this.toast('Score loaded from cache');
+      this.startDeepListen();
       return;
     }
     this.score = emptyScore(track, audioBuf.duration);
@@ -309,6 +312,7 @@ class App {
           if (isDefaultTuning(this.trackTuning)) void saveScore(this.score);
           // First play of a song on the default settings: learn better ones in the background.
           if (!this.midi && isDefaultTuning(this.trackTuning) && !params.has('noautotune')) void this.backgroundAutoTune(pcm, sampleRate, this.trackHash);
+          this.startDeepListen();
         }
       }
     };
@@ -367,8 +371,78 @@ class App {
     this.toast(`Auto-tuned the parser for this song (${r.changes.length} setting${r.changes.length > 1 ? 's' : ''}). Next time it plays, it uses them.`, 5000);
   }
 
+  /**
+   * Deep listen: Basic Pitch transcribes the melody and bass in the background and upgrades the
+   * score ahead of the playhead; the fully upgraded score is cached for next time. Skipped with
+   * MIDI (already exact), in the single-file build (no model file to load), with ?nodeep, and
+   * when the score has already had it.
+   */
+  private startDeepListen() {
+    const sc = this.score, audio = this.audioBuf;
+    if (import.meta.env.MODE === 'single' || params.has('nodeep') || this.midi || !sc || !audio) return;
+    this.deep?.stop();
+    this.deep = null;
+    const ABOUT = 'Deep listen runs a small neural network (Spotify\'s Basic Pitch) on your own machine to transcribe the melody and bass note by note, more precisely than the quick parser. Nothing is uploaded.';
+    if (sc.analysis.engine.includes('basic-pitch')) {
+      this.deepNote('deep listen', `${ABOUT}\n\nThis song already has its deep-listened notes (cached from an earlier ride).`);
+      return;
+    }
+    const pref = deepPref();
+    if (pref === 'off') {
+      this.deepNote('deep listen off', `${ABOUT}\n\nIt is switched off, so the quick parser does the notes. Click to switch it back on.`);
+      return;
+    }
+    const tryAnyway = pref === 'try' || params.get('deep') === 'force';
+    // Only on machines that can take it: a free precheck, then a timed check in the worker.
+    const no = tryAnyway || params.has('deep') ? null : deepPrecheck();
+    if (no) {
+      this.deepNote('quick listen', `${ABOUT}\n\nIt is off on this device (${no}), so the quick parser does the notes; the ride is just as smooth. Click to try deep listen anyway (it may slow things down).`);
+      return;
+    }
+    const hash = this.trackHash, tuning = this.trackTuning;
+    const deep = new DeepListen(audio, sc, () => this.player.time, upgraded => {
+      if (hash !== this.trackHash) return;
+      sc.analysis.engine = upgraded.analysis.engine;
+      if (isDefaultTuning(tuning)) void saveScore(upgraded);
+      this.toast(`Deep listen finished: ${deep.notes} notes transcribed. Next ride on this song uses them all.`, 5000);
+    });
+    this.deep = deep;
+    deep.force = tryAnyway;
+    deep.onChange = () => {
+      if (this.deep !== deep) return;
+      if (deep.state === 'checking') this.deepNote('checking…', `${ABOUT}\n\nChecking whether this machine can run it without slowing the ride. Click to switch it off.`);
+      else if (deep.state === 'running') this.deepNote(`deep listen ${Math.round(deep.progress * 100)}%`, `${ABOUT}\n\nIt is working in the background (${deep.speed.toFixed(0)}× faster than real time here) and the ride picks the notes up as they arrive. Click to switch it off.`);
+      else if (deep.state === 'done') this.deepNote('deep listen', `${ABOUT}\n\nDone: ${deep.notes} notes, cached with this song for next time. Click to switch it off for future songs.`);
+      else this.deepNote('quick listen', `${ABOUT}\n\n` + (deep.failed
+        ? 'It could not run here, so the quick parser does the notes; the ride is just as smooth.'
+        : `It is off on this machine: a quick check ran it at ${deep.speed.toFixed(1)}× real time and it needs 1.5×, so the quick parser does the notes; the ride is just as smooth.`) + ' Click to try it anyway (it may slow things down).');
+    };
+    deep.onChange();
+    deep.start().catch(e => { deep.failed = (e as Error).message; deep.state = 'skipped'; deep.onChange(); });
+  }
+
+  /** The 🎧 button: switches deep listen off, back on, or (where it was skipped) tries it anyway. */
+  private toggleDeep() {
+    const label = $('#deep').textContent ?? '';
+    if (/off$/.test(label)) { setDeepPref(null); this.toast('Deep listen on'); }
+    else if (/quick listen/.test(label)) { setDeepPref('try'); this.toast('Trying deep listen on this machine'); }
+    else { setDeepPref('off'); this.deep?.stop(); this.toast('Deep listen off: the quick parser does the notes'); }
+    this.startDeepListen();
+  }
+
+  /** The quiet 🎧 button in the bar saying whether deep listen is on. */
+  private deepNote(text: string, title: string) {
+    const el = $('#deep');
+    el.textContent = '🎧 ' + text;
+    el.title = title;
+    el.classList.remove('hidden');
+  }
+
   /** Back to the first station for a new journey. */
   private resetForNewTrack() {
+    $('#deep').classList.add('hidden');
+    this.deep?.stop();
+    this.deep = null;
     this.worker?.terminate();
     this.worker = null;
     this.tuneWorker?.terminate();
@@ -610,6 +684,7 @@ class App {
     });
     $('#play').addEventListener('click', () => this.togglePause());
     $('#again').addEventListener('click', () => this.seek(0));
+    $('#deep').addEventListener('click', () => this.toggleDeep());
     $('#tonon').addEventListener('click', async () => {
       await this.switchPack('non-gondry');
       $<HTMLSelectElement>('#pack').value = 'non-gondry';
@@ -728,11 +803,12 @@ class App {
         `look ${(this.look.yaw * 57.3).toFixed(0)}°${this.look.wander ? ' wander' : ''}`,
         sc ? `${sc.analysis.mode} · bpm ${sc.tempo[sc.tempo.length - 1]?.bpm ?? '?'}` : '',
         this.driver instanceof Visualiser ? this.driver.status : '',
+        this.deep ? this.deep.status : '',
         `build ${__BUILD__}`,
       ].filter(Boolean);
     }
     this.debug.draw(sc, s);
-    (window as any).__gondry = { phase: this.phase, s, yaw: Math.round(this.look.yaw * 57.3), fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, viz: this.driver instanceof Visualiser ? this.driver.status : undefined, sections: sc?.sections, signalStop: this.signalStop };
+    (window as any).__gondry = { phase: this.phase, s, yaw: Math.round(this.look.yaw * 57.3), fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, viz: this.driver instanceof Visualiser ? this.driver.status : undefined, deep: this.deep?.status, sections: sc?.sections, signalStop: this.signalStop };
   }
 }
 
@@ -791,4 +867,12 @@ function installable(app: App, started: Promise<unknown>) {
     await started;
     void app.loadFiles(files);
   });
+}
+
+/** Deep listen preference: null = automatic (if the machine can take it), 'off', or 'try' anyway. */
+function deepPref(): 'off' | 'try' | null {
+  try { const v = localStorage.getItem('gondryator.deep'); return v === 'off' || v === 'try' ? v : null; } catch { return null; }
+}
+function setDeepPref(v: 'off' | 'try' | null) {
+  try { if (v) localStorage.setItem('gondryator.deep', v); else localStorage.removeItem('gondryator.deep'); } catch { /* private window */ }
 }

@@ -138,3 +138,6 @@ body.running.idle #stage { cursor: none; }
 #fork a:hover { text-decoration: underline; }
 #endcard a { color: inherit; }
 #fork .inst.hidden, #tonon.hidden { display: none; }
+#bar #deep { font-size: 12px; opacity: 0.65; white-space: nowrap; }
+#bar #deep:hover { opacity: 1; }
+#deep.hidden { display: none; }

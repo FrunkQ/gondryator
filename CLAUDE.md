@@ -27,6 +27,7 @@ src/
   analysis/   analyzer.ts  progressive onset, pitch, beat and section detection (no ML, much faster than real time)
               tuning.ts    every parser knob, shown on the Tuning screen (T)
               autotune.ts  finds the knobs that suit one song by scoring parses for self-consistency
+              deep.ts      "deep listen": Basic Pitch (a neural note transcriber) upgrades melody and bass in the background
               worker.ts    runs the analyser off the main thread
   score/      types.ts     THE data format between analysis and rendering (read this first)
               midi.ts      MIDI in (sharper sync) and out; cache.ts stores parsed scores
