@@ -195,7 +195,8 @@ export function makeSceneryMaterial(opts: { trip?: any } = {}): THREE.MeshStanda
   const winGlow = vec3(1.0, 0.72, 0.42).mul(lit).mul(is(SURF.glass)).mul(U.night).mul(1.6);
   const tripGlow = tripCol.mul(TRIP).mul(float(0.12).add(U.kick.mul(1.2)).add(stripe.mul(1.5)));
   // Glowing parts (beacons, comet tails, stars) light themselves.
-  const selfGlow = base.mul(is(SURF.glow)).mul(3.0);
+  // Lamps and signs: lit by day, blazing at night.
+  const selfGlow = base.mul(is(SURF.glow)).mul(float(0.9).add(U.night.mul(2.4)));
   m.emissiveNode = winGlow.add(tripGlow).add(selfGlow);
   return m;
 }
@@ -219,6 +220,39 @@ export function makeGroundMaterial(map: THREE.Texture): THREE.MeshStandardNodeMa
   const field = pow(materialColor.rgb, vec3(1.5)).mul(vec3(0.95, 1.05, 0.8));
   m.colorNode = vec4(mix(field.mul(detail), tripCol, U.trip.mul(0.85)), 1);
   m.normalNode = bumpMap(n2.mul(near).add(tufts.mul(near)), 0.08);
+  m.emissiveNode = tripCol.mul(U.trip).mul(U.kick.mul(0.5));
+  return m;
+}
+
+/** The trippy window's ground: rings of colour pulsing out from the viewer on the beat. */
+export function makeTripFloorMaterial(): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial({ fog: false });
+  const wp = positionWorld;
+  const flow = mx_noise_float(vec3(wp.x.mul(0.012), U.showTime.mul(0.1), wp.z.mul(0.012)));
+  const rings = length(wp.xz.sub(cameraPosition.xz)).mul(0.025).sub(U.showTime.mul(0.45)).add(flow.mul(1.5));
+  const stripe = smoothstep(0.42, 0.5, fract(rings.mul(3.0))).mul(smoothstep(0.58, 0.5, fract(rings.mul(3.0))));
+  const col = pow(palette(rings.add(U.hue)), vec3(2.0));
+  m.colorNode = col.mul(float(0.25).add(U.kick.mul(0.35))).add(col.mul(stripe).mul(float(0.6).add(U.kick)));
+  return m;
+}
+
+/** River water: the theme colour, rippled, glossy enough to carry the sky and the quays. */
+export function makeWaterMaterial(map: THREE.Texture): THREE.MeshStandardNodeMaterial {
+  const m = new THREE.MeshStandardNodeMaterial({ map, roughness: 0.14, metalness: 0.1 });
+  const wp = positionWorld;
+  const d = length(cameraPosition.xz.sub(wp.xz));
+  const near = smoothstep(220, 8, d);
+  const t = U.showTime;
+  // Two scales of ripple drifting with the current, plus a long swell.
+  const r1 = mx_noise_float(vec3(wp.x.mul(0.35).add(t.mul(0.4)), t.mul(0.3), wp.z.mul(0.7)));
+  const r2 = mx_noise_float(vec3(wp.x.mul(1.6).add(t.mul(0.9)), t.mul(0.8), wp.z.mul(2.2)));
+  const swell = sin(wp.x.mul(0.05).add(wp.z.mul(0.11)).add(t.mul(0.6))).mul(0.5);
+  const flow = mx_noise_float(vec3(wp.x.mul(0.01), t.mul(0.08), wp.z.mul(0.01)));
+  const rings = length(wp.xz.sub(cameraPosition.xz)).mul(0.03).sub(t.mul(0.5)).add(flow);
+  const tripCol = pow(palette(rings.add(U.hue)), vec3(2.2)).mul(float(0.35).add(U.kick.mul(0.4)));
+  const water = pow(materialColor.rgb, vec3(1.4)).mul(float(0.85).add(r1.mul(0.08)));
+  m.colorNode = vec4(mix(water, tripCol, U.trip.mul(0.85)), 1);
+  m.normalNode = bumpMap(r1.mul(0.6).add(r2.mul(0.25).mul(near)).add(swell), 0.12);
   m.emissiveNode = tripCol.mul(U.trip).mul(U.kick.mul(0.5));
   return m;
 }

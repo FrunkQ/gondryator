@@ -19,7 +19,7 @@ import { makeDemoTrack } from './audio/demo';
 import { applyDelta, emptyScore, type Score, type ScoreDelta } from './score/types';
 import { hashFile, loadScore, saveScore } from './score/cache';
 import { parseMidi, scoreToMidi, type MidiImport } from './score/midi';
-import { PACKS } from './packs';
+import { PACKS, HIDDEN_PACKS } from './packs';
 import type { Pack } from './packs/types';
 import AnalysisWorker from './analysis/worker?worker&inline';
 import { Analyzer } from './analysis/analyzer';
@@ -41,7 +41,12 @@ const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
 class App {
-  pack: Pack = PACKS.find(p => p.id === params.get('pack')) ?? PACKS[0];
+  pack: Pack = [...PACKS, ...HIDDEN_PACKS].find(p => p.id === params.get('pack')) ?? PACKS[0];
+  /** The default ride: hop between the vehicles at section changes, if the machine keeps up. */
+  private tour = !params.has('pack') || params.get('pack') === 'tour';
+  private tourSec = -1;
+  private lastSwitchAt = 0;
+  private switching = false;
   world!: World;
   rig!: CameraRig;
   /** The pack's spawn mode: pass-by scenery (Spawner) or a cast on a stage (Performer). */
@@ -196,6 +201,7 @@ class App {
   }
 
   private attachScore(placeholder?: Score) {
+    this.tourSec = -1;
     const s = placeholder ?? this.score!;
     if (!placeholder) this.rig.attachScore(s);
     if (this.driver) { this.driver.reset(-1e9); this.world.scene.remove(this.driver.group); }
@@ -206,7 +212,10 @@ class App {
     // Star Guitar has a second window: invented worlds across the aisle, on the same beat.
     if (this.other) { this.other.dispose(); this.world.scene.remove(this.other.group); this.other = null; }
     if (this.pack.rig.lookYaw && this.pack.spawnMode !== 'perform' && !params.has('noother')) {
-      this.other = new OtherSide(OTHER_SIDE, this.rig, s, this.world.camera);
+      // The train looks out on invented worlds; the other vehicles on a trippy mirror of their own.
+      const trippy = this.pack.otherSide === 'trippy';
+      const otherPack = trippy ? { ...this.pack, id: `${this.pack.id}-mirror`, sectionEvents: undefined } : OTHER_SIDE;
+      this.other = new OtherSide(otherPack, this.rig, s, this.world.camera, trippy ? 0.9 : 0);
       this.world.scene.add(this.other.group);
       this.other.spawner.refreshLeads();
     }
@@ -216,6 +225,44 @@ class App {
     this.world.invalidateGround();
     // Build every shader now rather than when each thing first appears mid-ride.
     if (!params.has('nowarm')) this.world.warmup(this.other?.hidden ?? []);
+  }
+
+  /** The tour: at a section change, move to the next vehicle behind a quick fade to black. */
+  private tourCheck(s: number) {
+    const sc = this.score;
+    if (!sc || this.switching || this.phase !== 'run' || !this.player.playing) return;
+    let i = -1;
+    for (let k = 0; k < sc.sections.length; k++) if (sc.sections[k].t <= s) i = k;
+    if (i === this.tourSec) return;
+    const first = this.tourSec < 0;
+    this.tourSec = i;
+    if (first || i <= 0) return;
+    const next = sc.sections[i + 1]?.t ?? sc.track.durationSec;
+    // Stay put for short sections, near the end, or when the machine is already struggling.
+    if (s - this.lastSwitchAt < 40 || next - s < 15 || sc.track.durationSec - s < 20) return;
+    if (this.fps < 40 && !params.has('tourslow')) { perf.mark('tour skipped: frame rate too low'); return; }
+    void this.tourNext();
+  }
+
+  private async tourNext() {
+    this.switching = true;
+    const next = PACKS[(Math.max(0, PACKS.indexOf(this.pack)) + 1) % PACKS.length];
+    const fade = $('#fade');
+    fade.classList.add('on');
+    await new Promise(r => setTimeout(r, 450));
+    try {
+      perf.mark(`tour → ${next.id}`);
+      await this.switchPack(next.id);
+      this.lastSwitchAt = this.player.time;
+      // Let the new vehicle build its shaders behind the curtain (a little, not forever).
+      const t0 = performance.now();
+      while (this.world.warmPending > 0 && performance.now() - t0 < 2500) await new Promise(r => setTimeout(r, 50));
+    } finally {
+      fade.classList.remove('on');
+      this.switching = false;
+      $<HTMLSelectElement>('#pack').value = 'tour';
+      this.toast(next.name, 2200);
+    }
   }
 
   /** Tell the frame analyser about section, scenery and look changes this frame. */
@@ -383,6 +430,7 @@ class App {
       this.fx.amount = this.pack.rig.lookYaw ? ((1 - Math.cos(this.look.yaw)) / 2) ** 2 : 1;
       this.fx.update(s, dt, this.phase === 'run' || this.phase === 'ended', this.world.night, this.world.camera.aspect);
       if (perf.on) this.markChanges(s);
+      if (this.tour) this.tourCheck(s);
       if (!this.tuner?.isOpen) this.world.render(); // the tuning screen covers the view
       this.frames?.frame(s);
     } catch (e) {
@@ -423,7 +471,7 @@ class App {
     this.showCard('end', stopX, {
       name: this.world.mode === 'train' ? 'Terminus' : 'Curtain',
       line2: [this.trackInfo.title, this.trackInfo.artist].filter(Boolean).join(' — '),
-      line3: this.pack.credits + '  Made with the Gondryator.',
+      line3: this.pack.credits + '  Made with the Gondryator and three.js.',
       art: this.art,
     }, { end: true });
   }
@@ -450,7 +498,7 @@ class App {
   }
 
   async switchPack(id: string) {
-    const pack = PACKS.find(p => p.id === id);
+    const pack = [...PACKS, ...HIDDEN_PACKS].find(p => p.id === id);
     if (!pack || pack === this.pack) return;
     const wasRunning = this.phase === 'run' || this.phase === 'ended';
     const s = this.player.time;
@@ -525,10 +573,16 @@ class App {
     const scrub = $<HTMLInputElement>('#scrub');
     scrub.addEventListener('input', () => { if (this.score) this.seek((Number(scrub.value) / 1000) * this.score.track.durationSec); });
     const sel = $<HTMLSelectElement>('#pack');
+    const tourOpt = document.createElement('option'); tourOpt.value = 'tour'; tourOpt.textContent = 'Tour: every vehicle'; sel.appendChild(tourOpt);
     for (const p of PACKS) { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o); }
-    sel.value = this.pack.id;
+    if (!PACKS.includes(this.pack)) { const o = document.createElement('option'); o.value = this.pack.id; o.textContent = this.pack.name; sel.appendChild(o); }
+    sel.value = this.tour ? 'tour' : this.pack.id;
     $('#fx').addEventListener('click', () => this.cycleFx());
-    sel.addEventListener('change', () => void this.switchPack(sel.value));
+    sel.addEventListener('change', () => {
+      this.tour = sel.value === 'tour';
+      if (this.tour) { this.lastSwitchAt = this.player.time; this.toast('Touring every vehicle: a new one at a section change', 3000); }
+      else void this.switchPack(sel.value);
+    });
     $('#center').addEventListener('click', () => this.look.center());
     $('#gyro').addEventListener('click', async () => this.toast((await this.look.enableGyro()) ? 'Gyroscope on: move your phone to look around' : 'No gyroscope available'));
     $('#dbg').addEventListener('click', () => this.debug.toggle());

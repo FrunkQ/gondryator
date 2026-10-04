@@ -8,7 +8,7 @@ import type { CameraRig } from './rig';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { makeGroundMaterial, makeWindowGlassMaterial, makeGrassMaterial, U as SU } from './shaders';
+import { makeGroundMaterial, makeWaterMaterial, makeWindowGlassMaterial, makeGrassMaterial, U as SU } from './shaders';
 import { makePipeline, FX_UNIFORMS } from './fx';
 import { FLAGS } from './flags';
 import { perf } from '../ui/frames';
@@ -102,9 +102,10 @@ export class World {
       this.envScene.add(this.envSky);
     }
     if (this.mode === 'train') {
+      // The ground (fields, a river or a road), then what only a railway has: grass, rails, wires.
+      const v = this.pack.vehicle ?? 'train';
       this.buildGround();
-      this.buildGrass();
-      this.buildTrack();
+      if (v === 'train') { this.buildGrass(); this.buildTrack(); }
       this.buildCabin();
     } else {
       const floor = new THREE.Mesh(new THREE.CircleGeometry(3500, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: new THREE.Color(this.pack.stage?.floor ?? 0x2a2730).multiplyScalar(0.3), roughness: 0.95, metalness: 0, envMapIntensity: 0.1 }));
@@ -265,7 +266,7 @@ export class World {
 
   private buildGround() {
     for (const th of this.pack.themes) {
-      this.groundMats.set(th.name, FLAGS.procedural ? makeGroundMaterial(this.groundTexture(th)) : new THREE.MeshStandardMaterial({ map: this.groundTexture(th) }));
+      this.groundMats.set(th.name, FLAGS.procedural ? (th.ground.water ? makeWaterMaterial : makeGroundMaterial)(this.groundTexture(th)) : new THREE.MeshStandardMaterial({ map: this.groundTexture(th) }));
     }
     // Both sides of the line: the main view (-z) and the other window (+z).
     const geo = new THREE.PlaneGeometry(TILE, 5200);
@@ -421,18 +422,19 @@ export class World {
     const canopyMat = new THREE.MeshStandardMaterial({ color: 0x8d9497, emissive: 0x2a2d2f });
     if (!opts.trackside) this.platform(grp, canopyMat);
     else {
-      // A lineside board in a gravel patch with a small hut: the title card.
-      const pad = new THREE.Mesh(new THREE.BoxGeometry(16, 0.1, 6), new THREE.MeshStandardMaterial({ color: 0x9d968a }));
-      pad.position.set(0, 0.05, -9);
+      // The title card: a lineside goods shed, its name board fixed to the wall facing the line.
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(22, 0.1, 4), new THREE.MeshStandardMaterial({ color: 0x9d968a }));
+      pad.position.set(0, 0.05, -6.3);
       grp.add(pad);
-      const hut = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.6, 2.6), new THREE.MeshStandardMaterial({ color: 0xd8c9a8 }));
-      hut.position.set(6.5, 1.3, -11);
-      grp.add(hut);
-      const hr = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.25, 3), new THREE.MeshStandardMaterial({ color: 0xa75a3c }));
-      hr.position.set(6.5, 2.7, -11);
-      grp.add(hr);
+      const shed = new THREE.Mesh(new THREE.BoxGeometry(18, 5.6, 6), new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.9 }));
+      shed.position.set(0, 2.8, -8.3 - 3);
+      grp.add(shed);
+      const sr = new THREE.Mesh(new THREE.BoxGeometry(18.6, 0.35, 6.8), new THREE.MeshStandardMaterial({ color: 0xa75a3c }));
+      sr.position.set(0, 5.75, -8.3 - 3);
+      grp.add(sr);
     }
-    this.boardOnPosts(grp, info, opts, canopyMat, opts.trackside ? -8.2 : -9.5);
+    // The name board is fixed flat to a wall: the shed's, or the station building's.
+    this.boardOnWall(grp, info, opts, canopyMat, opts.trackside ? -8.3 : -11.5);
     this.stations.add(grp);
     return grp;
   }
@@ -464,10 +466,9 @@ export class World {
     grp.add(bRoof);
   }
 
-  private boardOnPosts(grp: THREE.Group, info: StationInfo, opts: { end?: boolean; trackside?: boolean }, canopyMat: THREE.Material, z: number) {
-    const groundY = opts.trackside ? 0 : 1.1;
-
-    // The board itself, on two posts, facing the train.
+  private boardOnWall(grp: THREE.Group, info: StationInfo, opts: { end?: boolean; trackside?: boolean }, canopyMat: THREE.Material, wallZ: number) {
+    const z = wallZ + 0.1;
+    // The board itself, screwed to the wall, facing the train.
     const tex = this.boardTexture(info, !!opts.end);
     const bw = opts.end ? 7.4 : opts.trackside ? 8.5 : 6.4, bh = bw * (tex.image.height / tex.image.width);
     const board = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), new THREE.MeshBasicMaterial({ map: tex, fog: false, toneMapped: false }));
@@ -477,12 +478,6 @@ export class World {
     const back = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.12, bh + 0.12, 0.08), canopyMat);
     back.position.set(0, cy, z - 0.06);
     grp.add(back);
-    for (const sx of [-1, 1]) {
-      const h = cy - groundY;
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, h, 0.12), canopyMat);
-      p.position.set(sx * (bw / 2 - 0.4), groundY + h / 2, z - 0.1);
-      grp.add(p);
-    }
     // Cover art as a poster on the station wall.
     if (info.art) {
       const at = new THREE.Texture(info.art);
@@ -493,7 +488,7 @@ export class World {
       grp.add(poster);
       const pf = new THREE.Mesh(new THREE.BoxGeometry(3.5, 3.5, 0.1), canopyMat);
       pf.position.set(9, 3.6, -11.52);
-      if (opts.trackside) { poster.position.set(-7, cy, z - 1); pf.position.set(-7, cy, z - 1.07); }
+      if (opts.trackside) { poster.position.set(-6.8, cy, z); pf.position.set(-6.8, cy, z - 0.06); }
       grp.add(pf);
     }
   }
@@ -580,8 +575,8 @@ export class World {
     if (d0) this.sunDisc.position.set(trainX + d0.x * 2800, d0.y * 2800, tmpPos.z + d0.z * 2800);
     if (this.mode !== 'train') return;
     for (const f of this.followers) f.position.x = trainX;
-    this.ballast.position.x = trainX;
-    this.ballastTex.offset.x = (((trainX - 400) / 800) * this.ballastTex.repeat.x) % 1;
+    if (this.ballast) this.ballast.position.x = trainX;
+    if (this.ballastTex) this.ballastTex.offset.x = (((trainX - 400) / 800) * this.ballastTex.repeat.x) % 1;
     const g0 = Math.floor(trainX / 60) - 1;
     for (let k = 0; k < this.grassTiles.length; k++) {
       const idx = g0 + k, tile = this.grassTiles[((idx % 3) + 3) % 3];
@@ -643,6 +638,8 @@ export class World {
     this.warmJobs.push(...jobs);
   }
   private warmJobs: (() => Promise<void>)[] = [];
+  /** Shader builds still queued (the tour waits for these behind its fade). */
+  get warmPending() { return this.warmJobs.length + (this.warming ? 1 : 0); }
   private warming = false;
   /** Run the next warm-up job, if the last one has finished. Called once a frame. */
   private stepWarmup() {

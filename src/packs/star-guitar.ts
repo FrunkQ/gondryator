@@ -9,6 +9,8 @@ export const STAR_GUITAR: Pack = {
   name: 'Star Guitar (train window)',
   credits: "In homage to Michel Gondry's Star Guitar for The Chemical Brothers (2002). All scenery is original.",
   inspiration: { title: 'The Chemical Brothers - Star Guitar (Official Music Video)', url: 'https://www.youtube.com/watch?v=0S43IwBF0uM' },
+  vehicle: 'train',
+  otherSide: 'other-side',
   viewpoint: 'fixed-window',
   rig: { type: 'lateral-rail', speed: 24, speedByEnergy: 0.25, eyeHeight: 2.7, maxYaw: 70, lookYaw: 180, startYaw: 10, startPitch: -3, maxPitch: 28, fov: 52 },
   spawnMode: 'pass-by',

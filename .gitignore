@@ -5,3 +5,4 @@ shots*/
 test-tracks/*.wav
 test-tracks/*.mp3
 *.log
+.cache/

@@ -5,7 +5,7 @@
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import { Spawner, type GazeSource } from './spawner';
-import { makeSceneryMaterial, makeSpaceMaterial, U } from './shaders';
+import { makeSceneryMaterial, makeSpaceMaterial, makeTripFloorMaterial, U } from './shaders';
 import type { Pack } from '../packs/types';
 import type { CameraRig } from './rig';
 import type { Score } from '../score/types';
@@ -39,7 +39,10 @@ export class OtherSide {
   private material: THREE.Material;
   private gaze: MirroredGaze | null = null;
 
-  constructor(private pack: Pack, private rig: CameraRig, score: Score, camera: THREE.PerspectiveCamera) {
+  private tripFloor: THREE.Mesh | null = null;
+
+  /** `minTrip` > 0: a permanently psychedelic version of the world (vehicles' trippy windows). */
+  constructor(private pack: Pack, private rig: CameraRig, score: Score, camera: THREE.PerspectiveCamera, private minTrip = 0) {
     // Its own copy of the scenery material: in space the paint is always a little psychedelic.
     this.material = makeSceneryMaterial({ trip: this.trip });
     (this.material as any).side = THREE.DoubleSide; // the mirror flips triangle winding
@@ -57,6 +60,13 @@ export class OtherSide {
     this.floor = new THREE.Mesh(new THREE.PlaneGeometry(4800, 2400).rotateX(-Math.PI / 2).translate(0, 0.12, 1200 + 3.3), floorMat);
     this.floor.frustumCulled = false;
     this.group.add(this.space, this.floor);
+    if (minTrip > 0) {
+      // The trippy window's own ground, over the real one on that side.
+      this.tripFloor = new THREE.Mesh(new THREE.PlaneGeometry(4800, 2400).rotateX(-Math.PI / 2).translate(0, 0.1, 1200 + 3.3), makeTripFloorMaterial());
+      this.tripFloor.frustumCulled = false;
+      this.tripFloor.receiveShadow = false;
+      this.group.add(this.tripFloor);
+    }
   }
 
   setScore(score: Score, camera: THREE.PerspectiveCamera) {
@@ -79,9 +89,10 @@ export class OtherSide {
     const cosmos = running && this.spawner.themeAt(s) === 'cosmos';
     const k = 1 - Math.exp(-dt / 1.2);
     this.reveal.value += ((cosmos ? 1.05 : -0.05) - this.reveal.value) * k;
-    this.trip.value = Math.max(U.trip.value, this.reveal.value * 0.3);
+    this.trip.value = Math.max(U.trip.value, this.reveal.value * 0.3, this.minTrip);
     this.space.visible = this.floor.visible = this.reveal.value > 0.01;
     this.space.position.x = this.floor.position.x = trainX;
+    if (this.tripFloor) this.tripFloor.position.x = trainX;
   }
 
   dispose() { this.spawner.reset(-1e9); }

@@ -54,6 +54,20 @@ The Star Guitar main window stays close to the original video. Turn round (drag,
 - `?noother` turns it off.
 - The main window stays photographic, like the original: the effects only come in as you turn round (forced looks via `X` or `?fx=` still apply everywhere). A milky summer haze (`haze` in the pack), a gravel works and French water towers bring it closer to the video.
 
+## Vehicles and the tour
+
+Three vehicles, each with a window true to life and a trippy one across the aisle (turn round to see it):
+
+- **Train** (`star-guitar`): the homage to Star Guitar; the other window is Provence and Cosmos.
+- **Riverboat** (`riverboat`): down a Parisian river past quays, houseboats, Haussmann fronts and domes; a stone bridge passes overhead at each new section and a convoy of barges in the breakdown. The river is a rippled, reflective water surface.
+- **Night bus** (`night-bus`): the top deck through a city at blue hour; street lamps on the kick, bus shelters on the snare, shopfronts and neon diners on the bass, tower blocks on the melody, skyscrapers on the pads; a lit footbridge at each new section and a tram in the breakdown.
+
+For the riverboat and the bus, the other window is a psychedelic mirror of the same world (`otherSide: 'trippy'` in the pack) over a floor of beat-pulsing colour rings.
+
+The default ride is the **tour**: at a section change (at least 40 s after the last hop, not in the last 20 s), the view fades to black for half a second, the next vehicle is built, its shaders are compiled behind the curtain, and the ride carries on with the music. It only hops while the frame rate holds above 40 fps; pick a single vehicle from the menu to stay put. `?pack=riverboat` (etc.) starts on one vehicle without touring.
+
+Around the World is hidden from the menu while it waits for its twist; `?pack=around-the-world` still opens it.
+
 ## The tuning screen
 
 Press `T` (or the 🎛 button, or open with `?tune`) to see what the music parser heard: a Synthesia-style piano roll where every detected hit falls onto the "now" line as it sounds. Drums get their own lanes (kick, snare, hat); bass, melody, pads and vocals fall onto a keyboard at their pitch. Hover a block for its instrument, note name, MIDI number and frequency, start time, length, velocity and bar position. Bars, beats, sections and the tempo are drawn too.

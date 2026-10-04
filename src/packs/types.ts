@@ -67,7 +67,7 @@ export interface IdleLayer { model: string; depth: number; spacing: number; jitt
 
 export interface SectionTheme {
   name: ThemeName;
-  ground: { base: string; stripes: string[]; rows?: boolean };
+  ground: { base: string; stripes: string[]; rows?: boolean; water?: boolean };
 }
 
 export interface RigSpec {
@@ -124,5 +124,9 @@ export interface Pack {
   fx?: { cycle: ('clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold')[]; bySection?: Partial<Record<string, 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold'>> };
   /** Optional glTF models: name -> url. */
   assets?: Record<string, string>;
+  /** What you are riding: decides the track, grass and carriage dressing (default 'train'). */
+  vehicle?: 'train' | 'boat' | 'bus';
+  /** The window across the aisle: another pack's id, or 'trippy' for a psychedelic mirror of this one. */
+  otherSide?: string;
   window: { width: number; height: number; bottom: number; pillar: number; distance: number; frame: string; wall: string };
 }

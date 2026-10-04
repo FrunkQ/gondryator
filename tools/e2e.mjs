@@ -28,7 +28,8 @@ const server = http.createServer((req, res) => {
 const port = server.address().port;
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  // CHROME=/path/to/chrome to choose a browser; otherwise Playwright's own (or this container's).
+  executablePath: process.env.CHROME ?? (fs.existsSync('/opt/pw-browsers/chromium-1194/chrome-linux/chrome') ? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' : undefined),
   args: ['--autoplay-policy=no-user-gesture-required', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-unsafe-webgpu'],
 });
 const page = await browser.newPage({ viewport: { width: Number(arg('w', 1280)), height: Number(arg('h', 720)) } });
