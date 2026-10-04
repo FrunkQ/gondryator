@@ -69,4 +69,4 @@ Keep the golden rule: **everything that moves must land on its beat.** The spawn
 
 ## Share it
 
-Made something lovely? Fork it, publish it, and show it off in the [Discord](https://discord.com/channels/1443167899933212744/1556283517866877031). All hail the great Michel Gondry: may your visuals play with every track.
+Made something lovely? Fork it, publish it, and show it off in the [Discord](https://discord.gg/xhHcDVfDwQ). All hail the great Michel Gondry: may your visuals play with every track.

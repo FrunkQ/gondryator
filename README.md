@@ -15,7 +15,9 @@ The originals, which you should watch first (and then again):
 
 Open source, public domain, and dedicated to him. Take it, play with it, make it dance.
 
-**Fork it and make your own ride.** Bring your favourite AI as a co-pilot: [CLAUDE.md](CLAUDE.md) gets it in the right playful mood, with a map of the code. Then come and show us on [Discord](https://discord.com/channels/1443167899933212744/1556283517866877031).
+**Fork it and make your own ride.** Bring your favourite AI as a co-pilot: [CLAUDE.md](CLAUDE.md) gets it in the right playful mood, with a map of the code. Then come and show us on [Discord](https://discord.gg/xhHcDVfDwQ).
+
+The ride is free and always will be. If it made you grin and you fancy buying the crew a coffee, there's a [Ko-fi](https://ko-fi.com/frunkq). No pressure at all.
 
 It stands on the shoulders of [three.js](https://threejs.org) and the MaterialX noise functions, which keep their own licences: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
