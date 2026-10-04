@@ -17,6 +17,8 @@ Pick a pack from the menu in the bar (or `?pack=around-the-world`); packs switch
 
 Keys: space play/pause, drag or arrow keys to look around, C centre the view, D debug overlay, G wandering-viewer test, S refocusing on/off, F fullscreen. Drop a `pack.json` on the page to load a pack at runtime; drop a `.mid` with the audio to use it instead of note analysis.
 
+Hosting: `wrangler.jsonc` serves `dist/` as Cloudflare Workers static assets (build `npm run build`, deploy `npx wrangler deploy`; `.nvmrc` pins Node 22 for Vite 8). Any static host works: it is just the files in `dist/`.
+
 ## What is built (against the spec)
 
 | Spec | Status |
