@@ -17,7 +17,7 @@ import { DebugOverlay } from './ui/debug';
 import { Player, toMono } from './audio/player';
 import { readTags } from './audio/tags';
 import { makeDemoTrack } from './audio/demo';
-import { applyDelta, describeStructure, emptyScore, sectionAt, type Score, type ScoreDelta } from './score/types';
+import { applyDelta, emptyScore, type Score, type ScoreDelta } from './score/types';
 import { hashFile, loadScore, saveScore } from './score/cache';
 import { parseMidi, scoreToMidi, type MidiImport } from './score/midi';
 import { PACKS, HIDDEN_PACKS } from './packs';
@@ -50,12 +50,6 @@ type Phase = 'landing' | 'title' | 'run' | 'ended';
 const MIN_LOOKAHEAD = 10; // seconds the score must be ahead of the playhead before the music starts
 const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
-
-/** A long debug line broken at spaces. */
-const wrap = (text: string, width: number) => text.split(' ').reduce<string[]>((lines, w) => {
-  if (lines.length && (lines[lines.length - 1] + ' ' + w).length <= width) lines[lines.length - 1] += ' ' + w; else lines.push(w);
-  return lines;
-}, []);
 
 /** Where you look when the ride starts (?yaw=150 overrides it, for testing the far window). */
 const startYaw = (pack: Pack) => params.has('yaw') ? Number(params.get('yaw')) : pack.rig.startYaw ?? 0;
@@ -815,12 +809,11 @@ class App {
         `look ${(this.look.yaw * 57.3).toFixed(0)}°${this.look.wander ? ' wander' : ''}`,
         sc ? `${sc.analysis.mode} · bpm ${sc.tempo[sc.tempo.length - 1]?.bpm ?? '?'}` : '',
         this.driver instanceof Visualiser ? this.driver.status : '',
-        ...(sc && sc.sections.length ? wrap('structure: ' + describeStructure(sc, sectionAt(sc, s).index), 46) : []),
         this.deep ? this.deep.status : '',
         `build ${__BUILD__}`,
       ].filter(Boolean);
     }
-    this.debug.draw(sc, s);
+    this.debug.draw(sc, s, this.deep ? { spans: this.deep.spans, state: this.deep.state } : undefined);
     (window as any).__gondry = { phase: this.phase, s, yaw: Math.round(this.look.yaw * 57.3), fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, viz: this.driver instanceof Visualiser ? this.driver.status : undefined, deep: this.deep?.status, sections: sc?.sections, signalStop: this.signalStop };
   }
 }

@@ -27,7 +27,10 @@ export class DebugOverlay {
 
   toggle(v = !this.visible) { this.visible = v; this.canvas.style.display = v ? 'block' : 'none'; }
 
-  draw(score: Score | null, s: number) {
+  /**
+   * @param deep spans of the song deep listen has finished, and its state, for the song strip.
+   */
+  draw(score: Score | null, s: number, deep?: { spans: [number, number][]; state: string }) {
     if (!this.visible) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
@@ -37,7 +40,7 @@ export class DebugOverlay {
     g.clearRect(0, 0, W, H);
     g.fillStyle = 'rgba(12,14,18,0.72)';
     g.fillRect(0, 0, W, H);
-    const left = 54, top = 22, rowH = Math.max(12, (H - top - 30) / ROWS.length);
+    const left = 54, top = 22, bottom = 50, rowH = Math.max(12, (H - top - bottom - 12) / ROWS.length);
     const span0 = -4, span1 = 14;
     const xOf = (t: number) => left + ((t - s - span0) / (span1 - span0)) * (W - left - 8);
     g.font = '11px ui-monospace, Menlo, monospace';
@@ -65,7 +68,7 @@ export class DebugOverlay {
         if (b.t < s + span0 || b.t > s + span1) continue;
         const x = xOf(b.t);
         g.fillStyle = b.downbeat ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.14)';
-        g.fillRect(x, top, b.downbeat ? 2 : 1, H - top - 18);
+        g.fillRect(x, top, b.downbeat ? 2 : 1, H - top - bottom);
       }
       // Events.
       ROWS.forEach((r, i) => {
@@ -93,17 +96,70 @@ export class DebugOverlay {
       const fx = xOf(score.frontierSec);
       if (fx < W) {
         g.fillStyle = 'rgba(255,80,80,0.25)';
-        g.fillRect(Math.max(left, fx), top, W - Math.max(left, fx), H - top - 18);
+        g.fillRect(Math.max(left, fx), top, W - Math.max(left, fx), H - top - bottom);
         g.fillStyle = '#ff6b6b';
-        g.fillRect(fx, top, 2, H - top - 18);
-        g.fillText('frontier', fx + 4, H - 26);
+        g.fillRect(fx, top, 2, H - top - bottom);
+        g.fillText('frontier', fx + 4, H - bottom - 8);
       }
     }
     // Playhead.
     const px = xOf(s);
     g.fillStyle = '#4cffb0';
-    g.fillRect(px - 1, top, 2, H - top - 18);
+    g.fillRect(px - 1, top, 2, H - top - bottom);
+    if (score) this.drawSong(score, s, left, W, H - bottom + 8, span0, span1, deep);
     g.fillStyle = '#dde';
     g.fillText(this.lines.join('   '), 6, H - 9);
+  }
+
+  /**
+   * The whole song in one strip under the timeline: sections coloured by kind and lettered by
+   * group (parts that sound alike share a letter), what is analysed so far, how far deep listen
+   * has got (the thin line under it), the stretch the timeline above shows, and the playhead.
+   */
+  private drawSong(score: Score, s: number, left: number, W: number, y: number, span0: number, span1: number, deep?: { spans: [number, number][]; state: string }) {
+    const g = this.g;
+    const dur = score.track.durationSec || 1;
+    const x = (t: number) => left + (Math.min(Math.max(t, 0), dur) / dur) * (W - left - 8);
+    const h = 16;
+    g.fillStyle = '#aab';
+    g.fillText('song', 6, y + h / 2);
+    g.fillStyle = 'rgba(255,255,255,0.06)';
+    g.fillRect(left, y, W - left - 8, h);
+    const letters = new Map<number, string>();
+    const cur = (() => { let i = -1; score.sections.forEach((sec, k) => { if (sec.t <= s) i = k; }); return i; })();
+    score.sections.forEach((sec, i) => {
+      const end = score.sections[i + 1]?.t ?? (score.final ? dur : score.frontierSec);
+      const x0 = x(sec.t), x1 = x(end);
+      g.fillStyle = SECTION_COLORS[sec.label] ?? '#555';
+      g.globalAlpha = i === cur ? 1 : 0.7;
+      g.fillRect(x0, y, Math.max(1, x1 - x0 - 1), h);
+      g.globalAlpha = 1;
+      let tag = sec.label === 'intro' || sec.label === 'outro' ? sec.label : sec.label === 'breakdown' ? 'brk' : '';
+      if (!tag && sec.group !== undefined) {
+        if (!letters.has(sec.group)) letters.set(sec.group, String.fromCharCode(65 + letters.size));
+        tag = (sec.label === 'drop' ? 'drop ' : '') + letters.get(sec.group);
+      }
+      if (!tag) tag = sec.label;
+      if (x1 - x0 > g.measureText(tag).width + 4) { g.fillStyle = '#fff'; g.fillText(tag, x0 + 3, y + h / 2); }
+      if (i === cur) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.strokeRect(x0 + 0.75, y + 0.75, x1 - x0 - 2.5, h - 1.5); }
+    });
+    // Not analysed yet.
+    if (!score.final) {
+      const fx = x(score.frontierSec);
+      g.fillStyle = 'rgba(255,80,80,0.3)';
+      g.fillRect(fx, y, W - 8 - fx, h);
+    }
+    // Deep listen: the windows it has finished.
+    if (deep) {
+      g.fillStyle = deep.state === 'skipped' ? 'rgba(160,160,160,0.5)' : '#c89bff';
+      if (deep.state === 'skipped') g.fillRect(left, y + h + 2, W - left - 8, 2);
+      else for (const [a, b] of deep.spans) g.fillRect(x(a), y + h + 2, Math.max(1, x(b) - x(a)), 3);
+    }
+    // The stretch the timeline above shows, and the playhead.
+    g.strokeStyle = 'rgba(76,255,176,0.8)';
+    g.lineWidth = 1;
+    g.strokeRect(x(s + span0), y - 2, Math.max(2, x(s + span1) - x(s + span0)), h + 4);
+    g.fillStyle = '#4cffb0';
+    g.fillRect(x(s) - 1, y - 3, 2, h + 6);
   }
 }

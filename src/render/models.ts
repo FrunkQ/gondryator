@@ -322,6 +322,28 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     T1(SURF.brick, cyl(0.6, 0.8, 6, 2.5, 13, -2, 0x8a6b5c, 8)),
   ]),
   // A windbreak of Italian cypresses: flame-shaped, leafy, slightly different heights.
+  // A hedgerow of field trees, oak and ash of different sizes: the countryside's skyline.
+  'tree-line': () => {
+    const parts: Part[] = [...T(SURF.foliage, box(22, 1.4, 1.4, 0, 0.7, 0, 0x4d6a33))];
+    [[-9, 1.1], [-5.5, 0.8], [-1.5, 1.25], [2.5, 0.9], [6, 1.15], [9.5, 0.75]].forEach(([x, k], i) => {
+      parts.push(cyl(0.22 * k, 0.4 * k, 4 * k, x, 2 * k, 0, 0x5b4632, 7));
+      parts.push(...canopy(x, 4.6 * k + 1, 0, 2.6 * k, [0x4f7036, 0x5c7d3c, 0x47652f][i % 3], 90 + i));
+    });
+    return merge(parts);
+  },
+  // Fields: stripes of crop with a hedge behind, a gate, and the odd bale or scarecrow.
+  'field': () => {
+    const crops = [0xd9c25a, 0x8fae4c, 0xc9b066, 0x6f9440];
+    const parts: Part[] = [];
+    for (let i = 0; i < 8; i++) parts.push(T1(SURF.grass, box(18, 0.12 + (i % 2) * 0.1, 0.9, 0, 0.08, -3.6 + i * 1.05, crops[(i >> 1) % crops.length])));
+    parts.push(...T(SURF.foliage, box(18, 1.5, 1.1, 0, 0.75, -5, 0x4f6b34)));
+    parts.push(T1(SURF.wood, box(2.4, 1.1, 0.08, 5, 0.6, 4.6, 0x8a7458)), T1(SURF.wood, box(0.15, 1.3, 0.15, 3.7, 0.65, 4.6, 0x5a4632)));
+    parts.push(cyl(0.7, 0.7, 1.2, -6, 0.6, 1, 0xd8c070, 12), cyl(0.7, 0.7, 1.2, -4.4, 0.6, 1.6, 0xcfb866, 12));
+    // The scarecrow, arms out.
+    parts.push(T1(SURF.wood, box(0.12, 2.2, 0.12, 2, 1.1, -1, 0x5a4632)), T1(SURF.wood, box(1.6, 0.1, 0.1, 2, 1.7, -1, 0x5a4632)));
+    parts.push(T1(SURF.paint, box(0.6, 0.7, 0.3, 2, 1.55, -1, 0x7a3b3b)), sphere(0.22, 2, 2.15, -1, 0xd8c8a0, 1, 1, 1, 8), cone(0.4, 0.3, 2, 2.4, -1, 0x6b5a3a, 8));
+    return merge(parts);
+  },
   'cypress-row': () => merge([
     ...cypress(-3.2, 0.85, 0x2f4a2a, 3), ...cypress(0, 1.05, 0x34502d, 5), ...cypress(3.1, 0.92, 0x2b4527, 8),
   ]),

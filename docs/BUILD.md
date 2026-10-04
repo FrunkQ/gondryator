@@ -100,9 +100,12 @@ Star Guitar now reads: intro · A A · B B · breakdown · drop (A) · C · A ·
 Every ride uses the groups. The non-Gondry view keys its pictures by group, so a returning part
 brings its picture back with a new palette and a different-sounding part gets a different one.
 The train and the starship (both windows) go back to the same scenery theme and effects look
-when a part returns (`Spawner.themeAt`, `FxDirector.lookFor`). The D overlay prints the whole
-shape (`describeStructure` in `score/types.ts`), with the current part in brackets and "…" while
-the analysis is still running; the tuning screen shows the group letter next to each section.
+when a part returns (`Spawner.themeAt`, `FxDirector.lookFor`). The D overlay has a song strip
+under the timeline: the whole song, sections coloured by kind and lettered by group, the current
+one outlined, the part not analysed yet in red, deep listen's finished stretches as a violet line
+underneath, and a green bracket for the stretch the timeline shows. `describeStructure` in
+`score/types.ts` gives the same shape as text; the tuning screen shows the group letter next to
+each section.
 
 ## Deep listen
 

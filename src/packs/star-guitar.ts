@@ -24,14 +24,15 @@ export const STAR_GUITAR: Pack = {
         // Mostly green, with a building now and then (repeats weight the pick: same sound, same object).
         industrial: ['tree-clump', 'shed', 'hedge', 'birch-clump', 'container', 'allotment', 'tree-clump', 'hedge', 'garages', 'birch-clump', 'signal-box', 'hedge'],
         town: ['tree-clump', 'garden', 'hedge', 'cottage', 'birch-clump', 'allotment', 'tree-clump', 'garden', 'wall-house', 'hedge', 'birch-clump', 'hoarding'],
-        country: ['tree-clump', 'hedge', 'hay-bales', 'birch-clump', 'garden', 'tree-clump', 'hedge', 'stone-hut', 'birch-clump', 'cottage'],
+        // The countryside is fields, hedges and copses; the odd hut.
+        country: ['field', 'tree-clump', 'hedge', 'hay-bales', 'field', 'birch-clump', 'hedge', 'tree-clump', 'field', 'stone-hut'],
       },
       tints: { industrial: ['#ffffff', '#d8e0e6', '#e8ddd0'], town: ['#ffffff', '#ffe9d6', '#f0f4ff'], country: ['#ffffff', '#f6ead2'] } },
     { id: 'mid', depth: 38, depthJitter: 3, scale: 0.9, scaleByVel: 0.25, lengthByDur: 0.85,
-      models: { industrial: ['warehouse', 'tree-clump', 'tank', 'birch-clump', 'gravel-works', 'hedge', 'gasholder', 'tree-clump', 'terrace'], town: ['apartment', 'tree-clump', 'terrace', 'garden', 'warehouse', 'birch-clump'], country: ['farmhouse', 'tree-clump', 'barn', 'hedge', 'viaduct', 'birch-clump'] },
+      models: { industrial: ['warehouse', 'tree-clump', 'tank', 'birch-clump', 'gravel-works', 'hedge', 'gasholder', 'tree-clump', 'terrace'], town: ['apartment', 'tree-clump', 'terrace', 'garden', 'warehouse', 'birch-clump'], country: ['tree-clump', 'field', 'hedge', 'farmhouse', 'tree-clump', 'field', 'birch-clump', 'barn', 'hedge', 'viaduct'] },
       tints: { industrial: ['#ffffff', '#dfe3e0', '#f2e6dc'], town: ['#ffffff', '#ffe4c8', '#ffd9cc', '#f7f0d8'], country: ['#ffffff', '#ffeccc'] } },
     { id: 'row', depth: 62, depthJitter: 2, scale: 1, scaleByVel: 0.1, pitchCenter: 64, heightPerSemitone: 0.09,
-      models: { industrial: ['factory-block', 'town-block'], town: ['town-block'], country: ['cypress-row', 'town-block'] },
+      models: { industrial: ['factory-block', 'town-block'], town: ['town-block'], country: ['tree-line', 'cypress-row', 'tree-line'] },
       tints: { industrial: ['#ffffff', '#e6e2da'], town: ['#ffffff', '#ffe0c0', '#ffd0c0', '#fff2c8', '#e8f0ff'], country: ['#ffffff', '#fff0d0'] } },
     { id: 'far', depth: 170, depthJitter: 30, scale: 1, scaleByVel: 0.3,
       models: { industrial: ['cooling-tower', 'silo', 'chimney', 'pylon', 'water-tower'], town: ['church-tower', 'water-tower', 'silo', 'pylon'], country: ['hill', 'church-tower', 'water-tower'] } },

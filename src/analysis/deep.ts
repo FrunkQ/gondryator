@@ -83,6 +83,9 @@ export class DeepListen {
 
   stop() { this.worker?.terminate(); this.worker = null; }
 
+  /** The stretches of the song transcribed so far (for the debug overlay's song strip). */
+  get spans(): [number, number][] { return [...this.windows.keys()].map(a => [a, Math.min(this.audio.duration, a + WINDOW)] as [number, number]); }
+
   private giveUp(why: string) {
     this.failed = why;
     this.state = 'skipped';
