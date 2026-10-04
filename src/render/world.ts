@@ -555,6 +555,36 @@ export class World {
     const back = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.12, bh + 0.12, 0.08), canopyMat);
     back.position.set(0, cy, z - 0.06);
     grp.add(back);
+    // On the title stop: a departures strip above the name board and a platform clock beside it,
+    // so the wait while the line ahead is read has something to watch.
+    if (opts.trackside && !opts.end) {
+      const dw = bw, dh = 0.8;
+      this.depCanvas = document.createElement('canvas');
+      this.depCanvas.width = 1400; this.depCanvas.height = Math.round(1400 * dh / dw);
+      this.depTex = new THREE.CanvasTexture(this.depCanvas);
+      this.depTex.colorSpace = THREE.SRGBColorSpace;
+      this.depText = '';
+      this.setDeparture('Waiting for a clear line');
+      const dep = new THREE.Mesh(new THREE.PlaneGeometry(dw, dh), new THREE.MeshBasicMaterial({ map: this.depTex, fog: false, toneMapped: false }));
+      dep.position.set(0, cy + bh / 2 + 0.25 + dh / 2, z);
+      grp.add(dep);
+      const dback = new THREE.Mesh(new THREE.BoxGeometry(dw + 0.12, dh + 0.12, 0.08), canopyMat);
+      dback.position.set(0, dep.position.y, z - 0.06);
+      grp.add(dback);
+      this.clockCanvas = document.createElement('canvas');
+      this.clockCanvas.width = this.clockCanvas.height = 256;
+      this.clockTex = new THREE.CanvasTexture(this.clockCanvas);
+      this.clockTex.colorSpace = THREE.SRGBColorSpace;
+      this.clockSec = -1;
+      this.drawClock();
+      const cx = info.art ? 6.9 : -6.9;
+      const face = new THREE.Mesh(new THREE.CircleGeometry(1.05, 48), new THREE.MeshBasicMaterial({ map: this.clockTex, fog: false, toneMapped: false }));
+      face.position.set(cx, cy, z + 0.12);
+      grp.add(face);
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(1.16, 1.16, 0.2, 48).rotateX(Math.PI / 2), canopyMat);
+      rim.position.set(cx, cy, z);
+      grp.add(rim);
+    }
     // Cover art as a poster on the station wall.
     if (info.art) {
       const at = new THREE.Texture(info.art);
@@ -581,6 +611,67 @@ export class World {
       if (mat) (Array.isArray(mat) ? mat : [mat]).forEach((x: THREE.Material) => x.dispose());
     });
     this.scene.clear();
+  }
+
+  private depCanvas: HTMLCanvasElement | null = null;
+  private depTex: THREE.CanvasTexture | null = null;
+  private depText = '';
+  private clockCanvas: HTMLCanvasElement | null = null;
+  private clockTex: THREE.CanvasTexture | null = null;
+  private clockSec = -1;
+
+  /** The departures strip on the title stop: amber dot-matrix text, redrawn only when it changes. */
+  setDeparture(text: string) {
+    const c = this.depCanvas;
+    if (!c || !this.depTex || text === this.depText) return;
+    this.depText = text;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#111312';
+    g.fillRect(0, 0, c.width, c.height);
+    g.font = `700 ${Math.round(c.height * 0.5)}px ui-monospace, "Courier New", monospace`;
+    g.textBaseline = 'middle';
+    g.fillStyle = '#ffb22e';
+    g.shadowColor = '#ff9a00'; g.shadowBlur = 14;
+    g.textAlign = 'left';
+    g.fillText('PLATFORM 1', 40, c.height / 2);
+    g.textAlign = 'right';
+    g.fillText(text.toUpperCase(), c.width - 40, c.height / 2);
+    g.shadowBlur = 0;
+    // The dot-matrix grain.
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    for (let x = 0; x < c.width; x += 6) g.fillRect(x, 0, 2, c.height);
+    for (let y = 0; y < c.height; y += 6) g.fillRect(0, y, c.width, 2);
+    this.depTex.needsUpdate = true;
+  }
+
+  /** The platform clock: the real time on your machine, with a sweeping red second hand. */
+  private drawClock() {
+    const c = this.clockCanvas;
+    if (!c || !this.clockTex) return;
+    const now = new Date();
+    const sec = now.getSeconds();
+    if (sec === this.clockSec) return;
+    this.clockSec = sec;
+    const g = c.getContext('2d')!, r = c.width / 2;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#f4f1e8';
+    g.fillRect(0, 0, c.width, c.height);
+    g.translate(r, r);
+    g.fillStyle = '#1b1d20';
+    for (let i = 0; i < 60; i++) {
+      g.save(); g.rotate((i / 60) * Math.PI * 2);
+      if (i % 5 === 0) g.fillRect(-4, -r + 10, 8, 26); else g.fillRect(-1.5, -r + 10, 3, 9);
+      g.restore();
+    }
+    const hand = (a: number, len: number, w: number, col: string) => {
+      g.save(); g.rotate(a); g.fillStyle = col; g.fillRect(-w / 2, -len, w, len + 18); g.restore();
+    };
+    const m = now.getMinutes() + sec / 60, h = (now.getHours() % 12) + m / 60;
+    hand((h / 12) * Math.PI * 2, r * 0.5, 12, '#1b1d20');
+    hand((m / 60) * Math.PI * 2, r * 0.78, 8, '#1b1d20');
+    hand((sec / 60) * Math.PI * 2, r * 0.82, 3, '#c8241d');
+    g.beginPath(); g.arc(0, 0, 9, 0, Math.PI * 2); g.fillStyle = '#c8241d'; g.fill();
+    this.clockTex.needsUpdate = true;
   }
 
   private boardTexture(info: StationInfo, end: boolean): THREE.CanvasTexture {
@@ -628,6 +719,7 @@ export class World {
 
   // ------------------------------------------------------------------ per frame
   update(s: number, rig: CameraRig, yaw: number, pitch: number, xr = false) {
+    this.drawClock();
     // Turning right round, you lean across the aisle to the other window.
     if (!xr && this.pack.rig.lookYaw) this.head.position.z = 1.55 * Math.max(0, -Math.cos(yaw)) ** 1.5;
     rig.pose(s, tmpPos, tmpQuat);

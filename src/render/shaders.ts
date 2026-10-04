@@ -594,7 +594,9 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const level = float(0.35).add(V.arc.mul(0.85)).mul(V.journey.x)
     .add(float(0.8).add(V.arc.mul(0.25)).mul(V.journey.y))
     .add(float(0.6).add(V.arc.mul(0.5)).mul(V.journey.z))
-    .mul(float(1.0).sub(V.tension.mul(0.35))).add(V.release.mul(0.6));
+    .mul(float(1.0).sub(V.tension.mul(0.35))).add(V.release.mul(0.6))
+    // While flowers, bubbles and the like are on, the backdrop steps back so they read on top of it.
+    .mul(float(1.0).sub(V.dim));
   const satCol = max(mix(vec3(grey), col, sat), vec3(0.0));
   const icy = vec3(0.35, 0.62, 1.0).mul(grey).mul(1.4);
   const thawed = mix(icy, satCol, min(smoothstep(0.25, 0.9, V.arc).add(V.release.mul(0.4)), 1.0));
@@ -634,6 +636,25 @@ export function makeSpriteMaterial(style: 'petal' | 'flat' | 'spike' = 'petal'):
     const veins = sin(atan(positionLocal.y, positionLocal.x).mul(18.0)).mul(0.15).add(0.85);
     m.colorNode = vec3(heart.add(petal.mul(veins)));
   }
+  return m;
+}
+
+/**
+ * A glitterball: flat mirror facets that flash white as they catch a few lights circling round,
+ * and otherwise show a dim, tinted reflection of the room.
+ */
+export function makeGlitterMaterial(): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial();
+  const n = normalize(normalWorld);
+  const v = normalize(positionWorld.sub(cameraPosition));
+  const r = v.sub(n.mul(dot(v, n).mul(2.0)));
+  const t = time.mul(0.9);
+  const lamp = (a: any, b: any, c: any) => pow(max(dot(r, normalize(vec3(a, b, c))), 0.0), 60.0);
+  const glint = lamp(cos(t), 0.5, sin(t)).add(lamp(cos(t.mul(1.3).add(2.1)), -0.2, sin(t.mul(1.3).add(2.1)))).add(lamp(cos(t.mul(0.7).add(4.0)), 0.8, sin(t.mul(0.7).add(4.0))));
+  const tint = vec3(0.35, 0.3, 0.5).add(vec3(0.25, 0.1, 0.35).mul(r.y.mul(0.5).add(0.5)));
+  // A sparkle per facet: hash of the facet's (flat) normal, twinkling with time.
+  const tw = smoothstep(0.93, 1.0, fract(hash(floor(n.mul(40.0)).dot(vec3(1.0, 57.0, 113.0))).add(time.mul(0.4))));
+  m.colorNode = tint.mul(0.5).add(glint.mul(3.0)).add(tw.mul(1.4));
   return m;
 }
 

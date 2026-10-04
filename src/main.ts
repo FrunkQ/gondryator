@@ -489,7 +489,11 @@ class App {
       // Pull away from the name board only when the line ahead is read and every shader is built
       // (but never wait forever on the shaders).
       const warm = this.world.warmPending === 0 || this.p > this.titleCross + 15;
-      const ready = ahead >= Math.min(MIN_LOOKAHEAD + 0.5, score.track.durationSec) && this.p >= this.titleCross + 1.2 && warm;
+      const need = Math.min(MIN_LOOKAHEAD + 0.5, score.track.durationSec);
+      const ready = ahead >= need && this.p >= this.titleCross + 1.2 && warm;
+      const dep = ready ? 'Departing' : this.departureText(ahead, need, warm);
+      this.world.setDeparture(dep);
+      if (this.driver instanceof Visualiser) this.driver.setWaiting(dep);
       if (ready) this.go();
     }
     if (this.phase === 'run' || this.phase === 'ended') {
@@ -559,6 +563,22 @@ class App {
     }
     this.updateHud(s);
   };
+
+  /**
+   * What the departures strip says while the train waits at the title stop: a countdown once the
+   * wait can be predicted (from how fast the analysis and the shader warm-up are going), and
+   * "waiting for a clear line" while it cannot.
+   */
+  private departureText(ahead: number, need: number, warm: boolean): string {
+    const rate = this.analysisWall > 0 ? this.analysedSec / this.analysisWall : 0;
+    const analysis = ahead >= need ? 0 : rate > 0 ? (need - ahead) / rate : Infinity;
+    const shaders = warm ? 0 : this.world.warmPending / Math.max(5, this.fps);
+    const arrive = Math.max(0, this.titleCross + 1.2 - this.p);
+    const wait = Math.max(analysis, shaders, arrive);
+    if (!isFinite(wait) || wait > 60) return 'Waiting for a clear line';
+    const n = Math.ceil(wait);
+    return n <= 1 ? 'Departing' : `Departs in ${n}s`;
+  }
 
   private go() {
     this.phase = 'run';

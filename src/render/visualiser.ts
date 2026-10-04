@@ -37,7 +37,7 @@
 
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import { makeSpriteMaterial, makeVisualiserMaterial } from './shaders';
+import { makeGlitterMaterial, makeSpriteMaterial, makeVisualiserMaterial } from './shaders';
 import type { CardInfo, ShowDriver } from './driver';
 import type { GazeSource } from './spawner';
 import type { FxLookName, Pack } from '../packs/types';
@@ -82,6 +82,8 @@ export const ELEMENTS: { name: string; group: Group }[] = [
   { name: 'snowflakes', group: 'pads' },     // 20 a huge slow twelve-armed flake per long note
 ];
 const NE = ELEMENTS.length;
+/** The elements drawn as sprites (flowers, bubbles, starbursts, confetti, snowflakes). */
+const SPRITE_ELEMENTS = [12, 17, 18, 19, 20];
 
 /** How the arc shows itself, one per era (see updateArc and the shader's arc block). */
 export const JOURNEYS = ['colour rise', 'complexity bloom', 'thaw'] as const;
@@ -195,7 +197,7 @@ class SpritePool {
       const sz = f.size * k * pop * (1 + f.grow * age);
       this.scl.set(sz, sz, sz);
       mesh.setMatrixAt(i, this.m4.compose(this.pos, this.q, this.scl));
-      this.col.setHSL(f.hue, f.sat, 0.5).multiplyScalar(fade * (0.45 + f.vel * 0.6) * light);
+      this.col.setHSL(f.hue, f.sat, 0.55).multiplyScalar(fade * (0.6 + f.vel * 0.7) * light);
       mesh.setColorAt(i, this.col);
     }
     mesh.instanceMatrix.needsUpdate = true;
@@ -223,7 +225,7 @@ export class Visualiser implements ShowDriver {
     layers: uniform(new THREE.Vector4()), poly: uniform(new THREE.Vector4(5, 2, 0.4, 0)), bands: uniform(new THREE.Vector3()),
     E0: uniform(new THREE.Vector4(1, 0, 0, 0)), E1: uniform(new THREE.Vector4()), E2: uniform(new THREE.Vector4()), E3: uniform(new THREE.Vector4()), E4: uniform(new THREE.Vector4()),
     fold: uniform(new THREE.Vector4(0, 0.6, 1.3, 0.5)), frac: uniform(new THREE.Vector4(6, 1.2, 0.7, 0.5)),
-    kickT: uniform(99), pad: uniform(0),
+    kickT: uniform(99), pad: uniform(0), dim: uniform(0),
     arc: uniform(0.3), tension: uniform(0), release: uniform(0), releaseT: uniform(99), phase: uniform(0), journey: uniform(new THREE.Vector3(1, 0, 0)),
     notes: null as unknown as THREE.DataTexture,
   };
@@ -573,6 +575,8 @@ export class Visualiser implements ShowDriver {
     // Element weights ease towards the scene's choice.
     const kw = 1 - Math.exp(-dt / 0.6);
     for (let i = 0; i < NE; i++) this.weights[i] += (this.target[i] - this.weights[i]) * kw;
+    // Sprites are added light, so on a bright backdrop they vanish: dim it while any are on.
+    this.V.dim.value = 0.55 * Math.max(...SPRITE_ELEMENTS.map(i => this.weights[i]));
     const w = this.weights;
     this.V.E0.value.set(w[0], w[1], w[2], w[3]); this.V.E1.value.set(w[4], w[5], w[6], w[7]);
     this.V.E2.value.set(w[8], w[9], w[10], w[11]); this.V.E3.value.set(w[12], w[13], w[14], w[15]);
@@ -586,7 +590,8 @@ export class Visualiser implements ShowDriver {
     else this.V.bands.value.set(0, 0, 0);
     this.updateArc(s, dt, running);
     this.updateWave(s, frontier, running);
-    const light = 0.4 + this.arcLvl * 0.8 + this.V.release.value * 0.5;
+    // The spawners are the notes themselves, so they stay bright even early in the arc.
+    const light = 0.8 + this.arcLvl * 0.5 + this.V.release.value * 0.5;
     for (const p of this.pools) p.update(s, light);
     this.updateCard(s, running);
   }
@@ -802,7 +807,7 @@ export class Visualiser implements ShowDriver {
       t0: t, life: pad ? 6 : 2.6, pop: 0.32, fadeOut: 1.2, grow: 0, wobble: 0,
       az: gazeAz + (r() - 0.5) * (pad ? 2.6 : 1.5), vAz: 0,
       el: THREE.MathUtils.clamp((pitch - 62) / 30, -0.5, 1.0) + (r() - 0.5) * 0.12, vEl: pad ? -0.04 : -0.14,
-      size: (pad ? 9 : 3.2) * (0.7 + vel * 0.6), spin: (r() - 0.5) * 2,
+      size: (pad ? 12 : 6) * (0.7 + vel * 0.6), spin: (r() - 0.5) * 2,
       hue: (((pitch % 12) + 12) % 12) / 12, sat: 0.85, vel,
     });
   }
@@ -874,34 +879,107 @@ export class Visualiser implements ShowDriver {
   }
 
   // ------------------------------------------------------------------ cards
+  private cardCanvas: HTMLCanvasElement | null = null;
+  private ball: THREE.Mesh | null = null;
+  private lastSparkle = 0;
+  private cardText = { name: '', line2: '', status: '' };
+
   card(kind: 'landing' | 'title' | 'end', info: CardInfo): boolean {
     if (this.card3d) { this.group.remove(this.card3d); (this.card3d.material as THREE.MeshBasicMaterial).map?.dispose(); }
     const c = document.createElement('canvas');
-    c.width = 1024; c.height = 384;
-    const g = c.getContext('2d')!;
-    g.fillStyle = '#ffffff';
-    g.textAlign = 'center';
-    g.font = '700 88px system-ui, sans-serif';
-    g.fillText(kind === 'landing' ? 'The non-Gondry view :(' : info.name, 512, 170, 980);
-    g.font = '400 44px system-ui, sans-serif';
-    g.fillStyle = 'rgba(255,255,255,0.75)';
-    g.fillText(kind === 'landing' ? 'Drop a music file' : info.line2, 512, 250, 980);
+    c.width = 1024; c.height = 448;
+    this.cardCanvas = c;
+    this.cardText = { name: kind === 'landing' ? 'The non-Gondry view :(' : info.name, line2: kind === 'landing' ? 'Drop a music file' : info.line2, status: kind === 'title' ? 'Tuning in' : '' };
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
-    this.card3d = new THREE.Mesh(new THREE.PlaneGeometry(16, 6), m);
+    const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+    this.card3d = new THREE.Mesh(new THREE.PlaneGeometry(16, 7), m);
+    this.drawCard();
     this.card3d.position.set(0, 1.5, -22);
+    // The glitterball, hung above the name while the show gets ready.
+    if (!this.ball) {
+      const geo = new THREE.IcosahedronGeometry(3, 3).toNonIndexed();
+      geo.computeVertexNormals();
+      this.ball = new THREE.Mesh(geo, makeGlitterMaterial());
+      this.ball.position.set(0, 7.8, -22);
+      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 20, 6), new THREE.MeshBasicMaterial({ color: 0x777788 }));
+      cord.position.y = 12;
+      this.ball.add(cord);
+      this.group.add(this.ball);
+    }
+    this.ball.visible = kind === 'title';
     this.card3d.renderOrder = 5;
     this.group.add(this.card3d);
     return true;
   }
 
+  /**
+   * While the shaders build, the song's name glows in neon with a line under it: "tuning in",
+   * then a countdown. `text` comes from the same estimate as the train's departures board.
+   */
+  setWaiting(text: string) {
+    const status = text === 'Waiting for a clear line' ? 'Tuning in' : text.replace('Departs in', 'Starting in').replace('Departing', 'Here we go');
+    if (status === this.cardText.status) return;
+    this.cardText.status = status;
+    this.drawCard();
+  }
+
+  private drawCard() {
+    const c = this.cardCanvas, card = this.card3d;
+    if (!c || !card) return;
+    const g = c.getContext('2d')!;
+    const { name, line2, status } = this.cardText;
+    g.clearRect(0, 0, c.width, c.height);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    let size = 104;
+    do { g.font = `800 ${size}px system-ui, sans-serif`; size -= 4; } while (g.measureText(name).width > 960 && size > 40);
+    // Neon: wide coloured haze, then a tighter glow in a sweep of hues, then a hot white core.
+    const grad = g.createLinearGradient(40, 0, 984, 0);
+    grad.addColorStop(0, '#ff3fa4'); grad.addColorStop(0.5, '#7a5cff'); grad.addColorStop(1, '#2fd6ff');
+    for (const [blur, alpha] of [[48, 0.6], [18, 0.9]] as const) {
+      g.shadowColor = '#b04cff'; g.shadowBlur = blur; g.globalAlpha = alpha;
+      g.strokeStyle = grad; g.lineWidth = 10; g.strokeText(name, 512, 160);
+    }
+    g.globalAlpha = 1; g.shadowBlur = 8; g.shadowColor = '#ffffff';
+    g.lineWidth = 3; g.strokeStyle = '#fff4ff'; g.strokeText(name, 512, 160);
+    g.shadowBlur = 0;
+    g.font = '400 42px system-ui, sans-serif';
+    g.fillStyle = 'rgba(220,235,255,0.8)';
+    g.fillText(line2, 512, 262, 960);
+    if (status) {
+      g.font = '700 46px ui-monospace, Menlo, monospace';
+      g.fillStyle = '#ffd36a'; g.shadowColor = '#ff9a00'; g.shadowBlur = 16;
+      g.fillText(status.toUpperCase(), 512, 370, 980);
+      g.shadowBlur = 0;
+    }
+    (card.material as THREE.MeshBasicMaterial).map!.needsUpdate = true;
+  }
+
   private updateCard(s: number, running: boolean) {
     if (!this.card3d) return;
+    // A slow breath and sway while it waits.
+    const tt = performance.now() / 1000;
+    this.card3d.scale.setScalar(1 + Math.sin(tt * 1.7) * 0.02);
+    this.card3d.rotation.z = Math.sin(tt * 0.6) * 0.02;
     // The name hangs in the air until the music has played for a few seconds.
     const m = this.card3d.material as THREE.MeshBasicMaterial;
     m.opacity = running ? THREE.MathUtils.clamp(1 - (s - 2) / 3, 0, 1) : 1;
     this.card3d.visible = m.opacity > 0.01;
+    const ball = this.ball;
+    if (ball && ball.visible) {
+      ball.rotation.y = tt * 0.8;
+      // Once the music starts, the ball is hauled up out of sight.
+      ball.position.y = 7.8 + (running ? Math.max(0, s - 1) ** 2 * 3 : 0);
+      if (running && s > 6) ball.visible = false;
+      // Spots of light thrown round the room while it waits.
+      if (!running && tt - this.lastSparkle > 0.12) {
+        this.lastSparkle = tt;
+        const r = this.rand;
+        this.bursts.add({ t0: s, life: 1.4, pop: 0.1, fadeOut: 1, grow: 0.2, wobble: 0, az: (r() - 0.5) * 3.2, vAz: 0.25, el: (r() - 0.35) * 1.2, vEl: 0,
+          size: 1.2 + r() * 1.5, spin: 0, hue: r(), sat: 0.25, vel: 0.9 });
+      }
+    }
   }
 }
 
