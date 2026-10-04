@@ -57,11 +57,14 @@ export class World {
   readonly mode: 'train' | 'stage';
   /** The starship: space all round, no ground, an open canopy instead of a carriage. */
   readonly ship: boolean;
+  /** Nothing at all: the visualiser draws the whole world. */
+  readonly void: boolean;
   private shipSky: THREE.Mesh | null = null;
 
   constructor(private pack: Pack) {
     this.mode = pack.rig.type === 'lateral-rail' ? 'train' : 'stage';
     this.ship = pack.vehicle === 'ship';
+    this.void = pack.vehicle === 'void';
     this.camera = new THREE.PerspectiveCamera(pack.rig.fov, 16 / 9, 0.05, 4000);
     this.baseFov = pack.rig.fov;
     this.camera.rotation.order = 'YXZ';
@@ -122,6 +125,10 @@ export class World {
         this.buildTrack();
         this.buildCabin();
       }
+    } else if (this.void) {
+      sc.background = new THREE.Color(0x000000);
+      this.sky.visible = false;
+      this.sunDisc.visible = false;
     } else {
       const floor = new THREE.Mesh(new THREE.CircleGeometry(3500, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: new THREE.Color(this.pack.stage?.floor ?? 0x2a2730).multiplyScalar(0.3), roughness: 0.95, metalness: 0, envMapIntensity: 0.1 }));
       floor.receiveShadow = true;

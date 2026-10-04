@@ -113,7 +113,7 @@ export interface SectionTheme {
 }
 
 export interface RigSpec {
-  type: 'lateral-rail' | 'dolly-forward' | 'locked-off' | 'orbit';
+  type: 'lateral-rail' | 'dolly-forward' | 'locked-off' | 'orbit' | 'static';
   /** orbit: radius (m), seconds per revolution, and the height the camera looks at. */
   orbitRadius?: number;
   orbitPeriod?: number;
@@ -148,7 +148,8 @@ export interface Pack {
   inspiration?: { title: string; url: string };
   viewpoint: 'fixed-window' | 'wraparound' | 'cockpit';
   rig: RigSpec;
-  spawnMode: 'pass-by' | 'replicate' | 'perform' | 'loop-layer';
+  /** pass-by: scenery scheduled past a window; perform: a cast on a stage; visualise: a 360° abstract world (render/visualiser.ts). */
+  spawnMode: 'pass-by' | 'replicate' | 'perform' | 'loop-layer' | 'visualise';
   layers: PackLayer[];
   mapping: MappingRule[];
   ambient: AmbientLayer[];
@@ -175,8 +176,8 @@ export interface Pack {
   fx?: { cycle: FxLookName[]; bySection?: Partial<Record<string, FxLookName>> };
   /** Optional glTF models: name -> url. */
   assets?: Record<string, string>;
-  /** What you are riding: 'train' (ground, track, carriage) or 'ship' (space all round, an open canopy). */
-  vehicle?: 'train' | 'ship';
+  /** What you are riding: 'train' (ground, track, carriage), 'ship' (space all round, an open canopy) or 'void' (nothing: the visualiser draws the whole world). */
+  vehicle?: 'train' | 'ship' | 'void';
   /** The window across the aisle: another pack's id, or 'trippy' for a psychedelic mirror of this one. */
   otherSide?: string;
   window: { width: number; height: number; bottom: number; pillar: number; distance: number; frame: string; wall: string };

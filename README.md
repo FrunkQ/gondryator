@@ -4,12 +4,15 @@
 
 *Live inside a Michel Gondry video.*
 
-Drop in a song and the world outside the window starts keeping time: poles on the kick, sheds on the snare, a skyline that hums the melody. Ride the train, or take the open cockpit of a starship. Turn round in your seat and the other window has gone somewhere else entirely: lavender fields, the space between the planets, or a psychedelic vortex. It is a humble imitation of a genius, made with a lot of love and no small amount of awe.
+Drop in a song and the world outside the window starts keeping time: poles on the kick, sheds on the snare, a house for every note of the tune, mountains that bend with every slide. Ride the train, or take the open cockpit of a starship. Turn round in your seat and the other window has gone somewhere else entirely: lavender fields, the space between the planets, or a psychedelic vortex. It is a humble imitation of a genius, made with a lot of love and no small amount of awe.
 
-The originals, which you should watch first (and then again):
+And for when you just want to sit still and drown in it, there's **the non-Gondry view :(**. No train, no window, just a world of plasma, lightning and flowers blooming all around you, a fresh one for every song.
+
+The original, which you should watch first (and then again):
 
 - 🚆 **Star Guitar**, The Chemical Brothers (2002): [the official video](https://www.youtube.com/watch?v=0S43IwBF0uM)
-- 🕺 **Around the World**, Daft Punk (1997): [the official video](https://www.youtube.com/watch?v=K0HSD_i2DvA)
+
+Daft Punk's *Around the World* is having a little lie-down. It'll be back when it has found its twist.
 
 🥽 Coming in V2: a native VR app on Steam, so you can take the window seat for real. Turn your head and the beats land wherever you look.
 

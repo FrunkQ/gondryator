@@ -6,6 +6,7 @@ import { Spawner } from './render/spawner';
 import { OtherSide, ClampedGaze } from './render/otherside';
 import { OTHER_SIDE } from './packs/other-side';
 import { Performer } from './render/performer';
+import { Visualiser } from './render/visualiser';
 import type { CardInfo, ShowDriver } from './render/driver';
 import { FxDirector, FX_LOOKS, type FxLook } from './render/fx';
 import { VR } from './ui/vr';
@@ -131,7 +132,7 @@ class App {
     this.fx.locked = locked;
     this.fx.warpAll = pack.vehicle === 'ship';
     this.sky = new SkyLife(this.world.mode === 'stage');
-    this.sky.birdsVisible = !this.world.ship;
+    this.sky.birdsVisible = !this.world.ship && !this.world.void;
     this.world.scene.add(this.sky.group);
     this.rig = makeRig(pack.rig);
     this.world.themeForX = x => {
@@ -228,7 +229,9 @@ class App {
     if (this.driver) { this.driver.reset(-1e9); this.world.scene.remove(this.driver.group); }
     this.driver = this.pack.spawnMode === 'perform'
       ? new Performer(this.pack, this.rig, s, this.world.camera)
-      : new Spawner(this.pack, this.rig, s, this.world.camera, undefined, pools);
+      : this.pack.spawnMode === 'visualise'
+        ? new Visualiser(this.pack, s, this.world.camera)
+        : new Spawner(this.pack, this.rig, s, this.world.camera, undefined, pools);
     this.world.scene.add(this.driver.group);
     // Star Guitar has a second window: invented worlds across the aisle, on the same beat.
     if (this.other && this.pack.rig.lookYaw && !params.has('noother')) {
@@ -450,6 +453,11 @@ class App {
       this.mainGaze ??= new ClampedGaze(this.look, 1);
       this.mainGaze.limit = THREE.MathUtils.degToRad(this.pack.rig.maxYaw);
       this.driver.update(s, dt, this.mainGaze, frontier, running);
+      if (this.driver instanceof Visualiser) {
+        // The visualiser picks the post-effects look per scene, and crashes the picture on a change.
+        this.fx.override = this.driver.look;
+        if (this.driver.takeCrash()) this.fx.crash();
+      }
       this.other?.update(s, dt, this.look, frontier, running, this.world.train.position.x);
     }
     try {
@@ -664,6 +672,7 @@ class App {
       if (e.key === 'c' || e.key === 'C') this.look.center();
       if (e.key === 'f' || e.key === 'F') $('#fs').click();
       if (e.key === 'x' || e.key === 'X') this.cycleFx();
+      if ((e.key === 'r' || e.key === 'R') && this.driver instanceof Visualiser) this.toast(`New seed: ${this.driver.reroll()}`);
       if (e.key === 's' || e.key === 'S') { if (this.driver) { this.driver.steering = !this.driver.steering; this.driver.gazeSpawning = this.driver.steering; this.toast(this.driver.steering ? 'Refocusing on' : 'Refocusing off (objects stay where the original video would put them)'); } }
     });
   }

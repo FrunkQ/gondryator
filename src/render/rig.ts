@@ -251,7 +251,29 @@ export class OrbitRig implements CameraRig {
   timeAtTravel(_x: number) { return -1; }
 }
 
+/** Sitting still at the origin (the non-Gondry view): nothing travels, you only look around. */
+export class StaticRig implements CameraRig {
+  readonly spec: RigSpec;
+  private departAt: number | null = null;
+  constructor(spec: RigSpec) { this.spec = spec; }
+  get departed() { return this.departAt !== null; }
+  depart(p: number) { if (this.departAt === null) this.departAt = p; }
+  titleTravel() { return 0; }
+  titleArrival() { return this.departAt === null ? Infinity : this.departAt + 2; }
+  go() { /* nothing moves */ }
+  goImmediate() { /* nothing moves */ }
+  attachScore() { /* timing comes straight from the score */ }
+  setAspect() { /* nothing depends on it */ }
+  travel() { return 0; }
+  pose(_s: number, pos: THREE.Vector3, quat: THREE.Quaternion) { pos.set(0, 0, 0); quat.identity(); }
+  placeFor(_t: number, depth: number, yaw: number, out: THREE.Vector3) { out.set(depth * Math.sin(yaw), 0, -depth * Math.cos(yaw)); }
+  leadTime() { return 0; }
+  timeAtTravel() { return -1; }
+  speedAt() { return 0; }
+}
+
 export function makeRig(spec: RigSpec): CameraRig {
   if (spec.type === 'orbit') return new OrbitRig(spec);
+  if (spec.type === 'static') return new StaticRig(spec);
   return new LateralRail(spec);
 }

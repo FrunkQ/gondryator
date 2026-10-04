@@ -156,6 +156,8 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
 export class FxDirector {
   look: FxLook = 'clean';
   locked: FxLook | null = null;
+  /** A look chosen by the show itself (the visualiser's scenes); the X key still wins. */
+  override: FxLook | null = null;
   /** How much of the look shows, 0..1: a pack can keep one view clean (Star Guitar's main window). */
   amount = 1;
   private cur: Weights = { fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS.clean };
@@ -209,6 +211,7 @@ export class FxDirector {
         this.look = this.bySection[label] ?? this.cycle[idx % this.cycle.length];
       }
     } else this.look = 'clean';
+    if (this.override && running) this.look = this.override;
     const target = { fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS[this.locked ?? this.look] };
     if (label === 'breakdown') target.rain = 1;
     const k = 1 - Math.exp(-dt / 0.8);
@@ -241,6 +244,9 @@ export class FxDirector {
     W.aspect.value = aspect; W.kalRot.value += dt * (0.1 + this.kick * 0.6);
     W.segments.value = 6 + 2 * (this.secIdx % 3);
   }
+
+  /** Tear the picture apart for a moment (a scene change in the visualiser). */
+  crash() { this.glitch = 1; this.warp = Math.max(this.warp, 0.7); }
 
   /** Cycles a forced look (keyboard X): auto -> each look -> auto. */
   cycleLock(): string {

@@ -13,6 +13,7 @@ import {
   Fn, uniform, attribute, vec2, vec3, vec4, float, mix, select, abs, floor, fract, sin, cos, clamp, smoothstep, step,
   positionGeometry, normalGeometry, positionWorld, normalWorld, vertexColor, fwidth, length, max, min, dot, bumpMap, time,
   mx_noise_float, mx_worley_noise_float, hash, cameraPosition, pow, atan, acos, materialColor, viewportSharedTexture, screenUV, uv, positionLocal, normalLocal,
+  asin, texture, exp, normalize,
 } from 'three/tsl';
 
 /** Uniforms shared by every procedural material and the post effects; the FX director writes them. */
@@ -384,6 +385,89 @@ export function makeConsoleMaterial(): THREE.MeshStandardNodeMaterial {
   const col = pow(palette(h.mul(0.8).add(U.hue.mul(0.5))), vec3(1.6));
   const top = smoothstep(0.5, 0.8, normalLocal.y);
   m.emissiveNode = col.mul(key).mul(top).mul(lit.mul(float(0.7).add(U.kick.mul(1.6))).add(0.08));
+  return m;
+}
+
+/**
+ * The non-Gondry view's sky: a whole sphere of classic 2D effects in angle space (azimuth,
+ * elevation), each fed by a different stream of the score. `V` holds the scene's uniforms (see
+ * render/visualiser.ts, which writes them every frame):
+ *   palette a, b, c, d   cosine palette of the current scene
+ *   shape (vec4)         plasma frequency, swirl, kaleidoscope segments (0 = off), drift speed
+ *   mixes (vec4)         weights of plasma, rings round the zenith, tunnel stripes, phase offset
+ *   gaze (vec3)          where the viewer looks: the bass pulses blast out from there
+ *   pulse0..3            seconds since the last four bass notes (big = none)
+ *   boltAz, boltT, boltSeed  lightning on the snare: where, how long ago, which shape
+ *   wave (texture)       the melody's pitch over the next/last few seconds, laid round the horizon
+ *   crash                0..1 flash when the scene is torn down for a fresh one
+ *   rise, bright         build-ups and brightness
+ */
+export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, fog: false, depthWrite: false });
+  const d = positionLocal.normalize();
+  const az = atan(d.x, d.z.negate());             // 0 ahead (-z), +/- pi behind
+  const el = asin(clamp(d.y, -1.0, 1.0));          // -pi/2 .. pi/2
+  const t = U.showTime.mul(V.shape.w);
+  const F = V.shape.x;
+  // Kaleidoscope: fold the azimuth into mirrored segments.
+  const segs = max(V.shape.z, 1.0);
+  const seg = fract(az.div(6.28318).mul(segs).add(0.5));
+  const azK = select(V.shape.z.greaterThan(0.5), abs(seg.sub(0.5)).mul(6.28318).div(segs), az);
+  // Swirl: the further from the horizon, the more it turns.
+  const azS = azK.add(el.mul(V.shape.y).add(sin(t.mul(0.3)).mul(V.shape.y).mul(0.5)));
+  const px = azS.mul(F), py = el.mul(F).mul(1.3);
+  const plasma = sin(px.add(t))
+    .add(sin(py.sub(t.mul(1.1))))
+    .add(sin(px.add(py).mul(0.7).add(t.mul(0.7))))
+    .add(sin(length(vec2(px, py.mul(2.0))).mul(1.5).sub(t.mul(1.3)).add(U.kick.mul(1.5))))
+    .mul(0.25);
+  const rings = sin(el.mul(F).mul(4.0).sub(t.mul(2.0)).add(U.kick.mul(2.0)));
+  const tunnel = sin(acos(clamp(dot(d, V.gaze), -1.0, 1.0)).mul(F).mul(3.0).sub(t.mul(3.0)).add(azK.mul(2.0)));
+  const v = plasma.mul(V.mixes.x).add(rings.mul(V.mixes.y)).add(tunnel.mul(V.mixes.z))
+    .add(V.mixes.w).add(U.hue.mul(0.5)).add(mx_noise_float(d.mul(2.0).add(t.mul(0.1))).mul(0.25));
+  const pal = V.pa.add(V.pb.mul(cos(V.pc.mul(v).add(V.pd).mul(6.28318))));
+  const glow = float(0.1).add(U.energy.mul(0.12)).add(U.kick.mul(0.28)).add(V.rise.mul(0.25)).add(V.bright.mul(0.08));
+  // Contrast: thin bright filaments over darkness, and drifting black voids, so it reads as a
+  // pattern rather than a wash.
+  const fil = pow(sin(v.mul(9.0)).mul(0.5).add(0.5), 3.0);
+  const voids = smoothstep(0.35, 0.75, mx_noise_float(d.mul(1.3).add(vec3(0.0, t.mul(0.08), 0.0))).mul(0.5).add(0.5));
+  const base = pow(pal, vec3(2.2)).mul(glow).mul(fil.mul(0.85).add(0.15)).mul(voids.mul(0.85).add(0.15));
+  // Bass: rings blasting out from wherever you are looking.
+  const ang = acos(clamp(dot(d, V.gaze), -1.0, 1.0));
+  const ring = (p: any) => { const x = ang.sub(p.mul(2.2)).div(0.07); return exp(x.mul(x).negate()).mul(exp(p.mul(-1.6))); };
+  const bass = ring(V.pulse0).add(ring(V.pulse1)).add(ring(V.pulse2)).add(ring(V.pulse3));
+  const bassCol = V.pa.add(V.pb.mul(cos(V.pc.mul(v.add(0.5)).add(V.pd).mul(6.28318)))).mul(bass).mul(1.4);
+  // Melody: a wave of light round the horizon. Ahead of your gaze is what is coming, behind it what has played.
+  const rel = atan(sin(az.sub(V.gazeAz)), cos(az.sub(V.gazeAz)));
+  const w = texture(V.wave, vec2(rel.div(6.28318).add(0.5), 0.5));
+  const target = w.r.sub(0.5).mul(1.6);
+  const near = abs(el.sub(target));
+  const waveA = smoothstep(0.035, 0.0, near).mul(1.6).add(smoothstep(0.22, 0.0, near).mul(0.3)).mul(w.g);
+  const waveCol = palette(rel.div(6.28318).add(U.hue)).mul(0.6).add(0.4).mul(waveA);
+  // Lightning on the snare: a jagged bolt from the zenith down at boltAz.
+  const dAz = atan(sin(az.sub(V.boltAz)), cos(az.sub(V.boltAz)));
+  const jag = mx_noise_float(vec2(el.mul(9.0), V.boltSeed)).mul(0.12).add(mx_noise_float(vec2(el.mul(31.0), V.boltSeed.add(7.0))).mul(0.035));
+  const boltLine = exp(abs(dAz.sub(jag)).mul(-90.0)).mul(smoothstep(-0.6, 0.2, el));
+  const bolt = boltLine.mul(exp(V.boltT.mul(-9.0))).mul(1.8).add(exp(V.boltT.mul(-14.0)).mul(0.12));
+  // Hats: sparks.
+  const cell = floor(d.mul(160.0));
+  const spark = step(0.985, hash(cell.dot(vec3(1.0, 57.0, 113.0)))).mul(smoothstep(0.4, 0.0, length(fract(d.mul(160.0)).sub(0.5))));
+  const sparks = spark.mul(U.hat.mul(1.6).add(0.08));
+  const col = base.add(bassCol).add(waveCol).add(vec3(0.85, 0.9, 1.0).mul(bolt)).add(vec3(sparks));
+  // The crash: an inverted flash that tears the old scene down.
+  m.colorNode = mix(col, vec3(1.0).sub(col).add(V.crash.mul(0.6)), V.crash.mul(0.85));
+  return m;
+}
+
+/** Flowers that splash open for each note: additive petals, bright at the heart. */
+export function makeFlowerMaterial(): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  m.blending = THREE.AdditiveBlending;
+  const r = length(positionLocal.xy);
+  const heart = smoothstep(0.35, 0.0, r).mul(1.6);
+  const petal = smoothstep(1.0, 0.3, r).mul(0.7);
+  const veins = sin(atan(positionLocal.y, positionLocal.x).mul(18.0)).mul(0.15).add(0.85);
+  m.colorNode = vec3(heart.add(petal.mul(veins)));
   return m;
 }
 
