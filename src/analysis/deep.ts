@@ -73,12 +73,22 @@ export class DeepListen {
     const w = new Worker(new URL('./deep.worker.ts', import.meta.url), { type: 'module' });
     this.worker = w;
     w.onmessage = (ev: MessageEvent) => this.onMessage(ev.data);
-    w.onerror = e => { this.failed = e.message || 'worker failed'; this.stop(); };
+    w.onerror = e => { this.giveUp(e.message || 'worker failed'); };
+    // An error deep inside TensorFlow's own promises never reaches onerror, so the check also
+    // gives up if it has not finished within a minute and a half.
+    setTimeout(() => { if (this.state === 'checking' && this.worker === w) this.giveUp('the system check did not finish'); }, 90_000);
     const modelUrl = new URL('models/basic-pitch/model.json', document.baseURI).href;
     w.postMessage({ type: 'start', pcm, modelUrl, windows, minSpeed: this.force ? 0 : MIN_SPEED }, [pcm.buffer]);
   }
 
   stop() { this.worker?.terminate(); this.worker = null; }
+
+  private giveUp(why: string) {
+    this.failed = why;
+    this.state = 'skipped';
+    this.stop();
+    this.onChange();
+  }
 
   get status() {
     if (this.failed) return `deep listen failed: ${this.failed}`;

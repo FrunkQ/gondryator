@@ -11,6 +11,15 @@ import { BasicPitch, addPitchBendsToNoteEvents, noteFramesToTime, outputToNotesP
 export interface DeepNote { t: number; d: number; p: number; a: number; bend: number }
 export interface DeepStart { type: 'start'; pcm: Float32Array; modelUrl: string; windows: [number, number][]; minSpeed: number }
 
+// TensorFlow.js 3 checks `!window` while waiting on the GPU, which throws in a worker (there is
+// no window at all). A window that exists but is undefined makes it fall back to setTimeout.
+if (!('window' in self)) (self as any).window = undefined;
+
+// Anything that fails inside TensorFlow's own promises still reaches the page as an error.
+self.addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
+  (self as any).postMessage({ type: 'error', message: String(e.reason?.message ?? e.reason) });
+});
+
 const SR = 22050;
 const PRE = 1, POST = 2;
 
