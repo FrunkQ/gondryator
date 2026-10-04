@@ -23,7 +23,7 @@ export const STARSHIP: Pack = {
     { id: 'near', depth: 24, depthJitter: 4, scale: 1, scaleByVel: 0.35,
       models: { nebula: ['cargo-pod', 'satellite', 'asteroid-big'], belt: ['asteroid-big', 'asteroid-big', 'cargo-pod'], deep: ['satellite', 'cargo-pod', 'halo-gate'] },
       tints: ALL(['#ffffff', '#ffe8d0', '#e0f0ff']) },
-    { id: 'mid', depth: 50, depthJitter: 4, scale: 1, scaleByVel: 0.2, lengthByDur: 0.85,
+    { id: 'mid', depth: 50, depthJitter: 4, scale: 1, scaleByVel: 0.2, lengthByDur: 0.85, stretch: ['freighter'],
       models: { nebula: ['freighter', 'freighter', 'star-dock'], belt: ['freighter'], deep: ['star-dock', 'space-station', 'freighter'] },
       tints: ALL(['#ffffff', '#e6ecf4', '#f4e6dc']) },
     { id: 'row', depth: 85, depthJitter: 3, scale: 1, scaleByVel: 0.1, pitchCenter: 64, heightPerSemitone: 0.08,

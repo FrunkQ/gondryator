@@ -23,6 +23,12 @@ export interface PackLayer {
   heightPerSemitone?: number;
   /** If set, the model's length along travel follows duration: length = dur x train speed x this. */
   lengthByDur?: number;
+  /**
+   * Which models may be stretched by lengthByDur (rows, sheds, hedges); everything else keeps its
+   * own shape. Stretching is also held between 0.75x and 2x the model's own length, so nothing
+   * becomes a sliver (a squashed gasholder seen edge-on) or one endless tenement.
+   */
+  stretch?: string[];
   /** Colour tints per theme (multiplied with the model's own colours). */
   tints?: Record<ThemeName, string[]>;
   /** Ground offset, metres (e.g. sink hills). */

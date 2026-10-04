@@ -347,13 +347,13 @@ export class Spawner {
     const sc = (L.scale ?? 1) * (1 + (L.scaleByVel ?? 0) * (vel - 0.5));
     o.sx = sc; o.sy = sc; o.sz = sc;
     if (L.pitchCenter !== undefined && e.pitch !== null) o.sy *= THREE.MathUtils.clamp(1 + (e.pitch - L.pitchCenter) * (L.heightPerSemitone ?? 0.05), 0.35, 2.6);
-    if (L.lengthByDur) {
+    if (L.lengthByDur && (!L.stretch || L.stretch.includes(model))) {
       // Duration -> length: a note lasting d seconds is about as long as the stretch of line
       // the train covers in d seconds, so consecutive notes make a continuous row.
       const bbw = getModel(model).boundingBox!;
       const width = bbw.max.x - bbw.min.x;
       const len = THREE.MathUtils.clamp(e.dur * this.rig.speedAt(e.t) * L.lengthByDur, 3, 60);
-      o.sx = len / width;
+      o.sx = THREE.MathUtils.clamp(len / width, 0.75 * sc, 2 * sc);
     }
     o.rotY = L.depth > 100 ? ((h % 100) / 100 - 0.5) * 0.6 : 0;
     const tints = L.tints?.[theme];

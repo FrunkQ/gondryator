@@ -19,7 +19,7 @@ export const OTHER_SIDE: Pack = {
     { id: 'near', depth: 19, depthJitter: 3, scale: 0.9, scaleByVel: 0.3,
       models: { provence: ['sunflowers', 'hay-bales', 'stone-hut'], cosmos: ['satellite', 'halo-gate', 'asteroid', 'cargo-pod'] },
       tints: { provence: ['#ffffff', '#fff1d6'], cosmos: ['#ffffff', '#ffe0f0', '#e0f0ff'] } },
-    { id: 'mid', depth: 38, depthJitter: 3, scale: 1, scaleByVel: 0.25, lengthByDur: 0.85,
+    { id: 'mid', depth: 38, depthJitter: 3, scale: 1, scaleByVel: 0.25, lengthByDur: 0.85, stretch: ['lavender-row', 'freighter'],
       models: { provence: ['lavender-row', 'lavender-row', 'farmhouse'], cosmos: ['space-station', 'freighter', 'star-dock'] },
       tints: { provence: ['#ffffff', '#f4e8ff'], cosmos: ['#ffffff', '#ffe6c8'] } },
     { id: 'row', depth: 62, depthJitter: 2, scale: 1, scaleByVel: 0.1, pitchCenter: 64, heightPerSemitone: 0.09,
