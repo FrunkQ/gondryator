@@ -1,6 +1,14 @@
 import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+
+// A version stamp (commit and build date), so it is easy to see which build is live.
+const commit = (() => {
+  try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); }
+  catch { return (process.env.WORKERS_CI_COMMIT_SHA || process.env.CF_PAGES_COMMIT_SHA || 'dev').slice(0, 7); }
+})();
+const BUILD = `${commit} · ${new Date().toISOString().slice(0, 10)}`;
 
 // Third-party licence texts ride along at the end of the built page (see THIRD_PARTY_NOTICES.md).
 const notices = {
@@ -20,6 +28,7 @@ export default defineConfig(({ mode }) => ({
   // Addons import 'three'; point them at the WebGPU build so there is one copy of three.
   resolve: { alias: [{ find: /^three$/, replacement: 'three/webgpu' }] },
   worker: { format: 'es' },
+  define: { __BUILD__: JSON.stringify(BUILD) },
   plugins: mode === 'single' ? [viteSingleFile(), notices] : [notices],
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist',

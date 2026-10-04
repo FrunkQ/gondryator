@@ -728,6 +728,7 @@ class App {
         `look ${(this.look.yaw * 57.3).toFixed(0)}°${this.look.wander ? ' wander' : ''}`,
         sc ? `${sc.analysis.mode} · bpm ${sc.tempo[sc.tempo.length - 1]?.bpm ?? '?'}` : '',
         this.driver instanceof Visualiser ? this.driver.status : '',
+        `build ${__BUILD__}`,
       ].filter(Boolean);
     }
     this.debug.draw(sc, s);
@@ -748,9 +749,46 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
 }
 
+declare const __BUILD__: string;
+console.info(`Gondryator ${__BUILD__}`);
 const app = new App();
 (window as any).app = app;
-app.start().catch(e => {
+$('#fork a').title += ` (build ${__BUILD__})`;
+const started = app.start().catch(e => {
   console.error(e);
   $('#status').textContent = 'Could not start the 3D view: ' + (e as Error).message;
 });
+installable(app, started);
+
+/**
+ * Install as an app (a PWA): the manifest and service worker live in public/. Skipped in the
+ * single-file build, which has nowhere to serve them from. Once installed, music files can be
+ * opened with the Gondryator straight from the desktop (file_handlers in the manifest).
+ */
+function installable(app: App, started: Promise<unknown>) {
+  if (import.meta.env.MODE === 'single' || !/^https?:$/.test(location.protocol)) return;
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = './manifest.webmanifest';
+  document.head.appendChild(link);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(e => console.warn('service worker', e));
+  // The browser offers installing when it is ready; show a quiet button for it.
+  let prompt: any = null;
+  const show = (on: boolean) => document.querySelectorAll('#fork .inst').forEach(el => el.classList.toggle('hidden', !on));
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); prompt = e; show(true); });
+  window.addEventListener('appinstalled', () => { prompt = null; show(false); });
+  $('#install').addEventListener('click', e => {
+    e.preventDefault();
+    if (!prompt) return;
+    prompt.prompt();
+    prompt.userChoice.finally(() => { prompt = null; show(false); });
+  });
+  // Opened with a music file from the desktop.
+  const lq = (window as any).launchQueue;
+  if (lq?.setConsumer) lq.setConsumer(async (p: { files?: FileSystemFileHandle[] }) => {
+    if (!p.files?.length) return;
+    const files = await Promise.all(p.files.map(h => h.getFile()));
+    await started;
+    void app.loadFiles(files);
+  });
+}

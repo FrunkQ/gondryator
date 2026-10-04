@@ -1,0 +1,27 @@
+{
+  "name": "Gondryator",
+  "short_name": "Gondryator",
+  "description": "Live inside a Michel Gondry video: drop in a song and the world outside the window keeps time with it.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#16161d",
+  "theme_color": "#16161d",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "audio/*": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
+        "audio/midi": [".mid", ".midi"]
+      }
+    }
+  ]
+}

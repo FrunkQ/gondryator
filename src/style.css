@@ -137,3 +137,4 @@ body.running.idle #stage { cursor: none; }
 #fork a { color: inherit; text-decoration: none; }
 #fork a:hover { text-decoration: underline; }
 #endcard a { color: inherit; }
+#fork .inst.hidden, #tonon.hidden { display: none; }

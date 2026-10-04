@@ -84,6 +84,10 @@ Kaleidoscopes go deep in two ways. A scene can fold the base pattern's plane up 
 
 Around the World is hidden from the menu while it waits for its twist; `?pack=around-the-world` still opens it.
 
+## Install as an app
+
+The site is a progressive web app (`public/manifest.webmanifest`, `public/sw.js`). In Chrome or Edge, use the ⤓ Install link in the corner (or the install icon in the address bar) and it gets its own window and a desktop icon, keeps working offline after the first visit, and can open music files straight from the desktop ("Open with Gondryator"). Safari: Share → Add to Dock / Home Screen. The service worker caches only the app's own files; pages are fetched network-first, so a new deploy shows up on the next load. The single-file build skips all of this. The commit and build date show in the D overlay, the console and the GitHub link's tooltip.
+
 ## The tuning screen
 
 Press `T` (or the 🎛 button, or open with `?tune`) to see what the music parser heard: a Synthesia-style piano roll where every detected hit falls onto the "now" line as it sounds. Drums get their own lanes (kick, snare, hat); bass, melody, pads and vocals fall onto a keyboard at their pitch. Hover a block for its instrument, note name, MIDI number and frequency, start time, length, velocity and bar position. Bars, beats, sections and the tempo are drawn too.
