@@ -163,3 +163,30 @@ export function sectionAt(score: Score, t: number): { section: Section | null; i
   }
   return { section: idx >= 0 ? score.sections[idx] : null, index: idx };
 }
+
+/**
+ * The song's shape in one line, like "intro · A A · B B · breakdown · drop (A) · C · A · outro":
+ * sections that sound alike share a letter, in order of first appearance. `current` (a section
+ * index) is shown in brackets.
+ */
+export function describeStructure(score: Score, current = -1): string {
+  const letter = new Map<number, string>();
+  const named = (l: string) => l === 'intro' || l === 'outro' || l === 'breakdown';
+  const words = score.sections.map((sec, i) => {
+    let w: string;
+    if (named(sec.label) || sec.group === undefined) w = sec.label;
+    else {
+      if (!letter.has(sec.group)) letter.set(sec.group, String.fromCharCode(65 + letter.size));
+      w = sec.label === 'drop' ? `drop (${letter.get(sec.group)})` : letter.get(sec.group)!;
+    }
+    return i === current ? `[${w}]` : w;
+  });
+  let out = '';
+  words.forEach((w, i) => {
+    if (i === 0) { out = w; return; }
+    const prev = words[i - 1].replace(/[[\]]/g, ''), cur = w.replace(/[[\]]/g, '');
+    const run = prev === cur;
+    out += (run ? ' ' : ' · ') + w;
+  });
+  return out + (score.final ? '' : ' …');
+}

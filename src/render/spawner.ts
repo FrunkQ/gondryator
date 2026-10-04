@@ -137,6 +137,10 @@ export class Spawner {
       const k = this.themeCache.length;
       const forced = this.pack.themeBySection?.[secs[k].label];
       if (forced) { this.themeCache.push(forced); continue; }
+      // A part of the song coming back (same group) goes back to the same place.
+      const g = secs[k].group;
+      const back = g === undefined ? -1 : secs.findIndex((x, j) => j < k && x.group === g && !this.pack.themeBySection?.[x.label]);
+      if (back >= 0) { this.themeCache.push(this.themeCache[back]); continue; }
       // Next theme in the cycle after the last unforced one.
       let prev = -1;
       for (let j = k - 1; j >= 0; j--) {

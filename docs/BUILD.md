@@ -97,9 +97,12 @@ the harmony and bass line weighted down, because many tracks loop one chord sequ
 A close match (cosine ≥ 0.925) joins that section's `group` and keeps its label. A new kind of
 section is a chorus if it is fuller or clearly louder than every groove so far, otherwise a verse.
 Star Guitar now reads: intro · A A · B B · breakdown · drop (A) · C · A · B · A · B B · outro.
-The non-Gondry view keys its pictures by group, so a returning part brings its picture back
-with a new palette and a different-sounding part gets a different one. The D overlay and the
-tuning screen show the group letter next to each section.
+Every ride uses the groups. The non-Gondry view keys its pictures by group, so a returning part
+brings its picture back with a new palette and a different-sounding part gets a different one.
+The train and the starship (both windows) go back to the same scenery theme and effects look
+when a part returns (`Spawner.themeAt`, `FxDirector.lookFor`). The D overlay prints the whole
+shape (`describeStructure` in `score/types.ts`), with the current part in brackets and "…" while
+the analysis is still running; the tuning screen shows the group letter next to each section.
 
 ## Deep listen
 

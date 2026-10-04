@@ -21,13 +21,14 @@ export const STAR_GUITAR: Pack = {
       models: { industrial: ['catenary-pole'], town: ['catenary-pole'], country: ['catenary-pole'] } },
     { id: 'near', depth: 19, depthJitter: 3, scale: 0.8, scaleByVel: 0.3,
       models: {
-        industrial: ['shed', 'container', 'garages', 'hoarding', 'tree-clump', 'signal-box', 'birch-clump', 'allotment'],
-        town: ['wall-house', 'cottage', 'allotment', 'garages', 'tree-clump', 'hoarding', 'birch-clump', 'shed'],
-        country: ['hay-bales', 'stone-hut', 'tree-clump', 'cottage', 'birch-clump', 'allotment'],
+        // Mostly green, with a building now and then (repeats weight the pick: same sound, same object).
+        industrial: ['tree-clump', 'shed', 'hedge', 'birch-clump', 'container', 'allotment', 'tree-clump', 'hedge', 'garages', 'birch-clump', 'signal-box', 'hedge'],
+        town: ['tree-clump', 'garden', 'hedge', 'cottage', 'birch-clump', 'allotment', 'tree-clump', 'garden', 'wall-house', 'hedge', 'birch-clump', 'hoarding'],
+        country: ['tree-clump', 'hedge', 'hay-bales', 'birch-clump', 'garden', 'tree-clump', 'hedge', 'stone-hut', 'birch-clump', 'cottage'],
       },
       tints: { industrial: ['#ffffff', '#d8e0e6', '#e8ddd0'], town: ['#ffffff', '#ffe9d6', '#f0f4ff'], country: ['#ffffff', '#f6ead2'] } },
     { id: 'mid', depth: 38, depthJitter: 3, scale: 0.9, scaleByVel: 0.25, lengthByDur: 0.85,
-      models: { industrial: ['warehouse', 'tank', 'gravel-works', 'gasholder', 'terrace', 'tree-clump'], town: ['apartment', 'terrace', 'warehouse', 'tree-clump'], country: ['farmhouse', 'barn', 'viaduct', 'tree-clump'] },
+      models: { industrial: ['warehouse', 'tree-clump', 'tank', 'birch-clump', 'gravel-works', 'hedge', 'gasholder', 'tree-clump', 'terrace'], town: ['apartment', 'tree-clump', 'terrace', 'garden', 'warehouse', 'birch-clump'], country: ['farmhouse', 'tree-clump', 'barn', 'hedge', 'viaduct', 'birch-clump'] },
       tints: { industrial: ['#ffffff', '#dfe3e0', '#f2e6dc'], town: ['#ffffff', '#ffe4c8', '#ffd9cc', '#f7f0d8'], country: ['#ffffff', '#ffeccc'] } },
     { id: 'row', depth: 62, depthJitter: 2, scale: 1, scaleByVel: 0.1, pitchCenter: 64, heightPerSemitone: 0.09,
       models: { industrial: ['factory-block', 'town-block'], town: ['town-block'], country: ['cypress-row', 'town-block'] },

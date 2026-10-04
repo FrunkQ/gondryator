@@ -212,6 +212,28 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     cyl(0.18, 0.3, 2.6, 1.8, 1.3, 0.8, 0x5b4632, 7), ...canopy(1.8, 3.6, 0.8, 2, 0x6b8a45, 43),
     ...canopy(0.3, 1, 1.6, 1.4, 0x5f7d3e, 47, 0.6),
   ]),
+  // A field hedge with a gap and an oak at the end: the foreground is mostly green in real life.
+  'hedge': () => merge([
+    ...T(SURF.foliage, box(7, 1.7, 1.3, -4.5, 0.85, 0, 0x4f6b34)), ...T(SURF.foliage, box(6, 1.5, 1.2, 5.2, 0.75, 0.1, 0x587638)),
+    T1(SURF.wood, box(2, 1.1, 0.08, 0.4, 0.75, 0.3, 0x8a7458)), T1(SURF.wood, box(0.15, 1.3, 0.15, -0.7, 0.65, 0.3, 0x5a4632)),
+    cyl(0.3, 0.45, 4, 8.6, 2, -0.4, 0x5b4632, 7), ...canopy(8.6, 5.6, -0.4, 3, 0x4f7036, 71),
+    ...canopy(-8.5, 1.2, 0.2, 1.2, 0x5f7d3e, 73, 0.7),
+  ]),
+  // A back garden: lawn, a picket fence, flower beds, an apple tree and the washing out.
+  'garden': () => {
+    const parts: Part[] = [T1(SURF.grass, box(11, 0.08, 7, 0, 0.04, 0, 0x7fa04e))];
+    for (let x = -5.25; x <= 5.3; x += 0.75) parts.push(T1(SURF.paint, box(0.1, 0.9, 0.06, x, 0.45, 3.4, 0xf2f0e8)));
+    parts.push(T1(SURF.paint, box(10.6, 0.08, 0.05, 0, 0.7, 3.42, 0xf2f0e8)), T1(SURF.paint, box(10.6, 0.08, 0.05, 0, 0.3, 3.42, 0xf2f0e8)));
+    const blooms = [0xd8486a, 0xf0c03a, 0x8a5cc8, 0xf08a3a, 0xe8e0f0];
+    for (let i = 0; i < 5; i++) parts.push(...T(SURF.foliage, box(1.6, 0.45, 0.8, -4.2 + i * 2.1, 0.25, 2.5, blooms[i])));
+    parts.push(cyl(0.18, 0.25, 2.2, 3.5, 1.1, -1.5, 0x5b4632, 7), ...canopy(3.5, 3.2, -1.5, 1.7, 0x5c8a3a, 81));
+    // The washing line: two poles, a line, and whatever is drying today.
+    parts.push(T1(SURF.metal, box(0.08, 2.2, 0.08, -4.5, 1.1, -1, 0x9a9a96)), T1(SURF.metal, box(0.08, 2.2, 0.08, 0.5, 1.1, -1, 0x9a9a96)));
+    parts.push(box(5, 0.03, 0.03, -2, 2.1, -1, 0xd8d8d0));
+    const wash = [0xffffff, 0x4f86c6, 0xe85a5a, 0xf5d24a, 0xffffff, 0x6cc08a];
+    wash.forEach((c, i) => parts.push(T1(SURF.paint, box(0.55, 0.6 + (i % 3) * 0.15, 0.03, -4 + i * 0.8, 1.75 - (i % 3) * 0.07, -1, c))));
+    return merge(parts);
+  },
   'birch-clump': () => {
     const parts: Part[] = [];
     const xs = [-1.4, -0.2, 1.1, 2];

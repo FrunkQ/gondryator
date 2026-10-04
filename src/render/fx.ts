@@ -205,6 +205,20 @@ export class FxDirector {
   constructor(private cycle: FxLook[], private bySection: Partial<Record<string, FxLook>> = {}) {}
 
   setScore(score: Score | null) { this.score = score; this.ptr = 0; this.lastS = -Infinity; this.secIdx = -1; }
+
+  /** A returning part of the song (same group) gets its look back; a new part, the next in the cycle. */
+  private lookFor(secs: Score['sections'], idx: number): FxLook {
+    const byGroup = new Map<number, FxLook>();
+    let fresh = 0, look: FxLook = 'clean';
+    for (let i = 0; i <= idx; i++) {
+      const sec = secs[i], g = sec.group;
+      const forced = this.bySection[sec.label];
+      if (forced) look = forced;
+      else if (g !== undefined && byGroup.has(g)) look = byGroup.get(g)!;
+      else { look = this.cycle[(g === undefined ? i : fresh++) % this.cycle.length]; if (g !== undefined) byGroup.set(g, look); }
+    }
+    return look;
+  }
   private score: Score | null = null;
 
   update(s: number, dt: number, running: boolean, night: number, aspect: number) {
@@ -237,7 +251,7 @@ export class FxDirector {
       if (idx !== this.secIdx) {
         if (this.secIdx >= 0) { this.glitch = 1; this.warp = 1; }
         this.secIdx = idx;
-        this.look = this.bySection[label] ?? this.cycle[idx % this.cycle.length];
+        this.look = this.lookFor(sc.sections, idx);
       }
     } else this.look = 'clean';
     if (this.override && running) this.look = this.override;
