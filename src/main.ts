@@ -456,6 +456,7 @@ class App {
       if (this.driver instanceof Visualiser) {
         // The visualiser picks the post-effects look per scene, and crashes the picture on a change.
         this.fx.override = this.driver.look;
+        this.fx.feedback = this.driver.feedbackNow;
         if (this.driver.takeCrash()) this.fx.crash();
       }
       this.other?.update(s, dt, this.look, frontier, running, this.world.train.position.x);
@@ -496,6 +497,8 @@ class App {
   private end() {
     this.phase = 'ended';
     $('#endcard .lead').textContent = this.world.mode === 'train' ? 'Terminus.' : 'Curtain.';
+    // At the end of a train ride, invite people to hear the same song again with no train at all.
+    $('#tonon').classList.toggle('hidden', this.pack.id === 'non-gondry');
     $('#endcard').classList.remove('hidden');
   }
 
@@ -607,6 +610,11 @@ class App {
     });
     $('#play').addEventListener('click', () => this.togglePause());
     $('#again').addEventListener('click', () => this.seek(0));
+    $('#tonon').addEventListener('click', async () => {
+      await this.switchPack('non-gondry');
+      $<HTMLSelectElement>('#pack').value = 'non-gondry';
+      this.seek(0);
+    });
     $('#another').addEventListener('click', () => input.click());
     const scrub = $<HTMLInputElement>('#scrub');
     scrub.addEventListener('input', () => { if (this.score) this.seek((Number(scrub.value) / 1000) * this.score.track.durationSec); });
@@ -719,10 +727,11 @@ class App {
         m ? `refocus ${m.total ? Math.round((m.hits / m.total) * 100) : 0}% (${m.hits}/${m.total}, last64 ${recent}%)` : '',
         `look ${(this.look.yaw * 57.3).toFixed(0)}°${this.look.wander ? ' wander' : ''}`,
         sc ? `${sc.analysis.mode} · bpm ${sc.tempo[sc.tempo.length - 1]?.bpm ?? '?'}` : '',
+        this.driver instanceof Visualiser ? this.driver.status : '',
       ].filter(Boolean);
     }
     this.debug.draw(sc, s);
-    (window as any).__gondry = { phase: this.phase, s, yaw: Math.round(this.look.yaw * 57.3), fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, sections: sc?.sections, signalStop: this.signalStop };
+    (window as any).__gondry = { phase: this.phase, s, yaw: Math.round(this.look.yaw * 57.3), fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, viz: this.driver instanceof Visualiser ? this.driver.status : undefined, sections: sc?.sections, signalStop: this.signalStop };
   }
 }
 

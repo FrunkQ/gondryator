@@ -1,0 +1,96 @@
+// @ts-nocheck -- TSL node typings are too strict for swizzles and number arguments.
+// Video feedback, the light-synth classic: every frame, the previous frame comes back zoomed,
+// turned and colour-shifted underneath the new one, so anything bright leaves spiralling trails
+// that pour into (or out of) the centre. With amount 0 it passes the picture straight through.
+// Built like three's AfterImageNode (two render targets, swapped each frame), plus a transform.
+
+import { RenderTarget, Vector2, QuadMesh, NodeMaterial, RendererUtils, TempNode, NodeUpdateType } from 'three/webgpu';
+import { Fn, vec2, vec4, uv, texture, passTexture, max, cos, sin, mix, nodeObject, abs, fract, convertToTexture } from 'three/tsl';
+
+const _size = new Vector2();
+const _quad = new QuadMesh();
+let _state;
+
+export interface FeedbackParams {
+  /** 0..1: how much of the last frame survives each frame (0 = off). */
+  amount: any;
+  /** Zoom per frame: > 1 pours outwards, < 1 sucks into the centre. */
+  zoom: any;
+  /** Turn per frame, radians. */
+  turn: any;
+  /** Colour drift per frame, 0..1 (rotates the channels). */
+  hue: any;
+  /** Screen aspect, so the turn stays round. */
+  aspect: any;
+}
+
+class FeedbackNode extends TempNode {
+  static get type() { return 'FeedbackNode'; }
+
+  constructor(textureNode, p: FeedbackParams) {
+    super('vec4');
+    this.textureNode = textureNode;
+    this.params = p; // (not "p": single letters like p are swizzles on nodes)
+    this._compRT = new RenderTarget(1, 1, { depthBuffer: false });
+    this._oldRT = new RenderTarget(1, 1, { depthBuffer: false });
+    this._textureNode = passTexture(this, this._compRT.texture);
+    this._old = texture(this._oldRT.texture);
+    this._material = null;
+    this.updateBeforeType = NodeUpdateType.FRAME;
+  }
+
+  getTextureNode() { return this._textureNode; }
+
+  updateBefore(frame) {
+    const { renderer } = frame;
+    _state = RendererUtils.resetRendererState(renderer, _state);
+    const map = this.textureNode.value;
+    this._compRT.texture.type = map.type;
+    this._oldRT.texture.type = map.type;
+    renderer.getDrawingBufferSize(_size);
+    this._compRT.setSize(_size.x, _size.y);
+    this._oldRT.setSize(_size.x, _size.y);
+    this._textureNode.value = this._compRT.texture;
+    this._old.value = this._oldRT.texture;
+    _quad.material = this._material;
+    _quad.name = 'Feedback';
+    renderer.setRenderTarget(this._compRT);
+    _quad.render(renderer);
+    const t = this._oldRT; this._oldRT = this._compRT; this._compRT = t;
+    RendererUtils.restoreRendererState(renderer, _state);
+  }
+
+  setup(builder) {
+    const p = this.params;
+    const src = this.textureNode;
+    const old = this._old;
+    const mat = this._material || (this._material = new NodeMaterial());
+    mat.name = 'Feedback';
+    mat.fragmentNode = Fn(() => {
+      const u0 = uv();
+      // Where this pixel was last frame: undo the zoom and the turn about the centre.
+      const c = u0.sub(0.5).mul(vec2(p.aspect, 1)).div(p.zoom);
+      const ca = cos(p.turn.negate()), sa = sin(p.turn.negate());
+      const r = vec2(c.x.mul(ca).sub(c.y.mul(sa)), c.x.mul(sa).add(c.y.mul(ca)));
+      // Mirror at the edges so the trails never pull in black.
+      const uo = abs(fract(r.div(vec2(p.aspect, 1)).add(0.5).mul(0.5)).mul(2.0).sub(1.0)).oneMinus();
+      const prev = old.sample(uo).rgb;
+      // A little is taken off every frame as well as the fraction, so dim trails die out to black
+      // instead of piling up into a pastel wash.
+      const kept = max(mix(prev, prev.gbr, p.hue).mul(p.amount).sub(0.012), 0.0);
+      const now = src.sample(u0).rgb;
+      return vec4(max(now, kept), 1.0);
+    })();
+    builder.getNodeProperties(this).textureNode = src;
+    return this._textureNode;
+  }
+
+  dispose() {
+    super.dispose();
+    this._compRT.dispose();
+    this._oldRT.dispose();
+    this._material?.dispose();
+  }
+}
+
+export const feedback = (node, p: FeedbackParams) => nodeObject(new FeedbackNode(convertToTexture(node), p));

@@ -68,21 +68,26 @@ Not everything has to be a ride. `src/render/visualiser.ts` is a whole show with
 | Data | Where | What it feels like | How the non-Gondry view uses it |
 |---|---|---|---|
 | Kick | `events` with `kind: 'kick'` (also `U.kick`, a 0..1 value that decays after each hit) | the pulse | the whole sky pumps |
-| Snare | `kind: 'snare'` (`U.snare`) | a crack | a lightning strike |
-| Hats | `kind: 'hat'` (`U.hat`) | shimmer | sparks |
-| Bass notes | `stem: 'bass', kind: 'note'`, with `pitch` (MIDI) and `dur` | weight | rings blasting out from your gaze |
+| Snare | `kind: 'snare'` (`U.snare`) | a crack | a lightning strike, or a starburst |
+| Hats | `kind: 'hat'` (`U.hat`) | shimmer | sparks, or tumbling confetti |
+| Bass notes | `stem: 'bass', kind: 'note'`, with `pitch` (MIDI) and `dur` | weight | rings blasting out from your gaze, or bubbles rising |
 | Melody notes | `stem: 'other'` (or `'vocals'`), `kind: 'note'` | the tune, one note at a time | a flower per note: height = pitch, colour = note name |
-| Pads | notes with `dur` ≥ 1.2 s | washes of harmony | big slow blooms |
+| Pads | notes with `dur` ≥ 1.2 s | washes of harmony | big slow blooms, aurora, huge snowflakes |
 | Melody pitch, continuous | `envelopes.leadPitch` (50 Hz, MIDI with fractions, 0 = silent; `bassPitch` too) | slides and glides | a wave round the horizon: future ahead, past behind |
 | Loudness | `envelopes.mix`, per stem `drums` / `bass` / `other` | how full it is | glow |
 | Brightness | `envelopes.bright` | filters opening | glow, colour speed |
 | Build-ups | `envelopes.rise` | tension | everything runs hotter |
 | Beats and bars | `beats` (with `bar`, `beat`), `phrases` (4-bar blocks) | the grid | timing of anything that should feel "on the one" |
 | Sections | `sections` with `label` (intro, verse, chorus, breakdown, drop, outro) and `energy` | the story | a scene change; a returning label brings its pattern back with a new palette |
+| The whole song | everything above, read ahead (the analysis runs far ahead of the music) | the journey | the arc: dark and muted at the start, full colour only at the climax, holding its breath (greyer, darker, trails pulling in) before a drop and bursting on it |
+| Big changes | sections compared by instrumentation (`findEras` in `visualiser.ts`) | a new chapter: a solo, a long intro, the drums dropping out | a whole new vibe, with its own journey (colour rise, complexity bloom or thaw) |
 
 Rules of thumb:
+- **You can see the future, so use it.** A classic visualiser only hears the present. This one knows where the song is going, so it can save its brightest colours for the climax and wind up before a drop. Read ahead up to `score.frontierSec`.
 - **One kind of data, one kind of reaction.** Don't let the kick and the bass do the same thing; the viewer should be able to *see* which instrument is which.
 - **Discrete things for notes, continuous things for continuous data.** A note is an object that appears; a slide is a line that bends. (This came from Alex and it is right.)
+- **Spawners are cheap.** A `SpritePool` is an instanced mesh of glowing shapes; a new spawner is a polar outline plus a few lines (where it appears, how it drifts, how long it lives). Copy `bubble()` or `burst()` and make it yours.
+- **Fold space, not just pictures.** Kaleidoscopes, fractals and mirrors are almost free in a shader: fold the coordinates before you draw anything, then fold them again.
 - **Seed everything.** Draw scene parameters from a seeded random generator keyed by the song (`score.track.hash`), so a song always looks like itself, and let R reroll.
 - **Change scenes on the music's terms**, at sections and new phrases, never on a timer, and make the change an event (a crash, a flash, a warp).
 - Events up to `score.frontierSec` are final; never read beyond it while the analysis is still running.

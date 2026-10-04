@@ -13,6 +13,7 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { U, palette } from './shaders';
+import { feedback } from './feedback';
 import { sampleEnvelope, type Score } from '../score/types';
 
 export type FxLook = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel';
@@ -40,6 +41,8 @@ const W = {
   glitch: uniform(0), aspect: uniform(16 / 9), kalRot: uniform(0), segments: uniform(6),
   /** Motion blur: screen-space smear per metre of depth (uv * m), from travel speed and shutter. */
   blurK: uniform(0), blurDir: uniform(new THREE.Vector2(1, 0)),
+  /** Video feedback (render/feedback.ts): how much survives, zoom and turn per frame, colour drift. */
+  fbAmount: uniform(0), fbZoom: uniform(1), fbTurn: uniform(0), fbHue: uniform(0),
 };
 
 /** Builds the post pipeline for a scene + camera. Returns null if the backend cannot do it. */
@@ -133,7 +136,7 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
   const warpedTex = convertToTexture(warped);
   const glow = bloom(emissiveTex, 1.0, 0.5, 0.0);
   const bloomed = warpedTex.add(glow.mul(W.bloom.mul(float(0.6).add(U.kick.mul(1.4)))));
-  const trails = afterImage(bloomed, W.echo.mul(0.8));
+  const trails = feedback(afterImage(bloomed, W.echo.mul(0.8)), { amount: W.fbAmount, zoom: W.fbZoom, turn: W.fbTurn, hue: W.fbHue, aspect: W.aspect });
 
   const graded = Fn(() => {
     let c = trails.rgb;
@@ -243,7 +246,18 @@ export class FxDirector {
     W.punch.value = this.cur.punch * a; W.glitch.value = this.glitch * a;
     W.aspect.value = aspect; W.kalRot.value += dt * (0.1 + this.kick * 0.6);
     W.segments.value = 6 + 2 * (this.secIdx % 3);
+    // Feedback: eased, with a kick that pushes the zoom and the turn.
+    const kf = 1 - Math.exp(-dt / 0.5);
+    for (const key of ['amount', 'zoom', 'turn', 'hue'] as const) this.fb[key] += (this.feedback[key] - this.fb[key]) * kf;
+    W.fbAmount.value = this.fb.amount;
+    W.fbZoom.value = this.fb.zoom + (this.fb.zoom - 1) * this.kick * 1.5;
+    W.fbTurn.value = this.fb.turn * (1 + this.kick);
+    W.fbHue.value = this.fb.hue;
   }
+
+  /** Feedback trails wanted by the show (the visualiser's scenes); eased towards each frame. */
+  feedback = { amount: 0, zoom: 1, turn: 0, hue: 0 };
+  private fb = { amount: 0, zoom: 1, turn: 0, hue: 0 };
 
   /** Tear the picture apart for a moment (a scene change in the visualiser). */
   crash() { this.glitch = 1; this.warp = Math.max(this.warp, 0.7); }

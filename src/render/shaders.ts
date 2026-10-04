@@ -13,7 +13,7 @@ import {
   Fn, uniform, attribute, vec2, vec3, vec4, float, mix, select, abs, floor, fract, sin, cos, clamp, smoothstep, step,
   positionGeometry, normalGeometry, positionWorld, normalWorld, vertexColor, fwidth, length, max, min, dot, bumpMap, time,
   mx_noise_float, mx_worley_noise_float, hash, cameraPosition, pow, atan, acos, materialColor, viewportSharedTexture, screenUV, uv, positionLocal, normalLocal,
-  asin, texture, exp, normalize,
+  asin, texture, exp, normalize, cross,
 } from 'three/tsl';
 
 /** Uniforms shared by every procedural material and the post effects; the FX director writes them. */
@@ -409,19 +409,40 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const el = asin(clamp(d.y, -1.0, 1.0));          // -pi/2 .. pi/2
   const t = U.showTime.mul(V.shape.w);
   const F = V.shape.x;
+  // Symmetry: mirror the sky about the horizon (layers.w).
+  const elM = mix(el, abs(el), V.layers.w);
   // Kaleidoscope: fold the azimuth into mirrored segments.
   const segs = max(V.shape.z, 1.0);
   const seg = fract(az.div(6.28318).mul(segs).add(0.5));
   const azK = select(V.shape.z.greaterThan(0.5), abs(seg.sub(0.5)).mul(6.28318).div(segs), az);
   // Swirl: the further from the horizon, the more it turns.
-  const azS = azK.add(el.mul(V.shape.y).add(sin(t.mul(0.3)).mul(V.shape.y).mul(0.5)));
-  const px = azS.mul(F), py = el.mul(F).mul(1.3);
+  const azS = azK.add(elM.mul(V.shape.y).add(sin(t.mul(0.3)).mul(V.shape.y).mul(0.5)));
+  // Sub breathe (element 10): the whole pattern swells with the bass.
+  const breathe = float(1.0).add(V.E2.z.mul(V.bands.y).mul(0.35));
+  const px0 = azS.mul(F).mul(breathe), py0 = elM.mul(F).mul(1.3).mul(breathe);
+  // Deep kaleidoscope (fold.x levels, 0..5): fold the pattern's plane over and over, turning and
+  // stretching between folds, so one plasma becomes a mandala of mandalas. fold.y is the turn per
+  // level, fold.z the stretch, fold.w how far each level slides (it drifts with the music).
+  const folded = Fn(() => {
+    const pt = vec2(px0, py0).toVar();
+    for (let i = 0; i < 5; i++) {
+      const on = step(float(i + 0.5), V.fold.x);
+      const an = V.fold.y.mul(i + 1).add(sin(t.mul(0.21 * (i + 1))).mul(0.3));
+      const ca = cos(an), sa = sin(an);
+      const fo = abs(pt);
+      const ro = vec2(fo.x.mul(ca).sub(fo.y.mul(sa)), fo.x.mul(sa).add(fo.y.mul(ca)));
+      const nx = ro.mul(V.fold.z).sub(vec2(V.fold.w.add(U.kick.mul(0.25)), V.fold.w.mul(0.6)));
+      pt.assign(mix(pt, nx, on));
+    }
+    return pt;
+  })();
+  const px = folded.x, py = folded.y;
   const plasma = sin(px.add(t))
     .add(sin(py.sub(t.mul(1.1))))
     .add(sin(px.add(py).mul(0.7).add(t.mul(0.7))))
     .add(sin(length(vec2(px, py.mul(2.0))).mul(1.5).sub(t.mul(1.3)).add(U.kick.mul(1.5))))
     .mul(0.25);
-  const rings = sin(el.mul(F).mul(4.0).sub(t.mul(2.0)).add(U.kick.mul(2.0)));
+  const rings = sin(elM.mul(F).mul(4.0).sub(t.mul(2.0)).add(U.kick.mul(2.0)));
   const tunnel = sin(acos(clamp(dot(d, V.gaze), -1.0, 1.0)).mul(F).mul(3.0).sub(t.mul(3.0)).add(azK.mul(2.0)));
   const v = plasma.mul(V.mixes.x).add(rings.mul(V.mixes.y)).add(tunnel.mul(V.mixes.z))
     .add(V.mixes.w).add(U.hue.mul(0.5)).add(mx_noise_float(d.mul(2.0).add(t.mul(0.1))).mul(0.25));
@@ -453,21 +474,146 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const cell = floor(d.mul(160.0));
   const spark = step(0.985, hash(cell.dot(vec3(1.0, 57.0, 113.0)))).mul(smoothstep(0.4, 0.0, length(fract(d.mul(160.0)).sub(0.5))));
   const sparks = spark.mul(U.hat.mul(1.6).add(0.08));
-  const col = base.add(bassCol).add(waveCol).add(vec3(0.85, 0.9, 1.0).mul(bolt)).add(vec3(sparks));
+  // Vector shapes hung in front of you (layers.x): nested spinning polygons or stars, drawn on
+  // the plane facing your gaze, punching outwards on the kick. poly = (sides, nesting, spin, starriness).
+  const right = normalize(vec3(V.gaze.z.negate(), 0.0, V.gaze.x));
+  const up = normalize(vec3(V.gaze.y.negate().mul(V.gaze.x), V.gaze.x.mul(V.gaze.x).add(V.gaze.z.mul(V.gaze.z)), V.gaze.y.negate().mul(V.gaze.z)));
+  const fwd = max(dot(d, V.gaze), 0.001);
+  const q = vec2(dot(d, right), dot(d, up)).div(fwd);
+  const qa = atan(q.y, q.x), qr = length(q);
+  let shapes = float(0);
+  for (let i = 0; i < 5; i++) {
+    const n = V.poly.x;
+    const turn = U.showTime.mul(V.poly.z).mul(i % 2 ? -1.0 : 1.0).add(i * 0.4);
+    const sector = float(6.28318).div(n);
+    const aa = qa.add(turn);
+    const local = abs(fract(aa.div(sector)).sub(0.5)).mul(sector);
+    // Polygon edge distance, bent towards a star by poly.w.
+    const edge = cos(sector.mul(0.5)).div(cos(local)).mul(float(1.0).sub(V.poly.w.mul(abs(local).div(sector.mul(0.5)).oneMinus()).mul(0.45)));
+    const size = float(0.18 + i * 0.22).mul(float(1.0).add(U.kick.mul(0.25))).mul(step(float(i), V.poly.y));
+    const dist = abs(qr.sub(size.mul(edge)));
+    shapes = shapes.add(smoothstep(0.012, 0.0, dist).mul(step(0.01, size)).mul(1.0 - i * 0.12));
+  }
+  const shapeCol = palette(qr.mul(0.8).add(U.hue).add(V.mixes.w)).mul(shapes).mul(float(0.9).add(U.kick.mul(0.8)));
+  // Band ribbons round the horizon (layers.y): drums low, bass in the middle, the rest high, each as
+  // thick as its stem is loud and rippling with it.
+  const ribbon = (y: number, lvl: any, freq: number, colShift: number) => {
+    const yy = float(y).add(sin(az.mul(freq).add(U.showTime.mul(1.3 + freq * 0.2))).mul(lvl.mul(0.12)));
+    const a = smoothstep(lvl.mul(0.05).add(0.004), 0.0, abs(el.sub(yy)));
+    return V.pa.add(V.pb.mul(cos(V.pc.mul(float(colShift).add(az.div(6.28318))).add(V.pd).mul(6.28318)))).mul(a).mul(lvl);
+  };
+  const ribbons = ribbon(-0.35, V.bands.x, 6.0, 0.0).add(ribbon(-0.05, V.bands.y, 3.0, 0.33)).add(ribbon(0.3, V.bands.z, 9.0, 0.66)).mul(1.4);
+  const paletteAt = (x: any) => V.pa.add(V.pb.mul(cos(V.pc.mul(x).add(V.pd).mul(6.28318))));
+  // Starfield (3): stars streaming out of your gaze, faster with the energy.
+  const lanes = qa.mul(90.0 / 6.28318), lane = floor(lanes), lh = hash(lane);
+  const head = fract(lh.mul(13.7).add(U.showTime.mul(float(0.15).add(lh.mul(0.3)).mul(float(0.6).add(U.energy).add(V.rise))))).mul(2.4);
+  const streak = smoothstep(head.sub(float(0.04).add(U.kick.mul(0.08))), head, qr).mul(float(1).sub(smoothstep(head, head.add(0.01), qr)))
+    .mul(step(0.6, hash(lane.add(3.0)))).mul(smoothstep(0.5, 0.1, abs(fract(lanes).sub(0.5)))).mul(step(0.0, dot(d, V.gaze)));
+  const stars = mix(vec3(0.8, 0.9, 1.0), paletteAt(lh), 0.4).mul(streak).mul(1.6);
+  // Kick tunnel (4): a polygon ring flung outwards from your gaze on every kick.
+  const kx = qr.sub(V.kickT.mul(1.8)).div(0.03);
+  const kx2 = qr.sub(V.kickT.mul(1.8)).sub(0.35).div(0.02);
+  const kickRing = exp(kx.mul(kx).negate()).mul(exp(V.kickT.mul(-1.8))).add(exp(kx2.mul(kx2).negate()).mul(exp(V.kickT.mul(-2.5))).mul(0.5));
+  const kickCol = paletteAt(V.kickT.add(U.hue)).mul(kickRing).mul(1.5).mul(step(0.0, dot(d, V.gaze)));
+  // Drum floor (7): a grid on the ground streaming towards you; cells flash with the drums.
+  const below = smoothstep(-0.02, -0.12, d.y);
+  const fp = d.xz.div(max(d.y.negate(), 0.02)).mul(2.0).add(vec2(0.0, U.showTime.mul(3.0)));
+  const fl = fract(fp), fc = floor(fp);
+  const lines = smoothstep(0.06, 0.0, min(min(fl.x, fl.y), min(fl.x.oneMinus(), fl.y.oneMinus())));
+  const lit = step(float(1.0).sub(V.bands.x.mul(0.6)).sub(U.kick.mul(0.25)), hash(fc.dot(vec2(1.0, 57.0)).add(floor(U.showTime.mul(4.0)))));
+  const fade = smoothstep(-0.02, -0.4, d.y);
+  const floorCol = paletteAt(hash(fc.dot(vec2(7.0, 3.0))).add(U.hue)).mul(lit.mul(0.8).add(lines.mul(0.6))).mul(below).mul(fade.mul(0.8).add(0.2));
+  // Bass mountains (9): a wireframe range on the horizon as tall as the bass is loud.
+  const hgt = float(0.03).add(V.bands.y.mul(float(0.12).add(mx_noise_float(vec2(az.mul(3.0), U.showTime.mul(0.15))).mul(0.5).add(0.5).mul(0.3))));
+  const outline = smoothstep(0.012, 0.0, abs(el.sub(hgt)));
+  const hatch = smoothstep(0.15, 0.0, abs(fract(az.mul(40.0)).sub(0.5))).mul(step(el, hgt)).mul(step(-0.02, el)).mul(0.35);
+  const mountains = paletteAt(el.mul(2.0).add(0.2)).mul(outline.add(hatch)).mul(float(0.6).add(V.bands.y));
+  // Note circle (13): the twelve note names in a ring round your gaze; each lights as it is played.
+  const pcIdx = floor(qa.div(6.28318).add(0.5).mul(12.0));
+  const act = texture(V.notes, vec2(pcIdx.add(0.5).div(16.0), 0.5)).r;
+  const band = smoothstep(0.08, 0.0, abs(qr.sub(0.75))).mul(smoothstep(0.45, 0.4, abs(fract(qa.div(6.28318).add(0.5).mul(12.0)).sub(0.5))));
+  const circle = palette(pcIdx.div(12.0)).mul(band).mul(act.mul(1.8).add(0.05)).mul(step(0.0, dot(d, V.gaze)));
+  // Aurora (14): curtains of light across the sky, swaying with the pads.
+  const ax = az.mul(3.0).add(mx_noise_float(vec2(az.mul(1.5), U.showTime.mul(0.08))).mul(1.5));
+  const curtain = pow(abs(sin(ax.mul(4.0).add(U.showTime.mul(0.2)))), 6.0).mul(smoothstep(0.12, 0.45, el)).mul(smoothstep(1.3, 0.6, el));
+  const aurora = mix(vec3(0.1, 1.0, 0.6), paletteAt(el.add(az.div(6.28318))), 0.5).mul(curtain).mul(V.pad.mul(1.4).add(0.1));
+  // Nebula (15): soft clouds that bloom with the pads.
+  const neb = pow(mx_noise_float(d.mul(1.8).add(U.showTime.mul(0.02))).mul(0.5).add(0.5).mul(mx_noise_float(d.mul(4.2).add(3.0)).mul(0.5).add(0.5)), 2.0);
+  const nebula = paletteAt(neb.add(U.hue)).mul(neb).mul(V.pad.mul(1.6).add(0.15));
+  // Fractal kaleidoscope (16): a Kali-style fold-and-invert fractal (p = |p| / p.p - c, nine
+  // times over), entered through a kaleidoscope of frac.x mirrors round your gaze. Every fold of
+  // the formula mirrors all three axes at once, so it is a kaleidoscope of kaleidoscopes. The slice
+  // drifts through the fractal over time, the bass breathes its scale and the kick jolts it.
+  const rightK = normalize(vec3(V.gaze.z.negate(), 0.0, V.gaze.x).add(vec3(0.0001, 0.0, 0.0)));
+  const upK = normalize(cross(rightK, V.gaze));
+  const ka = atan(dot(d, upK), dot(d, rightK));
+  const kr = acos(clamp(dot(d, V.gaze), -1.0, 1.0));
+  const ksec = float(6.28318).div(max(V.frac.x, 1.0));
+  const kaF = abs(fract(ka.div(ksec).add(0.5)).sub(0.5)).mul(ksec).add(U.showTime.mul(V.frac.w).mul(0.2));
+  const kScale = V.frac.y.mul(float(1.0).add(V.bands.y.mul(0.25)));
+  const fract3 = Fn(() => {
+    const pp = vec3(cos(kaF).mul(kr), sin(kaF).mul(kr), sin(U.showTime.mul(V.frac.w).mul(0.13)).mul(0.6))
+      .mul(kScale).add(vec3(0.0, 0.0, 0.3)).toVar();
+    const cc = vec3(V.frac.z, V.frac.z.mul(0.86), V.frac.z.mul(0.62).add(U.kick.mul(0.05)));
+    const trapLine = float(9.0).toVar();
+    const trapDot = float(9.0).toVar();
+    for (let i = 0; i < 9; i++) {
+      pp.assign(abs(pp).div(max(dot(pp, pp), 0.02)).sub(cc));
+      trapLine.assign(min(trapLine, abs(pp.y)));
+      trapDot.assign(min(trapDot, length(pp.xz)));
+    }
+    return vec2(trapLine, trapDot);
+  })();
+  const kFil = exp(fract3.x.mul(-28.0)), kDot = exp(fract3.y.mul(-5.0));
+  const fractCol = paletteAt(fract3.y.mul(1.5).add(U.hue).add(V.mixes.w)).mul(kFil.mul(1.3).add(kDot.mul(0.5)))
+    .mul(float(0.55).add(U.kick.mul(0.5)).add(V.rise.mul(0.4)));
+  // The mix: each element times its weight (E0..E3 hold the 16 weights; see visualiser.ts ELEMENTS).
+  const col = base.mul(V.E0.x).add(shapeCol.mul(V.E0.y)).add(ribbons.mul(V.E0.z)).add(stars.mul(V.E0.w))
+    .add(kickCol.mul(V.E1.x)).add(vec3(0.85, 0.9, 1.0).mul(bolt).mul(V.E1.y)).add(vec3(sparks).mul(V.E1.z)).add(floorCol.mul(V.E1.w))
+    .add(bassCol.mul(V.E2.x)).add(mountains.mul(V.E2.y))
+    .add(waveCol.mul(V.E2.w)).add(circle.mul(V.E3.y))
+    .add(aurora.mul(V.E3.z)).add(nebula.mul(V.E3.w))
+    .add(fractCol.mul(V.E4.x));
+  // The song's arc (visualiser.ts updateArc): muted and dim early on, full colour at the climax;
+  // greyer and darker while it holds its breath before a drop, then a burst of light as it lets go.
+  // Three journeys, one per era (journey = weights of colour rise, complexity bloom, thaw):
+  //   colour rise       saturation and light both climb with the arc
+  //   complexity bloom  full colour all along; visualiser.ts adds elements and folds instead
+  //   thaw              icy monochrome that warms into the scene's palette
+  const grey = dot(col, vec3(0.3, 0.5, 0.2));
+  const satRise = float(0.25).add(V.arc.mul(0.95));
+  const sat = clamp(satRise.mul(V.journey.x).add(V.journey.y).add(V.journey.z)
+    .sub(V.tension.mul(0.45)).add(V.release.mul(0.5)), 0.0, 1.3);
+  const level = float(0.35).add(V.arc.mul(0.85)).mul(V.journey.x)
+    .add(float(0.8).add(V.arc.mul(0.25)).mul(V.journey.y))
+    .add(float(0.6).add(V.arc.mul(0.5)).mul(V.journey.z))
+    .mul(float(1.0).sub(V.tension.mul(0.35))).add(V.release.mul(0.6));
+  const satCol = max(mix(vec3(grey), col, sat), vec3(0.0));
+  const icy = vec3(0.35, 0.62, 1.0).mul(grey).mul(1.4);
+  const thawed = mix(icy, satCol, min(smoothstep(0.25, 0.9, V.arc).add(V.release.mul(0.4)), 1.0));
+  const arcCol = mix(satCol, thawed, V.journey.z).mul(level);
   // The crash: an inverted flash that tears the old scene down.
-  m.colorNode = mix(col, vec3(1.0).sub(col).add(V.crash.mul(0.6)), V.crash.mul(0.85));
+  m.colorNode = mix(arcCol, vec3(1.0).sub(arcCol).add(V.crash.mul(0.6)), V.crash.mul(0.85));
   return m;
 }
 
-/** Flowers that splash open for each note: additive petals, bright at the heart. */
-export function makeFlowerMaterial(): THREE.MeshBasicNodeMaterial {
+/**
+ * The sprites the visualiser's spawners throw into the sky (flowers, bubbles, starbursts, confetti,
+ * snowflakes): additive, coloured per instance. 'petal' is bright at the heart with veins, 'flat'
+ * is an even glow (rings, confetti), 'spike' fades from a hot centre out along the arms.
+ */
+export function makeSpriteMaterial(style: 'petal' | 'flat' | 'spike' = 'petal'): THREE.MeshBasicNodeMaterial {
   const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
   m.blending = THREE.AdditiveBlending;
   const r = length(positionLocal.xy);
-  const heart = smoothstep(0.35, 0.0, r).mul(1.6);
-  const petal = smoothstep(1.0, 0.3, r).mul(0.7);
-  const veins = sin(atan(positionLocal.y, positionLocal.x).mul(18.0)).mul(0.15).add(0.85);
-  m.colorNode = vec3(heart.add(petal.mul(veins)));
+  if (style === 'flat') m.colorNode = vec3(0.9);
+  else if (style === 'spike') m.colorNode = vec3(smoothstep(0.25, 0.0, r).mul(1.8).add(smoothstep(1.0, 0.0, r).mul(0.8)));
+  else {
+    const heart = smoothstep(0.35, 0.0, r).mul(1.6);
+    const petal = smoothstep(1.0, 0.3, r).mul(0.7);
+    const veins = sin(atan(positionLocal.y, positionLocal.x).mul(18.0)).mul(0.15).add(0.85);
+    m.colorNode = vec3(heart.add(petal.mul(veins)));
+  }
   return m;
 }
 
