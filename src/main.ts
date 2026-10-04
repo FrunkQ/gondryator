@@ -51,6 +51,9 @@ const MIN_LOOKAHEAD = 10; // seconds the score must be ahead of the playhead bef
 const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
+/** Where you look when the ride starts (?yaw=150 overrides it, for testing the far window). */
+const startYaw = (pack: Pack) => params.has('yaw') ? Number(params.get('yaw')) : pack.rig.startYaw ?? 0;
+
 class App {
   pack: Pack = [...PACKS, ...HIDDEN_PACKS].find(p => p.id === params.get('pack')) ?? PACKS[0];
   world!: World;
@@ -153,7 +156,7 @@ class App {
     this.look.wanderYaw = pack.rig.maxYaw;
     // Waiting at the first station you face the board square on; the angled view comes with the ride.
     const angled = this.phase !== 'landing';
-    this.look.setRest(angled ? THREE.MathUtils.degToRad(pack.rig.startYaw ?? 0) : 0, angled ? THREE.MathUtils.degToRad(pack.rig.startPitch ?? 0) : 0);
+    this.look.setRest(angled ? THREE.MathUtils.degToRad(startYaw(pack)) : 0, angled ? THREE.MathUtils.degToRad(pack.rig.startPitch ?? 0) : 0);
     this.onResize();
     const cr = $('#credits');
     cr.textContent = pack.credits + ' ';
@@ -195,7 +198,7 @@ class App {
     // The train rolls up to a board with the song's name, turning to the angled view on the way,
     // and stops there while the analysis and the shader warm-up finish.
     this.titleCross = this.rig.titleArrival();
-    this.look.restYaw = THREE.MathUtils.degToRad(this.pack.rig.startYaw ?? 0);
+    this.look.restYaw = THREE.MathUtils.degToRad(startYaw(this.pack));
     this.look.restPitch = THREE.MathUtils.degToRad(this.pack.rig.startPitch ?? 0);
     this.look.center();
     this.showCard('title', this.titleBoardX(), {
@@ -538,7 +541,10 @@ class App {
     try {
       this.sky.update(s, dt, this.score, this.phase === 'run' || this.phase === 'ended', this.world.train.position, SU.energy.value);
       // Star Guitar's main window stays true to the video; the looks come in as you turn round.
-      this.fx.amount = this.pack.rig.lookYaw ? ((1 - Math.cos(this.look.yaw)) / 2) ** 2 : 1;
+      this.fx.split = !!this.pack.rig.lookYaw;
+      const cam = this.world.camera;
+      this.fx.view.yaw = this.look.yaw;
+      this.fx.view.tanH = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * cam.aspect / cam.zoom;
       this.fx.update(s, dt, this.phase === 'run' || this.phase === 'ended', this.world.night, this.world.camera.aspect);
       if (perf.on) this.markChanges(s);
       if (!this.tuner?.isOpen) this.world.render(); // the tuning screen covers the view

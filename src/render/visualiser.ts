@@ -88,7 +88,13 @@ export const JOURNEYS = ['colour rise', 'complexity bloom', 'thaw'] as const;
 /** A stretch of the song with its own vibe. */
 export interface Era { t: number; kind: 'intro' | 'solo' | 'breakdown' | 'drive'; journey: number }
 
-const LOOKS: FxLookName[] = ['trip', 'kaleido', 'liquid', 'prism', 'echo', 'thermal', 'fold', 'hyper', 'tunnel', 'clean'];
+// Post-effects looks for scenes. The gentle ones come up more often, so the scene's own palette
+// carries the colour and the loud looks (trip, thermal) stay a treat.
+const LOOKS: FxLookName[] = ['clean', 'clean', 'echo', 'echo', 'liquid', 'kaleido', 'fold', 'tunnel', 'prism', 'hyper', 'trip', 'thermal'];
+/** Never let the picture sit unchanged longer than this (seconds). */
+const MAX_STILL = 14;
+/** ...and don't twist it more often than this, unless a section starts. */
+const MIN_STILL = 6;
 
 interface Scene {
   palette: number;
@@ -218,7 +224,7 @@ export class Visualiser implements ShowDriver {
     E0: uniform(new THREE.Vector4(1, 0, 0, 0)), E1: uniform(new THREE.Vector4()), E2: uniform(new THREE.Vector4()), E3: uniform(new THREE.Vector4()), E4: uniform(new THREE.Vector4()),
     fold: uniform(new THREE.Vector4(0, 0.6, 1.3, 0.5)), frac: uniform(new THREE.Vector4(6, 1.2, 0.7, 0.5)),
     kickT: uniform(99), pad: uniform(0),
-    arc: uniform(0.3), tension: uniform(0), release: uniform(0), journey: uniform(new THREE.Vector3(1, 0, 0)),
+    arc: uniform(0.3), tension: uniform(0), release: uniform(0), releaseT: uniform(99), phase: uniform(0), journey: uniform(new THREE.Vector3(1, 0, 0)),
     notes: null as unknown as THREE.DataTexture,
   };
   private noteData = new Uint8Array(16 * 4);
@@ -248,9 +254,20 @@ export class Visualiser implements ShowDriver {
   private secIdx = -1;
   private lastLeadT = -99;
   private lastSceneAt = -99;
+  /** When anything last changed (a scene or a twist), the scene showing, and when each element last showed. */
+  private lastChange = -99;
+  private current: Scene | null = null;
+  private lastUsed = new Float64Array(64).fill(-1e9);
+  private phraseIdx = -1;
+  private twists = 0;
   /** The song's arc: intensity at 2 Hz over the analysed part of the song (see buildArc). */
   private arcI = new Float32Array(0);
   private arcPeakT = 0;
+  /** Lifts: moments the song steps up (a drop, a bigger section, the end of a build-up), found ahead. */
+  lifts: { t: number; size: number }[] = [];
+  private liftPtr = 0;
+  private releaseT = 99;
+  private phase = 0;
   private arcBuiltAt = -1;
   private arcLvl = 0.3;
   private tensionLvl = 0;
@@ -313,6 +330,10 @@ export class Visualiser implements ShowDriver {
     while (lo < hi) { const m = (lo + hi) >> 1; if (ev[m].t <= s) lo = m + 1; else hi = m; }
     this.ptr = lo;
     this.lastS = s;
+    this.phraseIdx = -1;
+    this.lastChange = Math.min(this.lastChange, s);
+    this.liftPtr = 0;
+    while (this.liftPtr < this.lifts.length && this.lifts[this.liftPtr].t <= s) this.liftPtr++;
   }
 
   // ------------------------------------------------------------------ scenes
@@ -368,6 +389,9 @@ export class Visualiser implements ShowDriver {
     this.target.fill(0);
     for (const e of els) this.target[e] = e === 0 && els.length > 1 ? 0.7 : 1;
     if (q.get('fb') === '0') sc = { ...sc, feedback: { amount: 0, zoom: 1, turn: 0, hue: 0 } };
+    this.current = sc;
+    for (const e of els) this.lastUsed[e] = this.lastS;
+    this.lastChange = this.lastS;
     this.V.poly.value.set(...sc.poly);
     this.V.fold.value.set(...sc.fold);
     this.V.frac.value.set(...sc.frac);
@@ -386,6 +410,14 @@ export class Visualiser implements ShowDriver {
       sc = this.makeScene();
       sc.elements = this.orchestrate(s);
       if (sectionStart) this.patterns.set(label, { scene: sc, seen: 0 });
+    }
+    // An exhale: a section clearly quieter than the last (a breakdown) thins out to one or two
+    // elements with long, slow trails, so the next lift has somewhere to go.
+    const { index } = sectionAt(this.score, s);
+    const prevE = this.score.sections[index - 1]?.energy, curE = this.score.sections[index]?.energy;
+    if (sectionStart && prevE !== undefined && curE !== undefined && prevE - curE > 0.12) {
+      sc = { ...sc, elements: sc.elements.slice(0, label === 'breakdown' ? 1 : 2), look: this.rand() < 0.5 ? 'echo' : 'liquid',
+        feedback: { amount: 0.85, zoom: 0.992, turn: (this.rand() - 0.5) * 0.01, hue: 0.02 } };
     }
     this.applyScene(sc);
     this.crash();
@@ -412,17 +444,16 @@ export class Visualiser implements ShowDriver {
     const energy = sectionAt(sc, s).section?.energy ?? 0.5;
     const n = energy > 0.55 ? 3 : 2;
     // Groups in a seeded order, the busiest instruments a little more likely first.
-    const order = active.map(g => ({ g, k: r() * (g === 'mix' ? 0.6 : 1) + Math.min(1, count[g] / 30) * 0.4 })).sort((a, b) => b.k - a.k).map(o => o.g);
+    const order = active.map(g => ({ g, k: r() + Math.min(1, count[g] / 30) * 0.4 })).sort((a, b) => b.k - a.k).map(o => o.g);
     const pick: number[] = [];
     for (const g of order) {
       if (pick.length >= n) break;
-      const opts = ELEMENTS.map((el, i) => ({ el, i })).filter(o => o.el.group === g);
-      pick.push(opts[Math.floor(r() * opts.length)].i);
+      pick.push(this.freshest(ELEMENTS.map((el, i) => ({ el, i })).filter(o => o.el.group === g && !pick.includes(o.i))));
     }
     while (pick.length < n) {
       const opts = ELEMENTS.map((el, i) => ({ el, i })).filter(o => active.includes(o.el.group) && !pick.includes(o.i));
       if (!opts.length) break;
-      pick.push(opts[Math.floor(r() * opts.length)].i);
+      pick.push(this.freshest(opts));
     }
     return pick;
   }
@@ -431,6 +462,46 @@ export class Visualiser implements ShowDriver {
   get status() {
     const e = this.eras[this.eraIdx];
     return `era ${this.eraIdx + 1}/${this.eras.length} ${e?.kind ?? '-'} · ${JOURNEYS[this.journey]} · arc ${this.arcLvl.toFixed(2)} tension ${this.tensionLvl.toFixed(2)} · ${this.showing.join(', ')}`;
+  }
+
+  /** Of these elements, one of the two shown least recently (so everything gets its turn). */
+  private freshest(opts: { i: number }[]) {
+    const byAge = opts.slice().sort((a, b) => this.lastUsed[a.i] - this.lastUsed[b.i] || a.i - b.i);
+    return byAge[Math.min(byAge.length - 1, Math.floor(this.rand() * 2))].i;
+  }
+
+  /**
+   * A twist: a smaller change than a new scene, on a phrase boundary, so the picture never sits
+   * still for long. It alternates between swapping one element for one that hasn't shown for a
+   * while and re-dressing the scene (palette, mirrors, folds, shapes, look), with a flash of light
+   * instead of a crash.
+   */
+  private twist(s: number) {
+    const cur = this.current;
+    if (!cur) return;
+    const r = this.rand;
+    let sc: Scene;
+    if (this.twists++ % 2 === 0 && cur.elements.length) {
+      const fresh = this.orchestrate(s).filter(e => !cur.elements.includes(e));
+      const out = Math.floor(r() * cur.elements.length);
+      const els = cur.elements.slice();
+      if (fresh.length) els[out] = fresh[0];
+      sc = { ...cur, elements: els };
+    } else {
+      const segChoices = [0, 3, 4, 5, 6, 8, 12];
+      sc = {
+        ...cur,
+        palette: (cur.palette + 1 + Math.floor(r() * (PALETTES.length - 1))) % PALETTES.length,
+        shape: [cur.shape[0] * (0.7 + r() * 0.6), cur.shape[1], segChoices[Math.floor(r() * segChoices.length)], cur.shape[3]],
+        mixes: [cur.mixes[0], cur.mixes[1], cur.mixes[2], r() * 6],
+        fold: [Math.max(0, Math.min(5, cur.fold[0] + (r() < 0.5 ? -1 : 1) * (1 + Math.floor(r() * 2)))), 0.3 + r() * 1.2, cur.fold[2], cur.fold[3]],
+        poly: [3 + Math.floor(r() * 6), cur.poly[1], -cur.poly[2], r() < 0.4 ? r() : 0],
+        look: r() < 0.5 ? cur.look : LOOKS[Math.floor(r() * LOOKS.length)],
+      };
+    }
+    this.applyScene(sc);
+    this.V.release.value = Math.max(this.V.release.value, 0.45);
+    this.lastChange = s;
   }
 
   /** Which elements are showing now (for the debug overlay and tests). */
@@ -452,6 +523,15 @@ export class Visualiser implements ShowDriver {
       // Scene changes: every section, and every new melody phrase (after a breath of 1.5 s).
       const { section: sec, index: idx } = sectionAt(sc, s);
       if (idx !== this.secIdx && sec) { this.secIdx = idx; this.newScene(s, sec.label, true); }
+      // Twists: on each new phrase (four bars) once the picture has held for a few seconds, and
+      // in any case before it has sat still for MAX_STILL seconds.
+      let pi = this.phraseIdx;
+      while (pi + 1 < sc.phrases.length && sc.phrases[pi + 1].t <= s) pi++;
+      if (pi !== this.phraseIdx) {
+        this.phraseIdx = pi;
+        if (s - this.lastChange >= MIN_STILL) this.twist(s);
+      }
+      if (s - this.lastChange > MAX_STILL) this.twist(s);
       const lead = sampleEnvelope(sc.envelopes.leadPitch, s);
       if (lead > 0) {
         if (s - this.lastLeadT > 1.5 && s - this.lastSceneAt > 6 && sec) this.newScene(s, sec.label + ':phrase', false);
@@ -541,6 +621,51 @@ export class Visualiser implements ShowDriver {
     this.arcPeakT = peak / 2;
     this.arcBuiltAt = end;
     this.eras = this.findEras(end);
+    this.lifts = this.findLifts(end);
+    this.liftPtr = 0;
+    while (this.liftPtr < this.lifts.length && this.lifts[this.liftPtr].t <= this.lastS) this.liftPtr++;
+  }
+
+  /**
+   * Lifts, found ahead of time: sections that start louder than the one before, and moments where
+   * the next four seconds are clearly louder than the last four (a drop, the band coming back in,
+   * the end of a build-up). The show winds up over the bars before each one and lets go on it.
+   */
+  private findLifts(end: number) {
+    const sc = this.score;
+    const out: { t: number; size: number }[] = [];
+    for (let i = 1; i < sc.sections.length; i++) {
+      const a = sc.sections[i - 1], b = sc.sections[i];
+      if (b.t < end && b.energy - a.energy > 0.06) out.push({ t: b.t, size: Math.min(1, 0.45 + (b.energy - a.energy) * 3) });
+    }
+    // Loudness steps, at 4 Hz.
+    const n = Math.floor(end * 4);
+    const mix = new Float32Array(n);
+    for (let i = 0; i < n; i++) mix[i] = sampleEnvelope(sc.envelopes.mix, i / 4) + sampleEnvelope(sc.envelopes.drums, i / 4) * 0.5;
+    const pre = new Float32Array(n + 1);
+    for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + mix[i];
+    const mean = (a: number, b: number) => (pre[Math.min(n, b)] - pre[Math.max(0, a)]) / Math.max(1, Math.min(n, b) - Math.max(0, a));
+    let lo = Infinity, hi = -Infinity;
+    for (const v of mix) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    const range = Math.max(1e-6, hi - lo);
+    let best = { t: -99, d: 0 };
+    for (let i = 16; i < n - 16; i++) {
+      const d = (mean(i, i + 16) - mean(i - 16, i)) / range;
+      if (d > 0.07 && d > best.d && i / 4 - best.t < 6) best = { t: i / 4, d };
+      else if (d > 0.07 && i / 4 - best.t >= 6) { if (best.d > 0) out.push({ t: best.t, size: Math.min(1, best.d * 3) }); best = { t: i / 4, d }; }
+    }
+    if (best.d > 0) out.push({ t: best.t, size: Math.min(1, best.d * 3) });
+    // Snap each lift to the nearest beat, merge ones closer than 6 s (keep the bigger).
+    const beats = sc.beats;
+    const snap = (t: number) => { let bt = t, bd = 1; for (const b of beats) { const dd = Math.abs(b.t - t); if (dd < bd) { bd = dd; bt = b.t; } if (b.t > t + 1) break; } return bt; };
+    out.sort((a, b) => a.t - b.t);
+    const merged: { t: number; size: number }[] = [];
+    for (const l of out) {
+      const last = merged[merged.length - 1];
+      if (last && l.t - last.t < 6) { if (l.size > last.size) { last.t = snap(l.t); last.size = l.size; } }
+      else merged.push({ t: snap(l.t), size: l.size });
+    }
+    return merged;
   }
 
   /**
@@ -635,20 +760,26 @@ export class Visualiser implements ShowDriver {
       const toPeak = this.arcPeakT > 0 ? THREE.MathUtils.clamp(s / this.arcPeakT, 0, 1) : 1;
       const ceiling = s <= this.arcPeakT ? 0.35 + 0.65 * toPeak ** 1.3 : 0.85 + 0.15 * Math.exp(-(s - this.arcPeakT) / 20);
       arc = ceiling * (0.45 + 0.55 * now);
-      // Anticipation: a jump in intensity within the next eight seconds (and in the analysed part).
-      for (let d = 1; d <= 16; d++) {
-        const t2 = s + d / 2;
-        if (t2 >= end) break;
-        const jump = this.arcAt(t2) - now;
-        if (jump > 0.22) { tension = Math.max(tension, Math.min(1, jump * 2) * (1 - d / 17)); }
+      // Anticipation: wind up over the eight seconds (four bars at 120 bpm) before each lift,
+      // and with any build-up the parser hears (the rise envelope).
+      while (this.liftPtr < this.lifts.length && this.lifts[this.liftPtr].t <= s) {
+        // The lift lands: let go, with a shockwave out of your gaze.
+        const l = this.lifts[this.liftPtr++];
+        if (s - l.t < 0.5) { this.V.release.value = Math.max(this.V.release.value, 0.5 + l.size * 0.5); this.releaseT = 0; }
       }
+      const next = this.lifts[this.liftPtr];
+      if (next) { const ahead = next.t - s; if (ahead < 8) tension = next.size * (1 - ahead / 8) ** 1.5; }
+      tension = Math.max(tension, Math.min(1, sampleEnvelope(this.score.envelopes.rise, s) * 0.8));
     }
     const k = 1 - Math.exp(-dt / 1.2);
     this.arcLvl += (arc - this.arcLvl) * k;
     this.tensionLvl += (tension - this.tensionLvl) * (1 - Math.exp(-dt / 0.5));
-    // The release: tension falling away fast means the moment arrived.
-    if (this.lastTension > 0.35 && this.tensionLvl < this.lastTension - 0.08) this.V.release.value = 1;
     this.lastTension = this.tensionLvl;
+    this.releaseT += dt;
+    this.V.releaseT.value = this.releaseT;
+    // The pattern's own clock speeds up as the tension builds (it rushes towards the drop).
+    this.phase += dt * (this.V.shape.value.w) * (1 + this.tensionLvl * 3);
+    this.V.phase.value = this.phase;
     this.V.release.value *= Math.exp(-dt / 0.8);
     this.V.arc.value = this.arcLvl;
     this.V.tension.value = this.tensionLvl;

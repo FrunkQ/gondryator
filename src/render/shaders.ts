@@ -23,6 +23,7 @@ export const U = {
   hat: uniform(0),
   energy: uniform(0.5), // section energy 0..1
   trip: uniform(0),     // 0..1 how much the psychedelic paint replaces real surfaces
+  tripFar: uniform(0),  // the same, for the far side of a two-window ride (z > the camera) only
   night: uniform(0),    // 0..1 how many windows are lit
   hue: uniform(0),      // palette phase, advances with the music
   beatPhase: uniform(0),// 0..1 within the current beat
@@ -222,9 +223,11 @@ export function makeGroundMaterial(map: THREE.Texture): THREE.MeshStandardNodeMa
   const tripCol = pow(palette(rings.add(U.hue)), vec3(2.2)).mul(float(0.35).add(U.kick.mul(0.4)));
   // Grade the pastel field colours towards real grass and soil: richer and darker.
   const field = pow(materialColor.rgb, vec3(1.5)).mul(vec3(0.95, 1.05, 0.8));
-  m.colorNode = vec4(mix(field.mul(detail), tripCol, U.trip.mul(0.85)), 1);
+  // One ground runs under both windows: on a two-window ride only the far side takes the paint.
+  const trip = max(U.trip, U.tripFar.mul(smoothstep(0.0, 4.0, wp.z.sub(cameraPosition.z))));
+  m.colorNode = vec4(mix(field.mul(detail), tripCol, trip.mul(0.85)), 1);
   m.normalNode = bumpMap(n2.mul(near).add(tufts.mul(near)), 0.08);
-  m.emissiveNode = tripCol.mul(U.trip).mul(U.kick.mul(0.5));
+  m.emissiveNode = tripCol.mul(trip).mul(U.kick.mul(0.5));
   return m;
 }
 
@@ -407,7 +410,8 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const d = positionLocal.normalize();
   const az = atan(d.x, d.z.negate());             // 0 ahead (-z), +/- pi behind
   const el = asin(clamp(d.y, -1.0, 1.0));          // -pi/2 .. pi/2
-  const t = U.showTime.mul(V.shape.w);
+  // The pattern's clock: visualiser.ts advances it, faster as the song winds up for a lift.
+  const t = V.phase;
   const F = V.shape.x;
   // Symmetry: mirror the sky about the horizon (layers.w).
   const elM = mix(el, abs(el), V.layers.w);
@@ -446,7 +450,9 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const tunnel = sin(acos(clamp(dot(d, V.gaze), -1.0, 1.0)).mul(F).mul(3.0).sub(t.mul(3.0)).add(azK.mul(2.0)));
   const v = plasma.mul(V.mixes.x).add(rings.mul(V.mixes.y)).add(tunnel.mul(V.mixes.z))
     .add(V.mixes.w).add(U.hue.mul(0.5)).add(mx_noise_float(d.mul(2.0).add(t.mul(0.1))).mul(0.25));
-  const pal = V.pa.add(V.pb.mul(cos(V.pc.mul(v).add(V.pd).mul(6.28318))));
+  // Every element colours itself from the scene's palette, so a scene reads as one colour story.
+  const paletteAt = (x: any) => V.pa.add(V.pb.mul(cos(V.pc.mul(x).add(V.pd).mul(6.28318))));
+  const pal = paletteAt(v);
   const glow = float(0.1).add(U.energy.mul(0.12)).add(U.kick.mul(0.28)).add(V.rise.mul(0.25)).add(V.bright.mul(0.08));
   // Contrast: thin bright filaments over darkness, and drifting black voids, so it reads as a
   // pattern rather than a wash.
@@ -464,7 +470,7 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const target = w.r.sub(0.5).mul(1.6);
   const near = abs(el.sub(target));
   const waveA = smoothstep(0.035, 0.0, near).mul(1.6).add(smoothstep(0.22, 0.0, near).mul(0.3)).mul(w.g);
-  const waveCol = palette(rel.div(6.28318).add(U.hue)).mul(0.6).add(0.4).mul(waveA);
+  const waveCol = paletteAt(rel.div(6.28318).mul(0.5).add(U.hue.mul(0.3))).mul(0.7).add(0.3).mul(waveA);
   // Lightning on the snare: a jagged bolt from the zenith down at boltAz.
   const dAz = atan(sin(az.sub(V.boltAz)), cos(az.sub(V.boltAz)));
   const jag = mx_noise_float(vec2(el.mul(9.0), V.boltSeed)).mul(0.12).add(mx_noise_float(vec2(el.mul(31.0), V.boltSeed.add(7.0))).mul(0.035));
@@ -494,7 +500,7 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
     const dist = abs(qr.sub(size.mul(edge)));
     shapes = shapes.add(smoothstep(0.012, 0.0, dist).mul(step(0.01, size)).mul(1.0 - i * 0.12));
   }
-  const shapeCol = palette(qr.mul(0.8).add(U.hue).add(V.mixes.w)).mul(shapes).mul(float(0.9).add(U.kick.mul(0.8)));
+  const shapeCol = paletteAt(qr.mul(0.5).add(V.mixes.w)).mul(shapes).mul(float(0.7).add(U.kick.mul(0.6)));
   // Band ribbons round the horizon (layers.y): drums low, bass in the middle, the rest high, each as
   // thick as its stem is loud and rippling with it.
   const ribbon = (y: number, lvl: any, freq: number, colShift: number) => {
@@ -503,7 +509,6 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
     return V.pa.add(V.pb.mul(cos(V.pc.mul(float(colShift).add(az.div(6.28318))).add(V.pd).mul(6.28318)))).mul(a).mul(lvl);
   };
   const ribbons = ribbon(-0.35, V.bands.x, 6.0, 0.0).add(ribbon(-0.05, V.bands.y, 3.0, 0.33)).add(ribbon(0.3, V.bands.z, 9.0, 0.66)).mul(1.4);
-  const paletteAt = (x: any) => V.pa.add(V.pb.mul(cos(V.pc.mul(x).add(V.pd).mul(6.28318))));
   // Starfield (3): stars streaming out of your gaze, faster with the energy.
   const lanes = qa.mul(90.0 / 6.28318), lane = floor(lanes), lh = hash(lane);
   const head = fract(lh.mul(13.7).add(U.showTime.mul(float(0.15).add(lh.mul(0.3)).mul(float(0.6).add(U.energy).add(V.rise))))).mul(2.4);
@@ -565,8 +570,10 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
     return vec2(trapLine, trapDot);
   })();
   const kFil = exp(fract3.x.mul(-28.0)), kDot = exp(fract3.y.mul(-5.0));
-  const fractCol = paletteAt(fract3.y.mul(1.5).add(U.hue).add(V.mixes.w)).mul(kFil.mul(1.3).add(kDot.mul(0.5)))
-    .mul(float(0.55).add(U.kick.mul(0.5)).add(V.rise.mul(0.4)));
+  // Kept off the very centre of your gaze, so it frames the view rather than staring back at you.
+  const kCentre = smoothstep(0.08, 0.7, kr);
+  const fractCol = paletteAt(fract3.y.mul(0.9).add(V.mixes.w)).mul(kFil.mul(0.75).add(kDot.mul(0.25)))
+    .mul(float(0.4).add(U.kick.mul(0.3)).add(V.rise.mul(0.25))).mul(kCentre.mul(0.85).add(0.15));
   // The mix: each element times its weight (E0..E3 hold the 16 weights; see visualiser.ts ELEMENTS).
   const col = base.mul(V.E0.x).add(shapeCol.mul(V.E0.y)).add(ribbons.mul(V.E0.z)).add(stars.mul(V.E0.w))
     .add(kickCol.mul(V.E1.x)).add(vec3(0.85, 0.9, 1.0).mul(bolt).mul(V.E1.y)).add(vec3(sparks).mul(V.E1.z)).add(floorCol.mul(V.E1.w))
@@ -591,7 +598,20 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const satCol = max(mix(vec3(grey), col, sat), vec3(0.0));
   const icy = vec3(0.35, 0.62, 1.0).mul(grey).mul(1.4);
   const thawed = mix(icy, satCol, min(smoothstep(0.25, 0.9, V.arc).add(V.release.mul(0.4)), 1.0));
-  const arcCol = mix(satCol, thawed, V.journey.z).mul(level);
+  const arcLin = mix(satCol, thawed, V.journey.z).mul(level);
+  // A soft shoulder so layered elements never blow out to white: colours stay colours.
+  let arcCol = arcLin.div(float(1.0).add(dot(arcLin, vec3(0.3, 0.5, 0.2)).mul(0.8)));
+  // Winding up for a lift (V.tension): rings converge on your gaze faster and faster, and the
+  // light strobes on the beat, eighths then sixteenths, as the moment nears.
+  const angT = acos(clamp(dot(d, V.gaze), -1.0, 1.0));
+  const conv = pow(fract(angT.mul(2.5).add(U.showTime.mul(float(0.6).add(V.tension.mul(3.0))))), 18.0);
+  const strobeRate = select(V.tension.greaterThan(0.7), float(4.0), float(2.0));
+  const strobe = step(0.5, fract(U.beatPhase.mul(strobeRate))).mul(smoothstep(0.35, 0.9, V.tension));
+  // The lift lands (V.releaseT seconds ago): a shockwave out of your gaze.
+  const shockX = angT.sub(V.releaseT.mul(2.6)).div(0.09);
+  const shock = exp(shockX.mul(shockX).negate()).mul(exp(V.releaseT.mul(-1.2)));
+  const windUp = paletteAt(angT.mul(0.3).add(V.mixes.w)).mul(conv.mul(V.tension).mul(0.9)).add(vec3(shock.mul(1.4)));
+  arcCol = arcCol.mul(float(1.0).sub(strobe.mul(0.45))).add(windUp);
   // The crash: an inverted flash that tears the old scene down.
   m.colorNode = mix(arcCol, vec3(1.0).sub(arcCol).add(V.crash.mul(0.6)), V.crash.mul(0.85));
   return m;

@@ -20,10 +20,14 @@ export const STAR_GUITAR: Pack = {
     { id: 'trackside', depth: 7.2, scale: 0.92, scaleByVel: 0.12,
       models: { industrial: ['catenary-pole'], town: ['catenary-pole'], country: ['catenary-pole'] } },
     { id: 'near', depth: 19, depthJitter: 3, scale: 0.8, scaleByVel: 0.3,
-      models: { industrial: ['shed', 'container', 'signal-box'], town: ['wall-house', 'shed', 'signal-box'], country: ['hay-bales', 'stone-hut'] },
+      models: {
+        industrial: ['shed', 'container', 'garages', 'hoarding', 'tree-clump', 'signal-box', 'birch-clump', 'allotment'],
+        town: ['wall-house', 'cottage', 'allotment', 'garages', 'tree-clump', 'hoarding', 'birch-clump', 'shed'],
+        country: ['hay-bales', 'stone-hut', 'tree-clump', 'cottage', 'birch-clump', 'allotment'],
+      },
       tints: { industrial: ['#ffffff', '#d8e0e6', '#e8ddd0'], town: ['#ffffff', '#ffe9d6', '#f0f4ff'], country: ['#ffffff', '#f6ead2'] } },
     { id: 'mid', depth: 38, depthJitter: 3, scale: 0.9, scaleByVel: 0.25, lengthByDur: 0.85,
-      models: { industrial: ['warehouse', 'tank', 'gravel-works', 'warehouse'], town: ['apartment', 'warehouse'], country: ['farmhouse', 'farmhouse', 'viaduct'] },
+      models: { industrial: ['warehouse', 'tank', 'gravel-works', 'gasholder', 'terrace', 'tree-clump'], town: ['apartment', 'terrace', 'warehouse', 'tree-clump'], country: ['farmhouse', 'barn', 'viaduct', 'tree-clump'] },
       tints: { industrial: ['#ffffff', '#dfe3e0', '#f2e6dc'], town: ['#ffffff', '#ffe4c8', '#ffd9cc', '#f7f0d8'], country: ['#ffffff', '#ffeccc'] } },
     { id: 'row', depth: 62, depthJitter: 2, scale: 1, scaleByVel: 0.1, pitchCenter: 64, heightPerSemitone: 0.09,
       models: { industrial: ['factory-block', 'town-block'], town: ['town-block'], country: ['cypress-row', 'town-block'] },
@@ -41,8 +45,8 @@ export const STAR_GUITAR: Pack = {
     { match: { stem: 'other', kind: 'note' }, layer: 'row', tier: 1 },
   ],
   ambient: [
-    { depthMin: 20, depthMax: 120, density: { industrial: 1.2, town: 2, country: 5 },
-      models: { industrial: ['tree', 'bush'], town: ['plane-tree', 'tree', 'bush'], country: ['tree', 'cypress', 'bush', 'plane-tree'] }, scale: [0.8, 1.3] },
+    { depthMin: 12, depthMax: 120, density: { industrial: 2.2, town: 2.8, country: 5 },
+      models: { industrial: ['tree', 'bush', 'birch-clump', 'bush'], town: ['plane-tree', 'tree', 'bush', 'birch-clump'], country: ['tree', 'cypress', 'bush', 'plane-tree', 'tree-clump'] }, scale: [0.8, 1.3] },
     { depthMin: 600, depthMax: 900, density: { industrial: 0.35, town: 0.35, country: 0.5 },
       models: { industrial: ['far-hill'], town: ['far-hill'], country: ['far-hill'] }, scale: [0.7, 1.4] },
   ],
@@ -77,7 +81,7 @@ export const STAR_GUITAR: Pack = {
   ],
   title: { template: 'station-board' },
   // The main window stays photographic, like the original; the looks bloom as you turn round to the
-  // other window (see FxDirector.amount).
+  // other window, and only show out of it (see FxDirector.split).
   fx: { cycle: ['clean', 'prism', 'hyper', 'trip', 'fold', 'tunnel', 'kaleido', 'thermal', 'echo', 'liquid'], bySection: { breakdown: 'liquid', intro: 'clean' } },
   sectionEvents: { onNewSection: 'overpass', onBreakdown: 'train-car' },
   window: { width: 2.1, height: 1.1, bottom: -0.47, pillar: 0.26, distance: 1.0, frame: '#7d8483', wall: '#c4bdac' },

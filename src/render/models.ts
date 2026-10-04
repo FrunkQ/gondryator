@@ -183,6 +183,79 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     T1(SURF.brick, box(5, 4.2, 4, 0, 2.1, 0, 0xb87a5c)), roof(5.4, 4.6, 1.6, 0, 4.2, 0, 0x8a4a35),
     ...windowsOnFace(5, 4.2, 2.0, 2, 2, 0.6, 0x4d5b66),
   ]),
+  // Foreground variety: gardens, trees, lock-ups and little buildings, so the near window is not
+  // all sheds and warehouses.
+  'cottage': () => merge([
+    T1(SURF.plaster, box(5.5, 3.6, 4.2, 0, 1.8, 0, 0xf1e6cf)), roof(6, 4.8, 2, 0, 3.6, 0, 0x6e4b3a),
+    T1(SURF.brick, box(0.7, 2.2, 0.7, 1.8, 5, -0.6, 0x9b5a44)),
+    T1(SURF.wood, box(1, 2, 0.08, -1.2, 1, 2.12, 0x3f5e74)), box(1.8, 0.15, 1.2, -1.2, 2.3, 2.6, 0x6e4b3a),
+    ...windowsOnFace(5.5, 3.6, 2.1, 1, 3, 0.9, 0x55606a),
+    ...T(SURF.foliage, box(5.5, 0.9, 0.7, 0, 0.45, 3.4, 0x58753a)),
+  ]),
+  'garages': () => {
+    const parts: Part[] = [T1(SURF.concrete, box(12, 2.6, 5, 0, 1.3, 0, 0xb9b4aa)), T1(SURF.concrete, box(12.4, 0.25, 5.4, 0, 2.7, 0, 0x8e8a83))];
+    const doors = [0x5f7d8c, 0x9c4a3c, 0x6d7a4a, 0xc9b27a, 0x5f7d8c];
+    for (let i = 0; i < 5; i++) parts.push(T1(SURF.metal, box(2, 2.1, 0.06, -4.8 + i * 2.4, 1.05, 2.52, doors[i])));
+    return merge(parts);
+  },
+  'allotment': () => {
+    const parts: Part[] = [];
+    for (let i = 0; i < 5; i++) parts.push(...T(SURF.foliage, box(5, 0.35, 0.5, -1, 0.18, -2 + i * 1.1, i % 2 ? 0x6f9a44 : 0x8aa84e)));
+    // A little greenhouse and a water butt.
+    parts.push(T1(SURF.glass, box(2.4, 2, 3, 3.6, 1, 0, 0xa8c4c8)), roof(2.6, 3.2, 0.7, 3.6, 2, 0, 0xcfe0e2));
+    parts.push(cyl(0.4, 0.4, 1, -4.2, 0.5, 2, 0x2f5a3a, 10));
+    for (const x of [-4.6, 5.2]) for (const z of [-2.8, 2.8]) parts.push(T1(SURF.wood, box(0.1, 1.1, 0.1, x, 0.55, z, 0x6a5038)));
+    return merge(parts);
+  },
+  'tree-clump': () => merge([
+    cyl(0.25, 0.4, 3.8, -1.6, 1.9, 0, 0x5b4632, 7), ...canopy(-1.6, 5, 0, 2.8, 0x56783b, 41),
+    cyl(0.18, 0.3, 2.6, 1.8, 1.3, 0.8, 0x5b4632, 7), ...canopy(1.8, 3.6, 0.8, 2, 0x6b8a45, 43),
+    ...canopy(0.3, 1, 1.6, 1.4, 0x5f7d3e, 47, 0.6),
+  ]),
+  'birch-clump': () => {
+    const parts: Part[] = [];
+    const xs = [-1.4, -0.2, 1.1, 2];
+    xs.forEach((x, i) => {
+      const h = 5 + (i % 2) * 1.6;
+      parts.push(T1(SURF.paint, cyl(0.12, 0.18, h, x, h / 2, (i % 3) * 0.6 - 0.6, 0xe9e6dc, 6)));
+      parts.push(...canopy(x, h + 0.4, (i % 3) * 0.6 - 0.6, 1.3, 0x9cb85a, 60 + i, 1.3));
+    });
+    return merge(parts);
+  },
+  'hoarding': () => merge([
+    T1(SURF.wood, box(0.25, 5, 0.25, -3, 2.5, 0, 0x4d4036)), T1(SURF.wood, box(0.25, 5, 0.25, 3, 2.5, 0, 0x4d4036)),
+    // A blank poster panel in bold blocks of colour (no words, no logos).
+    T1(SURF.paint, box(7, 3, 0.15, 0, 3.5, 0.15, 0xf2d24b)), T1(SURF.paint, box(3.2, 3, 0.16, -1.9, 3.5, 0.17, 0xe0563f)),
+    T1(SURF.paint, box(1.6, 1.6, 0.17, 1.8, 3.9, 0.18, 0x2f6fb0)),
+  ]),
+  'terrace': () => {
+    const parts: Part[] = [];
+    const walls = [0xb87a5c, 0xc99a74, 0xa86a50, 0xd2b08a];
+    const doors = [0x2f4f6f, 0x8a2f2f, 0x2f6a4a, 0x111111];
+    for (let i = 0; i < 4; i++) {
+      const x = -6 + i * 4;
+      parts.push(T1(SURF.brick, box(4, 6, 6, x, 3, 0, walls[i])));
+      parts.push(T1(SURF.wood, box(1, 2.1, 0.08, x - 0.9, 1.05, 3.04, doors[i])));
+      parts.push(...windowsOnFace(4, 6, 3.0, 2, 1, 0.6, 0x4d5b66).map(p => p));
+      parts.push(T1(SURF.brick, box(0.5, 1.2, 0.8, x + 1.4, 7.4, -1, 0x8a4a35)));
+    }
+    parts.push(roof(16.4, 6.6, 2.2, 0, 6, 0, 0x5d4f4a));
+    return merge(parts);
+  },
+  'barn': () => merge([
+    T1(SURF.wood, box(9, 5, 7, 0, 2.5, 0, 0x9e3b2c)), roof(9.6, 7.6, 3, 0, 5, 0, 0x5b5148),
+    T1(SURF.wood, box(3.2, 3.6, 0.1, 0, 1.8, 3.52, 0xe8dcc8)), T1(SURF.wood, box(2.8, 3.2, 0.12, 0, 1.8, 3.56, 0x9e3b2c)),
+    T1(SURF.straw, cyl(0.9, 0.9, 1.6, 5.8, 0.9, 2, 0xd9b45a, 12)),
+  ]),
+  'gasholder': () => {
+    const parts: Part[] = [T1(SURF.metal, cyl(7, 7, 5, 0, 2.5, 0, 0x7f8a7e, 24))];
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      parts.push(T1(SURF.metal, box(0.35, 14, 0.35, Math.cos(a) * 7.6, 7, Math.sin(a) * 7.6, 0x8e5a4a)));
+    }
+    for (const y of [5, 9.5, 14]) parts.push(T1(SURF.metal, cyl(7.8, 7.8, 0.3, 0, y, 0, 0x8e5a4a, 24)));
+    return merge(parts);
+  },
   'stone-hut': () => merge([T1(SURF.stone, box(3.5, 2.6, 3, 0, 1.3, 0, 0xc8b89a)), roof(3.8, 3.3, 1.1, 0, 2.6, 0, 0xa8573a)]),
   'hay-bales': () => merge([
     ...[-1.3, 0, 1.3].map(x => T1(SURF.straw, colorize(new THREE.CylinderGeometry(0.75, 0.75, 1.2, 12).rotateX(Math.PI / 2).translate(x, 0.75, 0), 0xd9b56a))),
@@ -208,7 +281,7 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     box(10, 5.5, 7, 0, 2.75, 0, 0xe6c999), roof(10.6, 7.6, 2.4, 0, 5.5, 0, 0xb4583a),
     box(4, 3.5, 5, 6.8, 1.75, 0, 0xdcc08f), roof(4.3, 5.4, 1.4, 6.8, 3.5, 0, 0xa9533a),
     ...windowsOnFace(10, 5.5, 3.5, 2, 4, 0.8, 0x5a5048),
-    cone(1.1, 9, -7, 4.8, 1, 0x2f4a2a), cyl(0.2, 0.2, 0.6, -7, 0.3, 1, 0x4a3828),
+    cyl(0.25, 0.35, 3.2, -7, 1.6, 1, 0x4a3828, 7), ...canopy(-7, 4.4, 1, 2.3, 0x4f6e36, 31),
   ]),
   'tank': () => merge([T1(SURF.metal, cyl(5, 5, 6, 0, 3, 0, 0xc4c6c3, 20)), cyl(5.2, 5.2, 0.4, 0, 6.2, 0, 0x9da2a3, 20), box(0.3, 6.4, 0.3, 5.1, 3.2, 0, 0x6f7377)]),
   'viaduct': () => merge([
@@ -418,8 +491,32 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     };
     belt(26, 0.42, -18, 0, 0);
     belt(20, 0.5, 12, -6, Math.PI * 0.85);
-    parts.push(T1(SURF.metal, box(5, 6, 5, 4, 13, -1, 0xa7a49c)), T1(SURF.metal, cone(2.6, 3, 4, 8.5, -1, 0x8c8a84, 8)));
-    parts.push(...T(SURF.rock, cone(9, 7, -20, 3.5, 4, 0xbdb3a2, 14), cone(7, 5.5, 18, 2.75, 3, 0xc9bfae, 14), cone(5, 4, 30, 2, -4, 0xa99f8f, 12)));
+    // The screening tower: a hopper on four legs with a funnel underneath (not a floating cone).
+    parts.push(T1(SURF.metal, box(5, 5, 5, 4, 13.5, -1, 0xa7a49c)), T1(SURF.metal, cyl(3.2, 0.8, 3.2, 4, 9.4, -1, 0x8c8a84, 12)));
+    for (const [dx, dz] of [[-2.2, -2.2], [2.2, -2.2], [-2.2, 2.2], [2.2, 2.2]]) parts.push(T1(SURF.metal, box(0.35, 11, 0.35, 4 + dx, 5.5, -1 + dz, 0x6e7275)));
+    parts.push(T1(SURF.metal, box(5.6, 0.25, 5.6, 4, 11, -1, 0x6e7275)));
+    // Spoil heaps: soft, slumped mounds with lumpy flanks and a rounded crown, not pyramids.
+    const heap = (r: number, h: number, x: number, z: number, color: number, seed: number) => {
+      const pts: [number, number][] = [];
+      for (let i = 0; i <= 12; i++) {
+        const f = i / 12;
+        pts.push([r * (1 - f) + 0.01, h * Math.sin(f * Math.PI / 2) ** 0.85]);
+      }
+      const g = lathe(pts, color, 28);
+      // Lumps: push each vertex in and out a little, more on the flanks than at the crown.
+      const p = g.getAttribute('position');
+      for (let i = 0; i < p.count; i++) {
+        const vx = p.getX(i), vy = p.getY(i), vz = p.getZ(i);
+        const a = Math.atan2(vz, vx);
+        const n = Math.sin(a * 5 + seed) * 0.5 + Math.sin(a * 11 + seed * 2.3) * 0.3 + Math.sin(vy * 1.7 + a * 3 + seed) * 0.2;
+        const k = 1 + n * 0.09 * (1 - vy / h * 0.6);
+        p.setXYZ(i, vx * k, vy * (1 + n * 0.05), vz * k * 1.25);
+      }
+      g.computeVertexNormals();
+      g.translate(x, 0, z);
+      return T1(SURF.rock, g);
+    };
+    parts.push(heap(10, 5.5, -20, 4, 0xbdb3a2, 1), heap(8, 4.2, 18, 3, 0xc9bfae, 2), heap(6, 3, 30, -4, 0xa99f8f, 3), heap(4, 2, -8, 7, 0xb3a894, 4));
     return merge(parts);
   },
   'overpass': () => merge([

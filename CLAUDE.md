@@ -77,7 +77,7 @@ Not everything has to be a ride. `src/render/visualiser.ts` is a whole show with
 | Melody pitch, continuous | `envelopes.leadPitch` (50 Hz, MIDI with fractions, 0 = silent; `bassPitch` too) | slides and glides | a wave round the horizon: future ahead, past behind |
 | Loudness | `envelopes.mix`, per stem `drums` / `bass` / `other` | how full it is | glow |
 | Brightness | `envelopes.bright` | filters opening | glow, colour speed |
-| Build-ups | `envelopes.rise` | tension | everything runs hotter |
+| Build-ups and lifts | `envelopes.rise`, and lifts found ahead (`findLifts`: louder sections, loudness steps) | tension, then release | the clock rushes, rings converge on your gaze, the light strobes on the beat; a shockwave on the lift |
 | Beats and bars | `beats` (with `bar`, `beat`), `phrases` (4-bar blocks) | the grid | timing of anything that should feel "on the one" |
 | Sections | `sections` with `label` (intro, verse, chorus, breakdown, drop, outro) and `energy` | the story | a scene change; a returning label brings its pattern back with a new palette |
 | The whole song | everything above, read ahead (the analysis runs far ahead of the music) | the journey | the arc: dark and muted at the start, full colour only at the climax, holding its breath (greyer, darker, trails pulling in) before a drop and bursting on it |

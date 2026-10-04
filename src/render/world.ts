@@ -472,7 +472,15 @@ export class World {
     // Floor, and bulkheads closing each end.
     const floorY = eye - 1.5;
     add(new THREE.BoxGeometry(L, 0.06, 2 * sillZ).translate(0, floorY, z0), hull);
-    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.12, R * 2 + 0.6, 2 * R + 0.4).translate(sx * L / 2, y0 + 0.3, z0), hull);
+    // Each end is a round window of the same glass in a slim frame (a solid bulkhead here was a
+    // big grey wall whenever you looked fore or aft).
+    for (const sx of [-1, 1]) {
+      const end = new THREE.Mesh(new THREE.CircleGeometry(R, 64).rotateY(Math.PI / 2).translate(sx * L / 2, y0, z0), makeCanopyMaterial());
+      end.renderOrder = 10;
+      cockpit.add(end);
+      add(new THREE.TorusGeometry(R, 0.05, 8, 64).rotateY(Math.PI / 2).translate(sx * L / 2, y0, z0), frame);
+      add(new THREE.TorusGeometry(R * 0.55, 0.025, 6, 48).rotateY(Math.PI / 2).translate(sx * L / 2, y0, z0), frame);
+    }
     // Consoles: a sloping desk under each side of the canopy.
     const desk = makeConsoleMaterial();
     for (const sz of [-1, 1]) {

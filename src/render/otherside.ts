@@ -80,7 +80,7 @@ export class OtherSide {
     const cosmos = running && this.spawner.themeAt(s) === 'cosmos';
     const k = 1 - Math.exp(-dt / 1.2);
     this.reveal.value += ((cosmos ? 1.05 : -0.05) - this.reveal.value) * k;
-    this.trip.value = Math.max(U.trip.value, this.reveal.value * 0.3, this.minTrip);
+    this.trip.value = Math.max(U.trip.value, U.tripFar.value, this.reveal.value * 0.3, this.minTrip);
     this.space.visible = this.floor.visible = this.reveal.value > 0.01;
     this.space.position.x = this.floor.position.x = trainX;
   }
