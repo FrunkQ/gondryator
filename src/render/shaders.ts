@@ -196,7 +196,7 @@ export function makeSceneryMaterial(opts: { trip?: any } = {}): THREE.MeshStanda
   const tripGlow = tripCol.mul(TRIP).mul(float(0.12).add(U.kick.mul(1.2)).add(stripe.mul(1.5)));
   // Glowing parts (beacons, comet tails, stars) light themselves.
   // Lamps and signs: lit by day, blazing at night.
-  const selfGlow = base.mul(is(SURF.glow)).mul(float(0.9).add(U.night.mul(2.4)));
+  const selfGlow = base.mul(is(SURF.glow)).mul(float(0.7).add(U.night.mul(1.5)));
   m.emissiveNode = winGlow.add(tripGlow).add(selfGlow);
   return m;
 }

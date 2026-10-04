@@ -395,7 +395,7 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
   // --- The night bus (top deck) ---------------------------------------------------------
   'kerb': () => merge([
     T1(SURF.concrete, box(30.2, 0.16, 0.3, 0, 0.08, 0, 0xbab6ad)),
-    T1(SURF.concrete, box(30.2, 0.14, 7, 0, 0.07, -3.6, 0x8f8b85)),
+    T1(SURF.concrete, box(30.2, 0.14, 12, 0, 0.07, -6.1, 0x8f8b85)),
   ]),
   'bollard': () => merge([T1(SURF.metal, cyl(0.12, 0.14, 0.95, 0, 0.6, 0, 0x2e3236, 8)), T1(SURF.glow, cyl(0.125, 0.125, 0.06, 0, 0.95, 0, 0xfff0d0, 8))]),
   'street-lamp': () => merge([
@@ -407,7 +407,7 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     T1(SURF.metal, box(4.2, 0.12, 1.8, 0, 2.5, -0.5, 0x3a3f45)),
     ...[-2, 2].map(x => T1(SURF.metal, box(0.1, 2.5, 0.1, x, 1.25, -1.3, 0x3a3f45))),
     T1(SURF.glass, box(4, 2.2, 0.05, 0, 1.3, -1.35, 0x5a6870)),
-    T1(SURF.glow, box(1.3, 1.9, 0.12, 1.4, 1.25, -1.2, 0xffffff)),
+    T1(SURF.glow, box(1.2, 1.7, 0.12, 1.4, 1.25, -1.2, 0x9ab4d0)),
   ]),
   'parked-car': () => merge([
     T1(SURF.paint, box(4.2, 0.8, 1.8, 0, 0.6, 0, 0x8a2f35)), T1(SURF.paint, box(2.4, 0.65, 1.6, -0.2, 1.3, 0, 0x8a2f35)),
