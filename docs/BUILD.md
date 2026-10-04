@@ -135,6 +135,15 @@ The fast parser (`analyzer.ts`) is hand-made DSP: it gets the drums, beats and s
 
 The site is a progressive web app (`public/manifest.webmanifest`, `public/sw.js`). In Chrome or Edge, use the ⤓ Install link in the corner (or the install icon in the address bar) and it gets its own window and a desktop icon, keeps working offline after the first visit, and can open music files straight from the desktop ("Open with Gondryator"). Safari: Share → Add to Dock / Home Screen. The service worker caches only the app's own files; pages are fetched network-first, so a new deploy shows up on the next load. The single-file build skips all of this. The commit and build date show in the D overlay, the console and the GitHub link's tooltip.
 
+## Shuffle, club mode and the disco door
+
+- **Shuffle a music folder** (start screen, `src/ui/playlist.ts`): every audio file in a folder and its subfolders, shuffled, one ride after another. Chrome and Edge use the folder picker and remember the folder (a handle in IndexedDB), so the next visit offers "Shuffle it again". Other browsers use a folder upload field. Dropping several songs at once does the same. Nothing is copied or uploaded.
+- While one song plays, the next one is parsed in a background worker and cached, so it pulls away from its station almost at once with its whole shape known. The next ride starts once the train has reached its terminus (the curtain, for shows). ⏭ or N skips.
+- **Listen along to a tab** (`src/audio/listen.ts`, desktop Chrome and Edge): the browser's share prompt captures another tab's sound (a streaming service, a radio station, a mix) and mutes the tab. Each song is recorded as it plays, a gap of silence ends it (songs of 25 s or more; gapless mixes are cut every 12 minutes), and it joins the queue, parsed straight away. So the ride runs one song behind the tab, and every song is heard whole before it plays: the drop and the climax are known ahead, just as with a file. The first song is the wait (the card counts it up). Recordings stay in memory for the session only. Tested headless with a captured audio element standing in for the shared tab: three songs split at their gaps and rode one after another.
+- **Full screen is club mode**: no interface and no cursor, ever, apart from a tiny faint ✕ in the corner (Esc and F work too). Outside full screen the bar fades in and out as before.
+- **The disco door** on the start screen leads to the non-Gondry view, and back out "To the trains".
+- The climax showpiece in the non-Gondry view is picked per song (`CLIMAXES` in `visualiser.ts`): the glitterball about one song in four, otherwise another set piece.
+
 ## The tuning screen
 
 Press `T` (or the 🎛 button, or open with `?tune`) to see what the music parser heard: a Synthesia-style piano roll where every detected hit falls onto the "now" line as it sounds. Drums get their own lanes (kick, snare, hat); bass, melody, pads and vocals fall onto a keyboard at their pitch. Hover a block for its instrument, note name, MIDI number and frequency, start time, length, velocity and bar position. Bars, beats, sections and the tempo are drawn too.

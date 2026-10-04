@@ -29,6 +29,8 @@ import { DEFAULT_TUNING, isDefaultTuning, type Tuning } from './analysis/tuning'
 import type { AutoTuneResult } from './analysis/autotune';
 import { TuningScreen } from './ui/tuning';
 import { FrameAnalyser, perf } from './ui/frames';
+import { ListenAlong, canListenAlong } from './audio/listen';
+import { Playlist, isAudio, canPickFolder, pickFolder, rememberFolder, lastFolder, regainAccess, type Track } from './ui/playlist';
 
 /** Settings auto-tune found for one song (keyed by the file's hash), if any. */
 function songTuning(hash: string): Tuning | null {
@@ -99,6 +101,11 @@ class App {
   private deep: DeepListen | null = null;
   private audioBuf: AudioBuffer | null = null;
   private lastFile: { buf: ArrayBuffer; name: string } | null = null;
+  /** Shuffle play over a folder: the next ride starts when this one reaches its terminus. */
+  private playlist: Playlist | ListenAlong | null = null;
+  private waitShown = '';
+  private advancing = false;
+  private preStarted = false;
   private tuner!: TuningScreen;
   private frames!: FrameAnalyser;
   /** What was on screen last frame, so the frame analyser can say what changed. */
@@ -174,6 +181,9 @@ class App {
 
   // ------------------------------------------------------------------ loading
   async loadFiles(files: File[]) {
+    // A pile of songs is a playlist.
+    const songs = files.filter(f => isAudio(f.name) || f.type.startsWith('audio/'));
+    if (songs.length > 1) { this.startPlaylist(Playlist.fromFiles(songs, 'the pile you dropped')); return; }
     const audio = files.find(f => /\.(mp3|wav|flac|ogg|oga|opus|m4a|mp4|aac|webm)$/i.test(f.name) || f.type.startsWith('audio/'));
     const mid = files.find(f => /\.(mid|midi)$/i.test(f.name));
     if (mid) {
@@ -184,6 +194,81 @@ class App {
     await this.loadAudio(await audio.arrayBuffer(), audio.name);
   }
 
+  private startPlaylist(pl: Playlist | ListenAlong) {
+    if (pl instanceof Playlist && !pl.size) { this.toast(`No music found in ${pl.name}`, 3500); return; }
+    if (this.playlist instanceof ListenAlong && this.playlist !== pl) this.playlist.stop();
+    this.playlist = pl;
+    if (pl instanceof ListenAlong) {
+      this.toast('Listening along. The ride runs one song behind the tab, so it can see each whole song coming: it starts when the first song ends.', 7000);
+      return;
+    }
+    $('#next').classList.remove('hidden');
+    this.toast(`Shuffling ${pl.size} song${pl.size === 1 ? '' : 's'} from ${pl.name}`, 3500);
+    void this.playNext();
+  }
+
+  /** The next song in the shuffle (skipping any the browser cannot play). */
+  private async playNext() {
+    const pl = this.playlist;
+    if (!pl || this.advancing) return;
+    this.advancing = true;
+    try {
+      for (let tries = 0; tries < 8; tries++) {
+        const t = pl.next();
+        if (!t) { this.toast('The next song is still recording', 2500); return; }
+        try {
+          const f = await t.get();
+          this.midi = null;
+          await this.loadAudio(await f.arrayBuffer(), f.name);
+          return;
+        } catch (e) {
+          console.warn('playlist: skipping', t.name, e);
+          this.toast(`Skipping ${t.name}`, 2000);
+        }
+      }
+    } finally { this.advancing = false; }
+  }
+
+  /**
+   * While one song plays, the next one in the shuffle is parsed in the background and cached, so
+   * it pulls away from its station almost at once, with its whole shape already known.
+   */
+  private async preanalyse(t: Track) {
+    try {
+      const f = await t.get();
+      const buf = await f.arrayBuffer();
+      const hash = await hashFile(buf);
+      if (!isDefaultTuning(songTuning(hash) ?? this.tuning) || (await loadScore(hash))?.final) return;
+      const tags = readTags(buf, f.name);
+      const audio = await this.player.ctx.decodeAudioData(buf.slice(0));
+      const score = emptyScore({ title: tags.title, artist: tags.artist, album: tags.album, durationSec: audio.duration, art: null, hash }, audio.duration);
+      const w = new AnalysisWorker();
+      w.onmessage = (ev: MessageEvent) => {
+        if (ev.data.type !== 'delta') return;
+        applyDelta(score, ev.data.delta);
+        if (ev.data.delta.final) { score.final = true; void saveScore(score); w.terminate(); }
+      };
+      w.onerror = () => w.terminate();
+      w.postMessage({ type: 'start', pcm: toMono(audio), sampleRate: audio.sampleRate, throttleMsPerSec: 0, tuning: this.tuning });
+    } catch (e) { console.warn('playlist: could not pre-parse', t.name, e); }
+  }
+
+  /** The card while listening along and the next song is still recording. */
+  private listenWait() {
+    const l = this.playlist as ListenAlong;
+    const sec = Math.floor(l.recordingSec);
+    const line2 = !l.live ? 'Sharing stopped: nothing more to ride' : sec > 0 ? `Recording song ${l.size + 1} · ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : 'Waiting for the music';
+    if (line2 === this.waitShown) return;
+    this.waitShown = line2;
+    if (this.phase === 'ended') { this.toast(line2, 1500); return; }
+    this.showCard('landing', 0, { name: 'Listening along', line2 });
+  }
+
+  private async shuffleFolder(dir: FileSystemDirectoryHandle) {
+    this.toast(`Looking for music in ${dir.name}…`, 6000);
+    this.startPlaylist(await Playlist.fromDirectory(dir));
+  }
+
   async loadDemo() {
     await this.loadAudio(makeDemoTrack(), 'Test Tones - Valence Line.wav');
   }
@@ -191,6 +276,7 @@ class App {
   private async loadAudio(buf: ArrayBuffer, name: string) {
     this.lastFile = { buf: buf.slice(0), name };
     if (this.phase !== 'landing') this.resetForNewTrack();
+    this.preStarted = false;
     $('#drop').classList.add('hidden');
     void this.player.ctx.resume();
     this.phase = 'title';
@@ -515,8 +601,27 @@ class App {
         if (this.signalStop && ahead > 8) { this.signalStop = false; this.player.play(this.player.time); }
       }
       if (score && this.phase === 'run' && s > score.track.durationSec + 0.2) this.end();
+      if (this.playlist instanceof Playlist && score) {
+        // Shuffle: parse the next song once this one is settled (or nearly over), and move on once
+        // the train has pulled into its terminus (or the curtain has come down).
+        const settled = score.final && (!this.deep || this.deep.state === 'done' || this.deep.state === 'skipped');
+        if (!this.preStarted && score.final && (settled || s > score.track.durationSec - 90)) {
+          this.preStarted = true;
+          const next = this.playlist.peek();
+          if (next) void this.preanalyse(next);
+        }
+      }
+      if (this.playlist && this.phase === 'ended' && this.endedAt !== null && !this.advancing && this.p - this.endedAt > (this.world.mode === 'train' ? 12 : 4)) {
+        if (this.playlist instanceof Playlist || this.playlist.peek()) void this.playNext();
+        else this.listenWait();
+      }
       // The train sees its terminus coming; a stage only shows the end card once the music stops.
       if (score && score.final && !this.endBuilt && (this.world.mode === 'train' || s > score.track.durationSec)) this.buildEndStation();
+    }
+    // Listening along: the first song (or a song that is still recording) is the wait.
+    if (this.playlist instanceof ListenAlong && this.phase === 'landing' && !this.advancing) {
+      if (this.playlist.peek()) void this.playNext();
+      else this.listenWait();
     }
 
     if (head) {
@@ -603,7 +708,7 @@ class App {
     $('#endcard .lead').textContent = this.world.mode === 'train' ? 'Terminus.' : 'Curtain.';
     // At the end of a train ride, invite people to hear the same song again with no train at all.
     $('#tonon').classList.toggle('hidden', this.pack.id === 'non-gondry');
-    $('#endcard').classList.remove('hidden');
+    if (!this.playlist) $('#endcard').classList.remove('hidden');
   }
 
   private buildEndStation() {
@@ -701,6 +806,44 @@ class App {
     $('#choose').addEventListener('click', () => input.click());
     input.addEventListener('change', () => { if (input.files?.length) void this.loadFiles([...input.files]); });
     $('#demo').addEventListener('click', () => void this.loadDemo());
+    // Shuffle a folder: the browser's folder picker where it has one (and it is remembered for
+    // next time), otherwise a folder upload field (the files still never leave the machine).
+    const dirInput = $<HTMLInputElement>('#dir');
+    $('#folder').addEventListener('click', async () => {
+      if (!canPickFolder()) { dirInput.click(); return; }
+      const dir = await pickFolder();
+      if (!dir) return;
+      void rememberFolder(dir);
+      await this.shuffleFolder(dir);
+    });
+    dirInput.addEventListener('change', () => {
+      const files = [...(dirInput.files ?? [])];
+      const name = (files[0] as any)?.webkitRelativePath?.split('/')[0] || 'your folder';
+      this.startPlaylist(Playlist.fromFiles(files, name));
+    });
+    void lastFolder().then(dir => {
+      if (!dir) return;
+      const btn = $('#refolder');
+      btn.textContent = `↻ Shuffle “${dir.name}” again`;
+      btn.hidden = false;
+      btn.addEventListener('click', async () => {
+        if (await regainAccess(dir)) await this.shuffleFolder(dir);
+        else this.toast('The browser did not allow reading that folder: pick it again', 3500);
+      });
+    });
+    $('#next').addEventListener('click', () => void this.playNext());
+    // Listen along to another tab (desktop Chrome and Edge share tab audio).
+    $('#listen').hidden = !canListenAlong();
+    $('#listen').addEventListener('click', async () => {
+      const l = await ListenAlong.start(this.player.ctx);
+      if (typeof l === 'string') { this.toast(l, 4500); return; }
+      $('#drop').classList.add('hidden');
+      $('#next').classList.remove('hidden');
+      // Each song is parsed as soon as it has finished recording, so its ride can start at once.
+      l.onSong = t => { void this.preanalyse(t); };
+      l.onStop = () => this.toast('Listen along stopped: the songs already recorded will still play', 4000);
+      this.startPlaylist(l);
+    });
     const drop = $('#stage');
     drop.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
     drop.addEventListener('dragleave', () => document.body.classList.remove('dragging'));
@@ -792,6 +935,7 @@ class App {
       if (e.key === 'd' || e.key === 'D') this.debug.toggle();
       if (e.key === 'g' || e.key === 'G') { this.look.wander = !this.look.wander; this.toast(this.look.wander ? 'Wandering-viewer test on (refocus metric in debug view)' : 'Wandering-viewer test off'); }
       if (e.key === 'c' || e.key === 'C') this.look.center();
+      if ((e.key === 'n' || e.key === 'N') && this.playlist) void this.playNext();
       if (e.key === 'f' || e.key === 'F') $('#fs').click();
       if (e.key === 'x' || e.key === 'X') this.cycleFx();
       if ((e.key === 'r' || e.key === 'R') && this.driver instanceof Visualiser) this.toast(`New seed: ${this.driver.reroll()}`);

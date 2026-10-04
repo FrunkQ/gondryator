@@ -16,11 +16,15 @@
 
     <div id="drop" class="ui card">
       <p class="lead">Drop a music file anywhere to depart.</p>
-      <p class="small">MP3, WAV, FLAC, OGG or M4A. It stays on your machine. Add a MIDI file of the same track for the sharpest sync.</p>
+      <p class="small">MP3, WAV, FLAC, OGG or M4A. Drop several, or pick a folder, to shuffle them one ride after another. It all stays on your machine. Add a MIDI file of the same track for the sharpest sync.</p>
       <div class="row">
         <button id="choose">Choose a file</button>
+        <button id="folder" class="ghost" title="Shuffle play every song in a folder, one ride after another. It stays on your machine.">Shuffle a music folder</button>
+        <button id="refolder" class="ghost" hidden></button>
+        <button id="listen" class="ghost" hidden title="Ride along to another tab: a streaming service, a radio station, a mix. Share the tab with its audio; the ride runs one song behind, so it knows each song's shape before it plays.">Listen along to a tab</button>
         <button id="demo" class="ghost">Play a generated demo</button>
       </div>
+      <input id="dir" type="file" webkitdirectory multiple hidden />
       <button id="door" title="Step into the discothèque: the non-Gondry view, a world of light all round you">
         <span class="sign">Discothèque</span>
         <span class="frame"><span class="glow"></span><span class="leaf"><span class="knob"></span></span></span>
@@ -51,6 +55,7 @@
 
     <div id="bar" class="ui">
       <button id="play" title="Play / pause (space)">▶</button>
+      <button id="next" class="ghost hidden" title="Next track in the shuffle (N)">⏭</button>
       <span id="time"></span>
       <div class="scrubwrap"><div id="analysed"></div><input id="scrub" type="range" min="0" max="1000" value="0" /></div>
       <button id="deep" class="ghost hidden"></button>

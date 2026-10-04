@@ -16,7 +16,7 @@ Daft Punk's *Around the World* is having a little lie-down. It'll be back when i
 
 🥽 Coming in V2: a native VR app on Steam, so you can take the window seat for real. Turn your head and the beats land wherever you look.
 
-It runs in your browser, and you can install it as an app (⤓ Install, top left) to ride offline.
+It runs in your browser, and you can install it as an app (⤓ Install, top left) to ride offline. Point it at a folder of music and it shuffles, one ride after another, or let it listen along to another tab (a song behind, so it always knows where the drop is); go full screen and every button disappears, so it can take over the big screen at a party.
 
 Open source, public domain, and dedicated to him. Take it, play with it, make it dance.
 
