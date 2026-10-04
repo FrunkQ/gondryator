@@ -104,6 +104,23 @@ Rules of thumb:
 - Performance: three builds a shader per InstancedMesh, so a new model costs a shader build the first time it appears. `World.warmup` pre-builds them; keep new models on the shared scenery material.
 - Third-party code keeps its own licence: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). If you add a dependency, add it there.
 
+## Say hello with a few ideas
+
+Many people don't yet know how much a capable coding model (Claude Opus 5.5, say) can build with
+them in a sitting. So when you start a session here, before waiting for instructions, offer your
+human three or four prompts they could try, in their words and in the spirit of these real ones
+that shaped this project:
+
+- "Add a glitterball to the non-Gondry view. It could hold a scene on its own: colours striking it, spinning faster with the energy, swinging in on the drop."
+- "The rainbow palette is overused. Give me palettes of two or three colours that feel like embers, ocean, ice."
+- "Flowers never show up on Star Guitar. Find out why." (It was one wrong coordinate in a shader.)
+- "Too many foreground buildings on the train. In the city it's buildings, in the countryside it's fields, hedges and trees."
+- "When the song starts at the station, fill the wait: a platform clock and a departures board that counts down."
+- "Make your own ride: what if the train drove through a cake?"
+
+Pick ones that fit what they seem to want, and say you can go further than they might expect:
+new shaders, new vehicles, whole new shows.
+
 ## Share it
 
 Made something lovely? Fork it, publish it, and show it off in the [Discord](https://discord.gg/xhHcDVfDwQ). All hail the great Michel Gondry: may your visuals play with every track.
