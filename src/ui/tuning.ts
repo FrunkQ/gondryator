@@ -3,7 +3,8 @@
 // "now" line as they sound, so you can see and hear at once whether the parse is right.
 
 import { Analyzer } from '../analysis/analyzer';
-import { DEFAULT_TUNING, TUNING_PARAMS, type Tuning } from '../analysis/tuning';
+import type { AutoTuneResult } from '../analysis/autotune';
+import { DEFAULT_TUNING, TUNING_PARAMS, TUNING_PRESETS, type Tuning } from '../analysis/tuning';
 import { applyDelta, emptyScore, type Score, type ScoreEvent } from '../score/types';
 import type { Player } from '../audio/player';
 import { toMono } from '../audio/player';
@@ -39,6 +40,8 @@ export interface TuningHost {
   togglePlay(): void;
   /** Re-run the show with these settings. */
   apply(t: Tuning): void;
+  /** Search for settings that suit the loaded song, starting from `start`. */
+  autoTune(start: Tuning, onProgress: (p: number) => void): Promise<AutoTuneResult | null>;
 }
 
 export class TuningScreen {
@@ -73,8 +76,11 @@ export class TuningScreen {
           <label class="tn-zoom">Zoom <input type="range" min="40" max="400" value="140"></label>
         </div>
         <div class="tn-legend">${(Object.keys(COLOURS) as Lane[]).map(l => `<span><i style="background:${COLOURS[l]}"></i>${l}</span>`).join('')}</div>
+        <label class="tn-preset">Preset <select>${TUNING_PRESETS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('')}</select></label>
         <div class="tn-params"></div>
+        <p class="tn-autonote"></p>
         <div class="tn-row tn-actions">
+          <button class="tn-auto" title="Try a couple of dozen settings on a loud stretch of this song and keep the ones that give the tidiest parse">✨ Auto-tune</button>
           <button class="tn-apply" title="Restart the show with these settings">Apply to the show</button>
           <button class="ghost tn-reset">Reset</button>
           <button class="ghost tn-copy" title="Copy the settings as JSON">Copy</button>
@@ -89,6 +95,27 @@ export class TuningScreen {
     el.querySelector('.tn-play')!.addEventListener('click', () => this.host.togglePlay());
     el.querySelector<HTMLInputElement>('.tn-zoom input')!.addEventListener('input', e => { this.pxPerSec = Number((e.target as HTMLInputElement).value); });
     el.querySelector('.tn-apply')!.addEventListener('click', () => { this.host.apply({ ...this.tuning }); this.toggle(false); });
+    const preset = el.querySelector<HTMLSelectElement>('.tn-preset select')!;
+    preset.addEventListener('change', () => {
+      this.tuning = { ...DEFAULT_TUNING, ...TUNING_PRESETS[Number(preset.value)].values };
+      this.buildParams();
+      this.reparse();
+    });
+    const auto = el.querySelector<HTMLButtonElement>('.tn-auto')!;
+    auto.addEventListener('click', async () => {
+      if (auto.disabled || !this.host.audio()) return;
+      auto.disabled = true;
+      const r = await this.host.autoTune({ ...this.tuning }, p => { auto.textContent = `✨ Tuning… ${Math.round(p * 100)}%`; });
+      auto.disabled = false;
+      auto.textContent = '✨ Auto-tune';
+      if (!r) return;
+      this.tuning = { ...r.tuning };
+      this.buildParams();
+      this.reparse();
+      el.querySelector('.tn-autonote')!.textContent = r.changes.length
+        ? `Auto-tune changed ${r.changes.join(', ')}. Apply to the show to ride with them; they are kept for this song.`
+        : 'Auto-tune found nothing better than these settings.';
+    });
     el.querySelector('.tn-reset')!.addEventListener('click', () => { this.tuning = { ...DEFAULT_TUNING }; this.buildParams(); this.reparse(); });
     el.querySelector('.tn-copy')!.addEventListener('click', () => void navigator.clipboard?.writeText(JSON.stringify(this.tuning, null, 2)).catch(() => {}));
     this.canvas.addEventListener('pointermove', e => { const r = this.canvas.getBoundingClientRect(); this.mouse = { x: e.clientX - r.left, y: e.clientY - r.top }; });
@@ -102,6 +129,13 @@ export class TuningScreen {
   }
 
   get isOpen() { return this.open; }
+
+  /** Show these settings (a new song, or auto-tune finished in the background). */
+  setTuning(t: Tuning) {
+    this.tuning = { ...t };
+    this.buildParams();
+    if (this.open) this.reparse();
+  }
 
   toggle(on = !this.open) {
     this.open = on;

@@ -3,7 +3,7 @@ import type { Score } from './types';
 
 const DB = 'gondryator';
 const STORE = 'scores';
-const ENGINE_KEY = 'v3'; // bump when the analysis changes so stale scores are ignored
+const ENGINE_KEY = 'v6'; // bump when the analysis changes so stale scores are ignored
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {

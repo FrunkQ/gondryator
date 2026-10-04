@@ -24,8 +24,17 @@ import type { Pack } from './packs/types';
 import AnalysisWorker from './analysis/worker?worker&inline';
 import { Analyzer } from './analysis/analyzer';
 import { DEFAULT_TUNING, isDefaultTuning, type Tuning } from './analysis/tuning';
+import type { AutoTuneResult } from './analysis/autotune';
 import { TuningScreen } from './ui/tuning';
 import { FrameAnalyser, perf } from './ui/frames';
+
+/** Settings auto-tune found for one song (keyed by the file's hash), if any. */
+function songTuning(hash: string): Tuning | null {
+  try { const j = localStorage.getItem('gondryator.tuning.' + hash); return j ? { ...DEFAULT_TUNING, ...JSON.parse(j) } : null; } catch { return null; }
+}
+function saveSongTuning(hash: string, t: Tuning) {
+  try { localStorage.setItem('gondryator.tuning.' + hash, JSON.stringify(t)); } catch { /* private window */ }
+}
 
 function savedTuning(): Tuning {
   try { return { ...DEFAULT_TUNING, ...JSON.parse(localStorage.getItem('gondryator.tuning') ?? '{}') }; } catch { return { ...DEFAULT_TUNING }; }
@@ -78,6 +87,10 @@ class App {
   private trackInfo = { title: '', artist: '', album: '' };
   /** The music parser's settings (Tuning screen), and the track to re-parse with them. */
   private tuning = savedTuning();
+  /** The settings this track is parsed with: yours, or what auto-tune found for this song. */
+  private trackTuning = this.tuning;
+  private trackHash = '';
+  private tuneWorker: Worker | null = null;
   private audioBuf: AudioBuffer | null = null;
   private lastFile: { buf: ArrayBuffer; name: string } | null = null;
   private tuner!: TuningScreen;
@@ -135,7 +148,9 @@ class App {
     }
     this.look.maxYaw = pack.rig.lookYaw ?? pack.rig.maxYaw;
     this.look.wanderYaw = pack.rig.maxYaw;
-    this.look.setRest(THREE.MathUtils.degToRad(pack.rig.startYaw ?? 0), THREE.MathUtils.degToRad(pack.rig.startPitch ?? 0));
+    // Waiting at the first station you face the board square on; the angled view comes with the ride.
+    const angled = this.phase !== 'landing';
+    this.look.setRest(angled ? THREE.MathUtils.degToRad(pack.rig.startYaw ?? 0) : 0, angled ? THREE.MathUtils.degToRad(pack.rig.startPitch ?? 0) : 0);
     this.onResize();
     const cr = $('#credits');
     cr.textContent = pack.credits + ' ';
@@ -174,16 +189,24 @@ class App {
     const tags = readTags(buf, name);
     this.trackInfo = { title: tags.title, artist: tags.artist, album: tags.album };
     if (tags.art) this.art = await loadImage(URL.createObjectURL(tags.art)).catch(() => null);
-    // The title board crosses the window ~7 s after departure, while the analysis runs.
-    this.titleCross = this.dropAt + 7.5;
-    this.showCard('title', this.rig.titleTravel(this.titleCross), {
+    // The train rolls up to a board with the song's name, turning to the angled view on the way,
+    // and stops there while the analysis and the shader warm-up finish.
+    this.titleCross = this.rig.titleArrival();
+    this.look.restYaw = THREE.MathUtils.degToRad(this.pack.rig.startYaw ?? 0);
+    this.look.restPitch = THREE.MathUtils.degToRad(this.pack.rig.startPitch ?? 0);
+    this.look.center();
+    this.showCard('title', this.titleBoardX(), {
       name: tags.title || 'Untitled', line2: [tags.artist, tags.album].filter(Boolean).join(' · ') || ' ', art: this.art,
     }, { trackside: true });
     const hash = await hashFile(buf);
+    this.trackHash = hash;
+    // Settings saved for this song (by auto-tune or the tuning screen) win over the general ones.
+    this.trackTuning = songTuning(hash) ?? this.tuning;
+    this.tuner?.setTuning(this.trackTuning);
     const audioBuf = await this.player.decode(buf.slice(0));
     this.audioBuf = audioBuf;
     const track = { title: tags.title, artist: tags.artist, album: tags.album, durationSec: audioBuf.duration, art: null, hash };
-    const cached = this.midi || !isDefaultTuning(this.tuning) ? null : await loadScore(hash);
+    const cached = this.midi || !isDefaultTuning(this.trackTuning) ? null : await loadScore(hash);
     if (cached && cached.final) {
       this.score = cached;
       this.analysedSec = cached.track.durationSec;
@@ -200,14 +223,18 @@ class App {
   private attachScore(placeholder?: Score) {
     const s = placeholder ?? this.score!;
     if (!placeholder) this.rig.attachScore(s);
+    // A new score on the same ride keeps the instanced meshes, and so the shaders built for them.
+    const pools = this.driver instanceof Spawner ? this.driver.pools : undefined;
     if (this.driver) { this.driver.reset(-1e9); this.world.scene.remove(this.driver.group); }
     this.driver = this.pack.spawnMode === 'perform'
       ? new Performer(this.pack, this.rig, s, this.world.camera)
-      : new Spawner(this.pack, this.rig, s, this.world.camera);
+      : new Spawner(this.pack, this.rig, s, this.world.camera, undefined, pools);
     this.world.scene.add(this.driver.group);
     // Star Guitar has a second window: invented worlds across the aisle, on the same beat.
-    if (this.other) { this.other.dispose(); this.world.scene.remove(this.other.group); this.other = null; }
-    if (this.pack.rig.lookYaw && this.pack.spawnMode !== 'perform' && !params.has('noother')) {
+    if (this.other && this.pack.rig.lookYaw && !params.has('noother')) {
+      this.other.reset(-1e9);
+      this.other.setScore(s, this.world.camera);
+    } else if (this.pack.rig.lookYaw && this.pack.spawnMode !== 'perform' && !params.has('noother')) {
       // The train looks out on invented worlds; the starship on a psychedelic double of its own.
       const trippy = this.pack.otherSide === 'trippy';
       const otherPack = trippy ? { ...this.pack, id: `${this.pack.id}-mirror`, sectionEvents: undefined } : OTHER_SIDE;
@@ -240,16 +267,24 @@ class App {
   }
 
   /** A landing, title or end card: a station board on the line, or whatever the pack's show uses. */
+  /** Where the song's name board stands: right in the angled view from where the train stops. */
+  private titleBoardX() {
+    const x = this.rig.titleTravel(this.rig.titleArrival());
+    return this.world.mode === 'train' ? x + 8.2 * Math.tan(THREE.MathUtils.degToRad(this.pack.rig.startYaw ?? 0)) : x;
+  }
+
   private showCard(kind: 'landing' | 'title' | 'end', x: number, info: CardInfo, opts: { end?: boolean; trackside?: boolean } = {}) {
     this.lastCard = { kind, x, info, opts };
     perf.mark(`${kind} board`);
     if (this.driver?.card?.(kind, info)) return;
-    this.world.stationBoard(x, info, opts);
+    const board = this.world.stationBoard(x, info, opts);
+    // Build its shaders before it comes into view.
+    if (!params.has('nowarm')) this.world.warmup([board]);
   }
 
   private startAnalysis(buf: AudioBuffer) {
     this.worker?.terminate();
-    const pcm = toMono(buf);
+    const pcm = toMono(buf), sampleRate = buf.sampleRate;
     let midiPtr = 0;
     const onMessage = (m: any) => {
       if (m.type === 'progress') { this.analysedSec = m.analyzedSec; this.analysisWall = m.wallSec; }
@@ -268,7 +303,9 @@ class App {
         perf.mark(`score update (+${d.events.length} events)`);
         if (d.final) {
           this.score.final = true;
-          if (isDefaultTuning(this.tuning)) void saveScore(this.score);
+          if (isDefaultTuning(this.trackTuning)) void saveScore(this.score);
+          // First play of a song on the default settings: learn better ones in the background.
+          if (!this.midi && isDefaultTuning(this.trackTuning) && !params.has('noautotune')) void this.backgroundAutoTune(pcm, sampleRate, this.trackHash);
         }
       }
     };
@@ -276,7 +313,7 @@ class App {
     const onMainThread = () => {
       // Workers can be blocked (strict sandboxes): analyse on the main thread in small slices.
       this.worker = null;
-      const a = new Analyzer(pcm, buf.sampleRate, { chunkSec: 1.5, tuning: this.tuning });
+      const a = new Analyzer(pcm, buf.sampleRate, { chunkSec: 1.5, tuning: this.trackTuning });
       const t0 = performance.now();
       const tick = () => {
         if (this.score?.track.durationSec !== buf.duration) return; // a new track replaced this one
@@ -293,16 +330,46 @@ class App {
       let alive = false;
       w.onmessage = (ev: MessageEvent) => { alive = true; onMessage(ev.data); };
       w.onerror = () => { if (!alive) { w.terminate(); onMainThread(); } };
-      w.postMessage({ type: 'start', pcm: pcm.slice(), sampleRate: buf.sampleRate, throttleMsPerSec: throttle, tuning: this.tuning });
+      w.postMessage({ type: 'start', pcm: pcm.slice(), sampleRate: buf.sampleRate, throttleMsPerSec: throttle, tuning: this.trackTuning });
     } catch {
       onMainThread();
     }
+  }
+
+  /**
+   * Auto-tune (analysis/autotune.ts) in a worker of its own: re-parses a loud stretch of the song
+   * a couple of dozen times and returns the settings that gave the most self-consistent parse.
+   * Resolves null if workers are unavailable or a newer job replaced it.
+   */
+  private runAutoTune(pcm: Float32Array, sampleRate: number, start: Tuning, onProgress?: (p: number) => void): Promise<AutoTuneResult | null> {
+    this.tuneWorker?.terminate();
+    return new Promise(resolve => {
+      let w: Worker;
+      try { w = new AnalysisWorker(); } catch { resolve(null); return; }
+      this.tuneWorker = w;
+      w.onmessage = (ev: MessageEvent) => {
+        if (ev.data.type === 'autotune-progress') onProgress?.(ev.data.p);
+        if (ev.data.type === 'autotune-done') { w.terminate(); if (this.tuneWorker === w) this.tuneWorker = null; resolve(ev.data.result); }
+      };
+      w.onerror = () => { w.terminate(); resolve(null); };
+      w.postMessage({ type: 'autotune', pcm: pcm.slice(), sampleRate, tuning: start });
+    });
+  }
+
+  private async backgroundAutoTune(pcm: Float32Array, sampleRate: number, hash: string) {
+    const r = await this.runAutoTune(pcm, sampleRate, DEFAULT_TUNING);
+    if (!r || hash !== this.trackHash || !r.changes.length || r.score.total < r.baseline.total + 0.15) return;
+    saveSongTuning(hash, r.tuning);
+    this.tuner?.setTuning(r.tuning);
+    this.toast(`Auto-tuned the parser for this song (${r.changes.length} setting${r.changes.length > 1 ? 's' : ''}). Next time it plays, it uses them.`, 5000);
   }
 
   /** Back to the first station for a new journey. */
   private resetForNewTrack() {
     this.worker?.terminate();
     this.worker = null;
+    this.tuneWorker?.terminate();
+    this.tuneWorker = null;
     this.player.pause();
     this.score = null;
     this.midi = null;
@@ -339,7 +406,10 @@ class App {
     const score = this.score;
     if (this.phase === 'title' && score) {
       const ahead = score.final ? Infinity : score.frontierSec;
-      const ready = ahead >= Math.min(MIN_LOOKAHEAD + 0.5, score.track.durationSec) && this.p >= this.titleCross + 1;
+      // Pull away from the name board only when the line ahead is read and every shader is built
+      // (but never wait forever on the shaders).
+      const warm = this.world.warmPending === 0 || this.p > this.titleCross + 15;
+      const ready = ahead >= Math.min(MIN_LOOKAHEAD + 0.5, score.track.durationSec) && this.p >= this.titleCross + 1.2 && warm;
       if (ready) this.go();
     }
     if (this.phase === 'run' || this.phase === 'ended') {
@@ -460,6 +530,9 @@ class App {
     const wasRunning = this.phase === 'run' || this.phase === 'ended';
     const s = this.player.time;
     this.world.dispose();
+    // The old ride's spawners went with its scene.
+    if (this.driver) this.driver.reset(-1e9);
+    this.driver = null; this.other = null;
     await this.buildWorld(pack);
     if (this.score) {
       if (wasRunning) this.rig.goImmediate();
@@ -468,11 +541,11 @@ class App {
     this.lastCard = null;
     if (this.phase === 'title') this.rig.depart(this.dropAt);
     this.attachScore(this.score ? undefined : emptyScore({ title: '', artist: '', album: '', durationSec: 0, art: null, hash: '' }, 0));
-    this.driver!.reset(wasRunning ? s : this.score ? 0 : -1e9);
-    this.other?.reset(wasRunning ? s : this.score ? 0 : -1e9);
+    (this.driver as ShowDriver | null)?.reset(wasRunning ? s : this.score ? 0 : -1e9);
+    (this.other as OtherSide | null)?.reset(wasRunning ? s : this.score ? 0 : -1e9);
     this.endBuilt = false;
     if (this.phase === 'landing' && card) this.showCard('landing', 0, card.info);
-    if (this.phase === 'title') this.showCard('title', this.rig.titleTravel(this.titleCross), { name: this.trackInfo.title || 'Untitled', line2: this.trackInfo.artist || ' ', art: this.art }, { trackside: true });
+    if (this.phase === 'title') this.showCard('title', this.titleBoardX(), { name: this.trackInfo.title || 'Untitled', line2: this.trackInfo.artist || ' ', art: this.art }, { trackside: true });
   }
 
   // ------------------------------------------------------------------ UI
@@ -550,11 +623,26 @@ class App {
         else if (this.player.playing) this.player.pause();
         else if (this.audioBuf && this.phase === 'landing') this.player.play(Math.max(0, this.player.time));
       },
+      autoTune: (start, onProgress) => {
+        const buf = this.audioBuf;
+        if (!buf) return Promise.resolve(null);
+        const hash = this.trackHash;
+        return this.runAutoTune(toMono(buf), buf.sampleRate, start, onProgress).then(r => {
+          if (r && hash === this.trackHash) saveSongTuning(hash, r.tuning);
+          return r;
+        });
+      },
       apply: t => {
-        this.tuning = t;
-        try { localStorage.setItem('gondryator.tuning', JSON.stringify(t)); } catch { /* private window */ }
+        // With a song loaded the settings are kept for that song; otherwise they become the default.
+        if (this.trackHash) {
+          if (isDefaultTuning(t)) { try { localStorage.removeItem('gondryator.tuning.' + this.trackHash); } catch { /* private window */ } }
+          else saveSongTuning(this.trackHash, t);
+        } else {
+          this.tuning = t;
+          try { localStorage.setItem('gondryator.tuning', JSON.stringify(t)); } catch { /* private window */ }
+        }
         if (this.lastFile) void this.loadAudio(this.lastFile.buf, this.lastFile.name);
-        this.toast(isDefaultTuning(t) ? 'Parser back on its default settings' : 'Re-parsing the track with your tuning', 3000);
+        this.toast(isDefaultTuning(t) ? 'Parser back on its default settings' : 'Re-parsing the track with these settings', 3000);
       },
     }, this.tuning);
     document.body.appendChild(this.tuner.el);

@@ -87,6 +87,22 @@ function lathe(points: [number, number][], color: number, seg = 16): Part {
   return colorize(g, color, 0.8);
 }
 
+/** One Italian cypress at x, about 10 m tall at scale 1: a leafy flame, not a cone. */
+function cypress(x: number, scale: number, color: number, seed: number): Part[] {
+  const H = 10 * scale, R = 1.15 * scale;
+  const flame = lathe([[0, 0.4], [R * 0.75, 0.9], [R, H * 0.28], [R * 0.92, H * 0.55], [R * 0.62, H * 0.8], [R * 0.25, H * 0.95], [0, H]], color, 9);
+  flame.translate(x, 0, 0);
+  // A few tufts break up the outline.
+  let k = seed * 7919 + 13;
+  const rnd = () => ((k = (k * 9301 + 49297) % 233280) / 233280);
+  const tufts: Part[] = [];
+  for (let i = 0; i < 5; i++) {
+    const y = H * (0.2 + rnd() * 0.6), r = R * (0.9 - (y / H) * 0.6), a = rnd() * Math.PI * 2;
+    tufts.push(sphere(R * 0.45, x + Math.cos(a) * r * 0.7, y, Math.sin(a) * r * 0.7, color, 1, 1.6, 1, 6));
+  }
+  return [...T(SURF.foliage, flame, ...tufts), cyl(0.18 * scale, 0.22 * scale, 0.6, x, 0.3, 0, 0x4a3828, 6)];
+}
+
 function merge(parts: Part[]): THREE.BufferGeometry {
   // ExtrudeGeometry/Lathe are non-indexed or indexed inconsistently; normalise.
   const norm = parts.map(p => {
@@ -210,8 +226,9 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     ...[-2.5, 0, 2.5].map(x => roof(1.2, 8, 1.2, x, 10, 0, 0x8a8c88)),
     T1(SURF.brick, cyl(0.6, 0.8, 6, 2.5, 13, -2, 0x8a6b5c, 8)),
   ]),
+  // A windbreak of Italian cypresses: flame-shaped, leafy, slightly different heights.
   'cypress-row': () => merge([
-    cone(1.1, 10, 0, 5.2, 0, 0x2f4a2a, 8), cyl(0.2, 0.2, 0.5, 0, 0.25, 0, 0x4a3828, 6),
+    ...cypress(-3.2, 0.85, 0x2f4a2a, 3), ...cypress(0, 1.05, 0x34502d, 5), ...cypress(3.1, 0.92, 0x2b4527, 8),
   ]),
 
   // --- far landmarks (pads, long notes) --------------------------------------------------
@@ -247,7 +264,7 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
   'tree': () => merge([cyl(0.22, 0.38, 3.4, 0, 1.7, 0, 0x5b4632, 7), cyl(0.08, 0.12, 2, 0.6, 3.6, 0.2, 0x5b4632, 5),
     ...canopy(0, 4.6, 0, 2.6, 0x587a3d, 11)]),
   'plane-tree': () => merge([cyl(0.35, 0.5, 4.5, 0, 2.25, 0, 0x9c917d, 8), ...canopy(0, 6.6, 0, 3.8, 0x6b8a45, 23)]),
-  'cypress': () => merge([cone(0.9, 8, 0, 4.4, 0, 0x2d4628, 7), cyl(0.15, 0.15, 0.5, 0, 0.25, 0, 0x4a3828, 5)]),
+  'cypress': () => merge(cypress(0, 0.85, 0x2d4628, 2)),
   'bush': () => merge(canopy(0, 0.8, 0, 1.3, 0x6d8442, 5, 0.6)),
   'far-hill': () => merge([T1(SURF.grass, sphere(120, 0, -10, 0, 0x93a46a, 2.2, 0.45, 1, 16))]),
 
@@ -352,6 +369,17 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     T1(SURF.glass, colorize(new THREE.OctahedronGeometry(1.4, 0).scale(1, 10, 1).translate(0, 4, 0), 0x6fb8ff)),
     T1(SURF.glow, colorize(new THREE.OctahedronGeometry(0.5, 0).scale(1, 9, 1).translate(0, 4, 0), 0xbfe8ff)),
     T1(SURF.glow, sphere(0.6, 0, 18.5, 0, 0xffffff, 1, 1, 1, 8)),
+  ]),
+  // Held notes. Segments overlap so a row of them reads as one shape; scaled in height by pitch.
+  'ridge': () => merge([
+    T1(SURF.rock, sphere(10, 0, 0, 0, 0x8f897d, 1.25, 1.5, 0.9, 12)),
+    T1(SURF.stone, sphere(5.2, 0, 11.2, 0, 0xf4f3ee, 1.5, 0.55, 1.0, 10)),
+  ]),
+  'ridge-low': () => merge([T1(SURF.grass, sphere(8, 0, 0, 0, 0x7d8f50, 1.3, 1, 1, 12))]),
+  'lavender-ridge': () => merge([T1(SURF.lavender, sphere(7, 0, 0, 0, 0x8d78c4, 1.4, 0.9, 1, 12))]),
+  'light-ribbon': () => merge([
+    T1(SURF.glow, colorize(new THREE.CylinderGeometry(0.28, 0.28, 9.6, 8, 1).rotateZ(Math.PI / 2), 0xbfe8ff)),
+    T1(SURF.glass, colorize(new THREE.CylinderGeometry(0.7, 0.7, 9.4, 10, 1).rotateZ(Math.PI / 2), 0x6fb8ff)),
   ]),
   // Section change: a ring gate the ship flies straight through.
   'ring-gate': () => merge([

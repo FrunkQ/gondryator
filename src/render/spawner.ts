@@ -4,8 +4,8 @@
 // steered while in flight. The section-7 metric is measured here.
 
 import * as THREE from 'three/webgpu';
-import type { Pack, PackLayer, MappingRule } from '../packs/types';
-import type { Score, ScoreEvent } from '../score/types';
+import type { Pack, PackLayer, MappingRule, RidgeLayer } from '../packs/types';
+import { sampleEnvelope, type Envelope, type Score, type ScoreEvent } from '../score/types';
 import type { CameraRig } from './rig';
 import { Pools, type PooledObject } from './pool';
 import { getModel } from './models';
@@ -27,6 +27,8 @@ interface Live {
   baseX: number; // x at spawn (before steering)
   focusY: number;
   measured: boolean;
+  /** Entry timing: how far the model's middle sits past its front edge (so the front enters on the beat). */
+  xOff?: number;
 }
 
 export interface GazeSource {
@@ -74,10 +76,11 @@ export class Spawner {
 
   private probe: THREE.PerspectiveCamera;
 
-  constructor(private pack: Pack, private rig: CameraRig, private score: Score, camera: THREE.PerspectiveCamera, material?: THREE.Material) {
+  /** `pools`: reuse the instanced meshes of an earlier spawner, so their shaders are not built again. */
+  constructor(private pack: Pack, private rig: CameraRig, private score: Score, camera: THREE.PerspectiveCamera, material?: THREE.Material, pools?: Pools) {
     this.camera = camera;
     this.probe = camera.clone();
-    this.pools = new Pools(200, material);
+    this.pools = pools ?? new Pools(200, material);
     for (const l of pack.layers) this.layers.set(l.id, { layer: l, events: [], ptr: 0, lead: rig.leadTime(l.depth + (l.depthJitter ?? 0)) });
     const models = new Set<string>();
     for (const l of pack.layers) for (const ms of Object.values(l.models)) ms.forEach(m => models.add(m));
@@ -85,6 +88,8 @@ export class Spawner {
     if (pack.sectionEvents?.onNewSection) models.add(pack.sectionEvents.onNewSection);
     if (pack.sectionEvents?.onBreakdown) models.add(pack.sectionEvents.onBreakdown);
     for (const il of pack.idle ?? []) models.add(il.model);
+    if (pack.contour) for (const ms of Object.values(pack.contour.models)) ms.forEach(m => models.add(m));
+    for (const R of pack.ridges ?? []) for (const ms of Object.values(R.models)) ms.forEach(m => models.add(m));
     this.pools.warm([...models]);
   }
 
@@ -192,7 +197,7 @@ export class Spawner {
       if (o.vx !== 0) o.x = l.baseX + o.vx * (s - o.t0);
       if (o.grow < 1) o.grow = Math.min(1, o.grow + dt / 0.6);
       if (l.tier === 1 && this.steering && s < l.t) {
-        const target = this.rig.travel(l.t) + l.depth * Math.tan(clampAbs(gaze.yaw, yawMax));
+        const target = this.rig.travel(l.t) + l.depth * Math.tan(this.hitYaw(clampAbs(gaze.yaw, yawMax))) + (l.xOff ?? 0);
         const onScreen = this.ndcX(o.x, l.focusY, o.z);
         const v = this.rig.speedAt(s);
         // Off screen the object can slide quickly (nobody sees it); in view, only subtly.
@@ -212,7 +217,9 @@ export class Spawner {
           this.probe.position.set(this.rig.travel(l.t), this.rig.spec.eyeHeight, 0);
           this.probe.updateMatrixWorld(true);
           tmpV.set(o.x, l.focusY, o.z).project(this.probe);
-          const hit = Math.abs(tmpV.x) <= 1 / 3 && Math.abs(tmpV.y) <= 1 && tmpV.z < 1;
+          // At its sound: just entering the view (or in the central third, for 'centre' rides).
+          const ax = Math.abs(tmpV.x), entry = (this.rig.hitAngle?.() ?? 0) > 0;
+          const hit = (entry ? ax >= 0.6 && ax <= 1.15 : ax <= 1 / 3) && Math.abs(tmpV.y) <= 1 && tmpV.z < 1;
           this.metric.total++;
           if (hit) this.metric.hits++;
           const bl = (this.metric.byLayer[l.layer?.layer.id ?? '?'] ??= [0, 0]);
@@ -226,6 +233,85 @@ export class Spawner {
     this.updateAmbient(s);
     this.pools.flush();
     this.lastS = s;
+  }
+
+  /** Per ridge layer: which envelope samples belong to a held line long enough to show. */
+  private ridgeMask: { mask: Uint8Array; done: number; runStart: number; last: number; gap: number; lo: number; hi: number }[] = [];
+
+  private heldMask(R: RidgeLayer, ri: number, env: Envelope) {
+    const st = (this.ridgeMask[ri] ??= { mask: new Uint8Array(0), done: 0, runStart: -1, last: 0, gap: 0, lo: 0, hi: 0 });
+    const v = env.values, n = v.length;
+    if (st.mask.length < n) { const m = new Uint8Array(Math.max(n, st.mask.length * 2)); m.set(st.mask); st.mask = m; }
+    const minLen = Math.round(R.minDur * env.rate);
+    for (let i = st.done; i < n; i++) {
+      // A line continues while the pitch is there and moves smoothly (a slide, not a leap);
+      // dropouts of up to 80 ms don't break it.
+      if (v[i] <= 0) {
+        if (st.runStart >= 0 && ++st.gap > 4) st.runStart = -1;
+        if (st.runStart < 0) continue;
+      } else {
+        const smooth = st.runStart >= 0 && Math.abs(v[i] - st.last) < 1.2;
+        if (!smooth) { st.runStart = i; st.lo = st.hi = v[i]; }
+        st.lo = Math.min(st.lo, v[i]); st.hi = Math.max(st.hi, v[i]);
+        st.last = v[i]; st.gap = 0;
+      }
+      // Only lines that actually glide: a steady note is a single object, not a ridge.
+      if (st.runStart >= 0 && i - st.runStart + 1 >= minLen && st.hi - st.lo >= 0.8) {
+        // A gliding line: mark the whole run so far.
+        for (let k = i; k >= st.runStart && !st.mask[k]; k--) st.mask[k] = 1;
+      }
+    }
+    st.done = n;
+    return st.mask;
+  }
+
+  private updateRidge(R: RidgeLayer, ri: number, camX: number, want: Set<string>) {
+    const env = this.score.envelopes[R.pitch];
+    if (!env || !env.values.length) return;
+    const mask = this.heldMask(R, ri, env);
+    const known = env.values.length / env.rate;
+    const rest = THREE.MathUtils.degToRad(this.rig.spec.startYaw ?? 0);
+    const ahead = R.depth * Math.tan(this.hitYaw(rest));
+    const reach = Math.min(1400, R.depth * 1.6 + 100);
+    const c0 = Math.floor((camX - reach) / R.spacing), c1 = Math.floor((camX + reach) / R.spacing);
+    for (let c = c0; c <= c1; c++) {
+      const key = 'ridge' + ri + ':' + c;
+      if (this.ambientCells.has(key)) { want.add(key); continue; }
+      const x = c * R.spacing;
+      // The pitch at the moment this stretch comes into view.
+      const t = this.rig.timeAtTravel(x - ahead);
+      if (t < 0.5 || t >= known) continue;
+      const i = Math.min(env.values.length - 1, Math.round(t * env.rate));
+      if (!mask[i]) continue;
+      want.add(key);
+      let r = hash32(c, ri, 777);
+      const rnd = () => ((r = Math.imul(r ^ (r >>> 15), 2246822507) >>> 0), (r & 0xffff) / 0x10000);
+      const theme = this.themeAt(t);
+      const models = R.models[theme] ?? Object.values(R.models)[0];
+      const o = this.pools.acquire(models[Math.floor(rnd() * models.length)]);
+      const items: Live[] = [];
+      if (o) {
+        const semis = env.values[i] - R.pitchCenter;
+        o.x = x; o.z = -(R.depth + (rnd() - 0.5) * 3);
+        o.sx = o.sz = 0.92 + rnd() * 0.16;
+        if (R.float) { o.y = Math.max(0.5, R.float.y + semis * R.float.perSemitone); o.sy = 1; }
+        else { o.y = 0; o.sy = THREE.MathUtils.clamp(1 + semis * (R.heightPerSemitone ?? 0.05), R.minScale ?? 0.3, R.maxScale ?? 2.5); }
+        o.rotY = 0; o.grow = 1;
+        const tints = R.tints?.[theme];
+        if (tints) o.color.set(tints[Math.floor(rnd() * tints.length)]); else o.color.setRGB(1, 1, 1);
+        this.pools.write(o);
+        items.push({ obj: o, t, tier: 3, depth: R.depth, despawnAt: Infinity, layer: null, baseX: x, focusY: 0, measured: true });
+      }
+      this.ambientCells.set(key, items);
+    }
+  }
+
+  /**
+   * The angle an object must be at when its sound plays, for a gaze at `yaw`: the leading edge of
+   * the view, so it comes into sight on the beat and everything behind it is history.
+   */
+  private hitYaw(yaw: number) {
+    return Math.min(1.35, yaw + (this.rig.hitAngle?.() ?? 0));
   }
 
   private ndcX(x: number, y: number, z: number) {
@@ -244,13 +330,14 @@ export class Spawner {
     if (!o) return;
     const jitter = L.depthJitter ? ((hash32(h, 7) % 1000) / 1000 - 0.5) * 2 * L.depthJitter : 0;
     const depth = L.depth + jitter;
-    let yaw = 0;
+    // Tier 1 follows the viewer's gaze, tier 2 half way, tier 3 the resting view.
+    let yaw = THREE.MathUtils.degToRad(this.rig.spec.startYaw ?? 0);
     if (this.gazeSpawning) {
       const lead = Math.max(0, e.t - s);
       if (tier === 1) yaw = clampAbs(gaze.predictYaw(Math.min(lead, 1.5)), yawMax);
-      else if (tier === 2) yaw = 0.5 * clampAbs(gaze.predictYaw(Math.min(lead, 1.5)), yawMax);
+      else if (tier === 2) yaw = 0.5 * (yaw + clampAbs(gaze.predictYaw(Math.min(lead, 1.5)), yawMax));
     }
-    this.rig.placeFor(e.t, depth, yaw, tmpV);
+    this.rig.placeFor(e.t, depth, this.hitYaw(yaw), tmpV);
     o.x = tmpV.x; o.y = L.y ?? 0; o.z = tmpV.z;
     const vel = Math.round(e.vel * 10) / 10;
     const sc = (L.scale ?? 1) * (1 + (L.scaleByVel ?? 0) * (vel - 0.5));
@@ -272,7 +359,11 @@ export class Spawner {
     const bb = getModel(model).boundingBox!;
     const top = bb.max.y * o.sy;
     const focusY = THREE.MathUtils.clamp(this.rig.spec.eyeHeight, 0.3, Math.max(0.3, top * 0.9));
-    this.live.push({ obj: o, t: e.t, tier, depth, despawnAt: e.t + ls.lead + 0.5, layer: ls, baseX: o.x, focusY, measured: false });
+    // Entry timing: the front of the model (its -x end, the first to come into view) is what
+    // arrives on the beat, so a long note streams in for as long as it lasts.
+    const xOff = (this.rig.hitAngle?.() ?? 0) > 0 ? Math.max(0, -bb.min.x) * o.sx : 0;
+    o.x += xOff;
+    this.live.push({ obj: o, t: e.t, tier, depth, despawnAt: e.t + (xOff || this.rig.hitAngle?.() ? 2 * ls.lead + (2 * xOff) / Math.max(1, this.rig.speedAt(e.t)) : ls.lead) + 0.5, layer: ls, baseX: o.x, focusY, measured: false, xOff });
     this.pools.write(o);
   }
 
@@ -345,6 +436,42 @@ export class Spawner {
         this.ambientCells.set(key, items);
       }
     });
+    // The contour skyline: one model every few metres, as tall as the melody is high when you pass it.
+    const C = this.pack.contour, contour = this.score.envelopes.contour;
+    if (C && contour && contour.values.length) {
+      const known = contour.values.length / contour.rate;
+      const reach = Math.min(1400, C.depth * 1.6 + 100);
+      const c0 = Math.floor((camX - reach) / C.spacing), c1 = Math.floor((camX + reach) / C.spacing);
+      for (let c = c0; c <= c1; c++) {
+        const key = 'contour:' + c;
+        if (this.ambientCells.has(key)) { want.add(key); continue; }
+        let r = hash32(c, 4321);
+        const rnd = () => ((r = Math.imul(r ^ (r >>> 15), 2246822507) >>> 0), (r & 0xffff) / 0x10000);
+        const x = c * C.spacing + (rnd() - 0.5) * C.spacing * 0.3;
+        // Its height is the melody at the moment it comes into view (resting gaze).
+        const rest = THREE.MathUtils.degToRad(this.rig.spec.startYaw ?? 0);
+        const t = this.rig.timeAtTravel(x - C.depth * Math.tan(this.hitYaw(rest)));
+        if (t < 0.5 || t >= known) continue; // only where the music is known
+        want.add(key);
+        const theme = this.themeAt(t);
+        const models = C.models[theme] ?? Object.values(C.models)[0];
+        const o = this.pools.acquire(models[Math.floor(rnd() * models.length)]);
+        const items: Live[] = [];
+        if (o) {
+          const k = sampleEnvelope(contour, t), rise = sampleEnvelope(this.score.envelopes.rise, t);
+          o.x = x; o.y = C.y ?? 0; o.z = -(C.depth + (rnd() - 0.5) * 4);
+          o.sx = o.sz = 0.9 + rnd() * 0.2;
+          o.sy = (C.minScale + (C.maxScale - C.minScale) * k) * (1 + (C.riseBoost ?? 0) * rise);
+          o.rotY = 0; o.grow = 1;
+          const tints = C.tints?.[theme];
+          if (tints) o.color.set(tints[Math.floor(rnd() * tints.length)]); else o.color.setRGB(1, 1, 1);
+          this.pools.write(o);
+          items.push({ obj: o, t, tier: 3, depth: C.depth, despawnAt: Infinity, layer: null, baseX: x, focusY: 0, measured: true });
+        }
+        this.ambientCells.set(key, items);
+      }
+    }
+    (this.pack.ridges ?? []).forEach((R, ri) => this.updateRidge(R, ri, camX, want));
     // Idle scenery before the music: evenly spaced, unsynced, never past where the music starts.
     const idleLimit = this.rig.travel(-0.5);
     const synced = this.rig.travel(0) > this.rig.travel(-1); // going

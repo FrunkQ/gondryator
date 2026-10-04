@@ -13,7 +13,7 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { U, palette } from './shaders';
-import type { Score } from '../score/types';
+import { sampleEnvelope, type Score } from '../score/types';
 
 export type FxLook = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel';
 export const FX_LOOKS: FxLook[] = ['clean', 'prism', 'trip', 'kaleido', 'liquid', 'thermal', 'echo', 'fold', 'hyper', 'tunnel'];
@@ -223,14 +223,18 @@ export class FxDirector {
       const b0 = sc.beats[Math.max(0, lo - 1)], b1 = sc.beats[Math.min(sc.beats.length - 1, lo)];
       if (b1.t > b0.t) phase = Math.min(1, Math.max(0, (s - b0.t) / (b1.t - b0.t)));
     }
-    this.hue += dt * (0.01 + 0.03 * energy * this.cur.trip);
+    const bright = sc && running ? sampleEnvelope(sc.envelopes.bright, s) : 0.3;
+    this.hue += dt * (0.01 + 0.03 * energy * this.cur.trip + 0.04 * bright);
     U.kick.value = this.kick; U.snare.value = this.snare; U.hat.value = this.hat;
     const a = this.locked ? 1 : this.amount;
     U.energy.value = energy; U.trip.value = this.cur.trip * a; U.night.value = night;
     U.hue.value = this.hue; U.beatPhase.value = phase; U.showTime.value = s;
     W.fold.value = (this.cur.fold ?? 0) * a; U.rain.value = this.cur.rain ?? 0;
     W.hyper.value = (this.cur.hyper ?? 0) * a; W.tunnel.value = (this.cur.tunnel ?? 0) * a;
-    W.warp.value = this.warp * (this.warpAll ? 1 : a);
+    // A build-up charges the warp: the smear and the field of view swell as it climbs, then the
+    // section change fires the full jump.
+    const rise = sc && running ? sampleEnvelope(sc.envelopes.rise, s) : 0;
+    W.warp.value = Math.max(this.warp, rise * 0.22) * (this.warpAll ? 1 : a);
     W.kal.value = this.cur.kal * a; W.liquid.value = this.cur.liquid * a; W.rgb.value = this.cur.rgb * a; W.thermal.value = this.cur.thermal * a;
     W.echo.value = this.cur.echo * a; W.bloom.value = LOOKS.clean.bloom + (this.cur.bloom - LOOKS.clean.bloom) * a;
     W.punch.value = this.cur.punch * a; W.glitch.value = this.glitch * a;

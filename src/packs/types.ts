@@ -63,6 +63,47 @@ export interface TroupeSpec {
   label?: string;
 }
 
+/**
+ * A skyline that follows the melody's contour: a model every `spacing` metres whose height is
+ * the melody's pitch at the moment you pass it, so the line rises and falls with the tune, and
+ * swells further through a build-up (`riseBoost`).
+ */
+export interface ContourLayer {
+  depth: number;
+  spacing: number;
+  models: Record<ThemeName, string[]>;
+  tints?: Record<ThemeName, string[]>;
+  /** Height scale at the bottom and the top of the melody's range. */
+  minScale: number;
+  maxScale: number;
+  riseBoost?: number;
+  y?: number;
+}
+
+/**
+ * Slides as one continuous shape: a ridge of hills, a ribbon of light. Wherever the stem's pitch
+ * glides (moves smoothly by a semitone or so, with no leaps) for at least `minDur`, segments line
+ * up along the way, each as high as the pitch at the moment it comes into view. Separate notes
+ * stay separate objects.
+ */
+export interface RidgeLayer {
+  /** Which pitch track: the melody or the bass. */
+  pitch: 'leadPitch' | 'bassPitch';
+  depth: number;
+  spacing: number;
+  /** Shortest held line that makes a ridge, seconds. */
+  minDur: number;
+  models: Record<ThemeName, string[]>;
+  tints?: Record<ThemeName, string[]>;
+  pitchCenter: number;
+  /** Ground ridges: height scale per semitone from pitchCenter, clamped to [minScale, maxScale]. */
+  heightPerSemitone?: number;
+  minScale?: number;
+  maxScale?: number;
+  /** Floating ribbons: height above the ground at pitchCenter, and metres per semitone. */
+  float?: { y: number; perSemitone: number };
+}
+
 /** Regularly spaced scenery shown while the title block runs (before the music is synced). */
 export interface IdleLayer { model: string; depth: number; spacing: number; jitter?: number; chance?: number }
 
@@ -91,6 +132,12 @@ export interface RigSpec {
   startPitch?: number;
   maxPitch: number;
   fov: number;
+  /**
+   * Where a sound's object is when it sounds. 'entry' (the default): just coming into view at the
+   * leading edge, so everything you watch slide away is what has already played. 'centre': in the
+   * middle of the view.
+   */
+  hitAt?: 'entry' | 'centre';
 }
 
 export interface Pack {
@@ -105,6 +152,9 @@ export interface Pack {
   layers: PackLayer[];
   mapping: MappingRule[];
   ambient: AmbientLayer[];
+  /** Scenery whose height traces the melody's contour (see ContourLayer). */
+  contour?: ContourLayer;
+  ridges?: RidgeLayer[];
   idle?: IdleLayer[];
   themes: SectionTheme[];
   /** Theme order as sections advance. A section label can force a theme. */

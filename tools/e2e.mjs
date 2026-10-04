@@ -12,7 +12,7 @@ const has = k => args.includes('--' + k);
 const root = arg('root', 'dist');
 const out = arg('out', 'shots');
 const file = arg('file', null);
-const shots = arg('shots', '3,9,14,20,30').split(',').map(Number);
+const shots = arg('shots', '3,9,14,20,30').split(',').filter(Boolean).map(Number);
 const query = arg('query', '') + (has('wander') ? '&wander' : '') + (has('webgl') ? '&webgl' : '') + (file || has('landing') ? '' : '&demo') + (has('nodebug') ? '' : '&debug') + (has('virtual') ? '&virtual' : '');
 fs.mkdirSync(out, { recursive: true });
 
@@ -47,6 +47,14 @@ if (file) {
 if (arg('look', null)) await page.evaluate(([y, p]) => { window.app.look.targetYaw = y * Math.PI / 180; window.app.look.targetPitch = p * Math.PI / 180; }, arg('look').split(',').map(Number).concat([0]));
 const t0 = Date.now();
 let i = 0;
+// --title 5,10: shots during the title run (title clock seconds since load, virtual clock only).
+for (const at of (arg('title', '') ? arg('title').split(',').map(Number) : [])) {
+  await page.waitForFunction(t => window.__gondry && (window.__gondry.phase !== 'title' && window.__gondry.phase !== 'landing' || window.__gondry.s >= t), at, { timeout: 900000, polling: 250 });
+  const st = await page.evaluate(() => window.__gondry);
+  const name = `${out}/${String(++i).padStart(2, '0')}-title-${at}s.png`;
+  await page.screenshot({ path: name });
+  console.log(name, JSON.stringify({ phase: st?.phase, s: st?.s?.toFixed(2), yaw: st?.yaw, frontier: st?.frontier }));
+}
 for (const at of shots) {
   const wait = at * 1000 - (Date.now() - t0);
   if (has('virtual')) {

@@ -12,7 +12,7 @@ export const STAR_GUITAR: Pack = {
   vehicle: 'train',
   otherSide: 'other-side',
   viewpoint: 'fixed-window',
-  rig: { type: 'lateral-rail', speed: 24, speedByEnergy: 0.25, eyeHeight: 2.7, maxYaw: 70, lookYaw: 180, startYaw: 10, startPitch: -3, maxPitch: 28, fov: 52 },
+  rig: { type: 'lateral-rail', speed: 24, speedByEnergy: 0.25, eyeHeight: 2.7, maxYaw: 70, lookYaw: 180, startYaw: -16, startPitch: 2, maxPitch: 28, fov: 52 },
   spawnMode: 'pass-by',
   layers: [
     { id: 'fence', depth: 4.6, depthJitter: 0.1, scale: 0.9, scaleByVel: 0.3,
@@ -46,6 +46,13 @@ export const STAR_GUITAR: Pack = {
     { depthMin: 600, depthMax: 900, density: { industrial: 0.35, town: 0.35, country: 0.5 },
       models: { industrial: ['far-hill'], town: ['far-hill'], country: ['far-hill'] }, scale: [0.7, 1.4] },
   ],
+  // Held and sliding notes: the melody as a mountain ridge on the horizon, the bass as low hills.
+  ridges: [
+    { pitch: 'leadPitch', depth: 190, spacing: 9, minDur: 0.45, pitchCenter: 69, heightPerSemitone: 0.06, minScale: 0.35, maxScale: 2.2,
+      models: { industrial: ['ridge'], town: ['ridge'], country: ['ridge'] }, tints: { industrial: ['#d8d2c4'], town: ['#ffffff'], country: ['#f0f4e8'] } },
+    { pitch: 'bassPitch', depth: 135, spacing: 8, minDur: 0.5, pitchCenter: 40, heightPerSemitone: 0.07, minScale: 0.3, maxScale: 2,
+      models: { industrial: ['ridge-low'], town: ['ridge-low'], country: ['ridge-low'] }, tints: { industrial: ['#c8c4a8'], town: ['#ffffff'], country: ['#ffffff'] } },
+  ],
   idle: [
     { model: 'catenary-pole', depth: 7.2, spacing: 48 },
     { model: 'fence-post', depth: 4.6, spacing: 6 },
@@ -73,5 +80,5 @@ export const STAR_GUITAR: Pack = {
   // other window (see FxDirector.amount).
   fx: { cycle: ['clean', 'prism', 'hyper', 'trip', 'fold', 'tunnel', 'kaleido', 'thermal', 'echo', 'liquid'], bySection: { breakdown: 'liquid', intro: 'clean' } },
   sectionEvents: { onNewSection: 'overpass', onBreakdown: 'train-car' },
-  window: { width: 1.6, height: 1.0, bottom: -0.42, pillar: 0.26, distance: 1.0, frame: '#7d8483', wall: '#c4bdac' },
+  window: { width: 2.1, height: 1.1, bottom: -0.47, pillar: 0.26, distance: 1.0, frame: '#7d8483', wall: '#c4bdac' },
 };

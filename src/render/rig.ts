@@ -18,6 +18,8 @@ export interface CameraRig {
   depart(p: number): void;
   /** Position along the path during the title phase. */
   titleTravel(p: number): number;
+  /** Title clock time at which the title run comes to rest (at the song's name board). */
+  titleArrival(): number;
   /** The music will start `rampSec` from now (title clock p). */
   go(pNow: number, rampSec: number): void;
   /** Start running at once (pack switched mid-track). */
@@ -29,6 +31,8 @@ export interface CameraRig {
   /** Camera holder position and base orientation at show time s (eye height is added by the world). */
   pose(s: number, pos: THREE.Vector3, quat: THREE.Quaternion): void;
   placeFor(t: number, depth: number, yaw: number, out: THREE.Vector3): void;
+  /** View angle (radians, ahead of the gaze) at which an object sits when its sound plays. */
+  hitAngle?(): number;
   /** Seconds before t that an object at this depth can first come into view. */
   leadTime(depth: number): number;
   /** Show time at which the camera reaches travel position x (for themed ground and ambient). */
@@ -60,23 +64,43 @@ export class LateralRail implements CameraRig {
     this.halfFovH = Math.atan(Math.tan(vf / 2) * aspect);
   }
 
-  /** Title phase: the train waits at the station, then pulls away slowly. p = seconds since load. */
+  /**
+   * Title phase: the train pulls out of the first station, rolls up to the board with the song's
+   * name and draws to a stop there. It waits while the score and the shaders get ready, so any
+   * loading happens while standing still. p = seconds since load.
+   */
   private departAt: number | null = null;
+  /** Metres from the first station to the name board. */
+  titleStop = 30;
+  private static readonly ACC = 3;
+  private static readonly DEC = 4;
   depart(p: number) { if (this.departAt === null) this.departAt = p; }
   get departed() { return this.departAt !== null; }
+  private get titleCruise() {
+    const vi = this.idleSpeed, A = LateralRail.ACC, B = LateralRail.DEC;
+    return Math.max(0, this.titleStop - (vi * A) / 2 - (vi * B) / 2) / vi;
+  }
+  titleArrival() { return this.departAt === null ? Infinity : this.departAt + LateralRail.ACC + this.titleCruise + LateralRail.DEC; }
   titleTravel(p: number) {
     if (this.departAt === null || p < this.departAt) return 0;
-    const u = p - this.departAt, A = 3; // seconds to reach idle speed
-    return u < A ? (this.idleSpeed * u * u) / (2 * A) : this.idleSpeed * (u - A / 2);
+    const u = p - this.departAt, vi = this.idleSpeed, A = LateralRail.ACC, B = LateralRail.DEC, tc = this.titleCruise;
+    if (u < A) return (vi * u * u) / (2 * A);
+    if (u < A + tc) return (vi * A) / 2 + vi * (u - A);
+    const w = Math.min(u - A - tc, B);
+    return (vi * A) / 2 + vi * tc + vi * w - (vi * w * w) / (2 * B);
   }
   /** Start running without a title run-in (pack switch mid-track). */
   goImmediate() { this.going = true; this.goX = 0; this.rampSec = 0.001; this.x0 = 0; this.xs = [0]; this.vs = [this.cruise(0)]; }
+
+  /** Speed when the run-in starts (0 when pulling away from the name board). */
+  private goV = 5;
 
   /** Music will start rampSec from now; the camera is at titleTravel(p) now. */
   go(pNow: number, rampSec: number) {
     this.rampSec = rampSec;
     this.goX = this.titleTravel(pNow);
-    const v = this.spec.speed, vi = this.idleSpeed, R = rampSec;
+    this.goV = Math.max(0, (this.titleTravel(pNow + 0.05) - this.titleTravel(pNow - 0.05)) / 0.1);
+    const v = this.spec.speed, vi = this.goV, R = rampSec;
     this.x0 = this.goX + vi * R + ((v - vi) * R) / 2;
     this.going = true;
     this.xs = [this.x0];
@@ -114,7 +138,7 @@ export class LateralRail implements CameraRig {
 
   travel(s: number): number {
     if (!this.going) return this.titleTravel(s);
-    const R = this.rampSec, vi = this.idleSpeed, v = this.spec.speed;
+    const R = this.rampSec, vi = this.goV, v = this.spec.speed;
     if (s < -R) return this.goX + vi * (s + R);
     if (s < 0) { const u = s + R; return this.goX + vi * u + ((v - vi) * u * u) / (2 * R); }
     const D = this.score?.track.durationSec ?? Infinity;
@@ -135,7 +159,7 @@ export class LateralRail implements CameraRig {
 
   speedAt(s: number): number {
     if (!this.going) return (this.titleTravel(s + 0.05) - this.titleTravel(s - 0.05)) / 0.1;
-    const R = this.rampSec, vi = this.idleSpeed, v = this.spec.speed;
+    const R = this.rampSec, vi = this.goV, v = this.spec.speed;
     if (s < -R) return vi;
     if (s < 0) return vi + ((v - vi) * (s + R)) / R;
     const D = this.score?.track.durationSec ?? Infinity;
@@ -153,6 +177,9 @@ export class LateralRail implements CameraRig {
   placeFor(t: number, depth: number, yaw: number, out: THREE.Vector3) {
     out.set(this.travel(t) + depth * Math.tan(yaw), 0, -depth);
   }
+
+  /** Just inside the leading edge of the screen (an object's middle a touch past the edge). */
+  hitAngle() { return this.spec.hitAt === 'centre' ? 0 : this.halfFovH * 0.9; }
 
   leadTime(depth: number) {
     const reachAngle = Math.min(THREE.MathUtils.degToRad(80), THREE.MathUtils.degToRad(this.spec.maxYaw) + this.halfFovH);
@@ -189,6 +216,7 @@ export class OrbitRig implements CameraRig {
   get departed() { return this.departAt !== null; }
   depart(p: number) { if (this.departAt === null) this.departAt = p; }
   titleTravel(p: number) { return 0.35 * this.omega * p; } // a slower drift while the title shows
+  titleArrival() { return this.departAt === null ? Infinity : this.departAt + 8.5; }
   go(pNow: number, rampSec: number) { this.goAngle = this.titleTravel(pNow); this.rampSec = rampSec; this.going = true; }
   goImmediate() { this.goAngle = 0; this.rampSec = 0.001; this.going = true; }
   attachScore(score: Score) { this.score = score; }

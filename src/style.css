@@ -81,6 +81,8 @@ body.running.idle #stage { cursor: none; }
   #time { min-width: 0; }
   #credits { max-width: 70%; }
 }
+/* Narrow screens: the credits drop below the fork invitation instead of running into it. */
+@media (max-width: 820px) { #credits { top: 42px; max-width: 80%; } }
 [hidden] { display: none !important; }
 
 #credits a { color: inherit; text-decoration: underline; text-underline-offset: 2px; pointer-events: auto; }
@@ -99,6 +101,10 @@ body.running.idle #stage { cursor: none; }
 #tuning h2 { margin: 0; font-size: 17px; }
 #tuning h3 { margin: 14px 0 4px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8597; }
 #tuning .tn-lede { color: #9aa1ad; margin: 6px 0 10px; }
+#tuning .tn-autonote { color: #c9b8ff; margin: 8px 0 0; font-size: 12px; }
+#tuning .tn-autonote:empty { display: none; }
+#tuning .tn-preset { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; font-size: 12px; color: #9aa1ad; }
+#tuning .tn-preset select { flex: 1; background: #1c2130; color: #e6e9ef; border: 1px solid #2c3346; border-radius: 6px; padding: 4px 6px; }
 #tuning .tn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 #tuning .tn-zoom { display: flex; gap: 6px; align-items: center; color: #9aa1ad; }
 #tuning .tn-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0; color: #9aa1ad; }

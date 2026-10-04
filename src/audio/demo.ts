@@ -8,10 +8,10 @@ export function makeDemoTrack(sr = 44100): ArrayBuffer {
     { bars: 4, pads: 1, hats: 0.5 },
     { bars: 8, kick: 1, snare: 0.8, hats: 0.7, bass: 1, pads: 0.6 },
     { bars: 8, kick: 1, snare: 0.9, hats: 0.8, hats16: true, bass: 1, lead: 0.9, pads: 0.6 },
-    { bars: 4, pads: 1, lead: 0.8 },
+    { bars: 4, pads: 1, glide: 0.9 },
     { bars: 8, kick: 1, snare: 0.9, hats: 0.8, hats16: true, bass: 1, lead: 1, pads: 0.7 },
     { bars: 4, pads: 0.8, hats: 0.4 },
-  ] as { bars: number; pads?: number; hats?: number; hats16?: boolean; kick?: number; snare?: number; bass?: number; lead?: number }[];
+  ] as { bars: number; pads?: number; hats?: number; hats16?: boolean; kick?: number; snare?: number; bass?: number; lead?: number; glide?: number }[];
   const totalBars = structure.reduce((a, s) => a + s.bars, 0);
   const lead0 = beat;
   const dur = lead0 + totalBars * bar + 2.5;
@@ -29,6 +29,16 @@ export function makeDemoTrack(sr = 44100): ArrayBuffer {
   const saw = (ph: number) => 2 * (ph - Math.floor(ph + 0.5));
   const bassNote = (t: number, m: number, len: number, v: number) => { const f = mtof(m); let lp = 0; add(t, len, s => { const env = Math.min(1, s / 0.005) * (s > len - 0.03 ? Math.max(0, (len - s) / 0.03) : 1); const x = saw(f * s) * 0.6 + Math.sin(2 * Math.PI * f * s) * 0.6; lp += 0.12 * (x - lp); return v * 0.45 * env * lp; }); };
   const leadNote = (t: number, m: number, len: number, v: number) => { const f = mtof(m); add(t, len, s => { const env = Math.min(1, s / 0.01) * Math.exp(-s / 0.8) * (s > len - 0.04 ? Math.max(0, (len - s) / 0.04) : 1); return v * 0.2 * env * (Math.sin(2 * Math.PI * f * s) + 0.4 * Math.sin(4 * Math.PI * f * s) + 0.2 * Math.sin(6 * Math.PI * f * s)); }); };
+  // A singing synth line that slides between pitches (for the ridges that follow slides).
+  const glideNote = (t: number, m0: number, m1: number, len: number, v: number) => {
+    let ph = 0;
+    add(t, len, s => {
+      const k = Math.min(1, Math.max(0, (s / len - 0.15) / 0.6)), m = m0 + (m1 - m0) * (k * k * (3 - 2 * k));
+      ph += mtof(m) / sr;
+      const env = Math.min(1, s / 0.05) * Math.min(1, Math.max(0, (len - s) / 0.08));
+      return v * 0.2 * env * (Math.sin(2 * Math.PI * ph) + 0.35 * Math.sin(4 * Math.PI * ph) + 0.15 * Math.sin(6 * Math.PI * ph));
+    });
+  };
   const pad = (t: number, notes: number[], len: number, v: number) => { add(t, len, s => { const env = Math.min(1, s / 0.3) * Math.min(1, Math.max(0, (len - s) / 0.3)); let x = 0; for (const m of notes) { const f = mtof(m); x += Math.sin(2 * Math.PI * f * s) + 0.3 * Math.sin(2 * Math.PI * f * 1.003 * s); } return v * 0.06 * env * x; }); };
   const key = 45;
   const chords = [[0, 3, 7], [-4, 0, 3], [-2, 2, 5], [-5, -1, 2]];
@@ -47,6 +57,7 @@ export function makeDemoTrack(sr = 44100): ArrayBuffer {
         if (sec.hats) for (let e = 0; e < (sec.hats16 ? 4 : 2); e++) { if (!sec.hats16 && e === 0 && sec.kick) continue; hat(tq + (e * beat) / (sec.hats16 ? 4 : 2), sec.hats * (e % 2 ? 1 : 0.7)); }
         if (sec.bass) bassNote(tq + beat / 2, key - 12 + bassLine[ci * 4 + q], beat / 2 - 0.02, sec.bass);
       }
+      if (sec.glide) { const up = b % 2 === 0; glideNote(tb, key + 24 + (up ? 0 : 7), key + 24 + (up ? 7 : 0), bar * 0.95, sec.glide); }
       if (sec.lead) for (let k = 0; k < 4; k++) leadNote(tb + k * beat, key + 12 + melody[((b % 2) * 4 + k) % 8] + (ch[0] < 0 ? -2 : 0), beat * 0.9, sec.lead);
     }
     barIdx += sec.bars;

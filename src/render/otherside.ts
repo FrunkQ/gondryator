@@ -63,7 +63,7 @@ export class OtherSide {
   setScore(score: Score, camera: THREE.PerspectiveCamera) {
     this.group.remove(this.spawner.group);
     this.spawner.reset(-1e9);
-    this.spawner = new Spawner(this.pack, this.rig, score, camera, this.material);
+    this.spawner = new Spawner(this.pack, this.rig, score, camera, this.material, this.spawner.pools);
     this.spawner.group.scale.z = -1;
     this.group.add(this.spawner.group);
     this.spawner.refreshLeads();

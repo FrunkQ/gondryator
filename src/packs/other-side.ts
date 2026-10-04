@@ -42,6 +42,12 @@ export const OTHER_SIDE: Pack = {
     { depthMin: 20, depthMax: 140, density: { provence: 3, cosmos: 2.5 },
       models: { provence: ['cypress', 'tree', 'bush'], cosmos: ['asteroid'] }, scale: [0.7, 1.6] },
   ],
+  ridges: [
+    { pitch: 'leadPitch', depth: 190, spacing: 9, minDur: 0.45, pitchCenter: 69, heightPerSemitone: 0.06, minScale: 0.35, maxScale: 2.2,
+      models: { provence: ['ridge'], cosmos: ['light-ribbon'] }, tints: { provence: ['#fff0e0'], cosmos: ['#ffc8f0', '#c8ffe8'] } },
+    { pitch: 'bassPitch', depth: 120, spacing: 8, minDur: 0.5, pitchCenter: 40, heightPerSemitone: 0.07, minScale: 0.3, maxScale: 2,
+      models: { provence: ['lavender-ridge'], cosmos: ['lavender-ridge'] } },
+  ],
   idle: [],
   themes: [
     { name: 'provence', ground: { base: '#a8aa68', stripes: ['#a8aa68'] } },
@@ -51,5 +57,5 @@ export const OTHER_SIDE: Pack = {
   themeBySection: { intro: 'provence' },
   light: [],
   title: { template: 'station-board' },
-  window: { width: 1.6, height: 1.0, bottom: -0.42, pillar: 0.26, distance: 1.0, frame: '#7d8483', wall: '#c4bdac' },
+  window: { width: 2.1, height: 1.1, bottom: -0.47, pillar: 0.26, distance: 1.0, frame: '#7d8483', wall: '#c4bdac' },
 };

@@ -43,7 +43,6 @@ export class Analyzer {
 
   private x: Float32Array;
   private bassSig: Float32Array; private bassSr: number;
-  private leadSig: Float32Array; private leadSr: number;
   private fft = new FFT(N);
   private fftBig = new FFT(4096);
   private mags = new Float32Array(N / 2 + 1);
@@ -57,6 +56,14 @@ export class Analyzer {
   private dbLow: Float32Array; private dbMid: Float32Array; private dbHigh: Float32Array; private dbAll: Float32Array;
   private flat: Float32Array;
   private odf: Float32Array;
+  /** Spectral centroid per frame, 0..1 on a log scale from 200 Hz to 8 kHz. */
+  private centroid: Float32Array;
+  /** The top line: the highest clearly sounding pitch, from harmonic sums on a long FFT (MIDI, 0 = none). */
+  private topLine: Float32Array;
+  private magsTop = new Float32Array(4096 / 2 + 1);
+  // Contour / brightness / rise curve state (advanced in order as envelopes are committed).
+  private contourVal = 0.3; private contourHist: number[] = [];
+  private brightVal = 0.4; private emaFast = 0; private emaSlow = 0; private riseVal = 0; private curveInit = false;
 
   private framesDone = 0;
   private onsetScanned = 0; // frames scanned for onset peaks
@@ -123,17 +130,14 @@ export class Analyzer {
     this.dbLow = new Float32Array(F); this.dbMid = new Float32Array(F); this.dbHigh = new Float32Array(F); this.dbAll = new Float32Array(F);
     this.flat = new Float32Array(F);
     this.odf = new Float32Array(F);
+    this.topLine = new Float32Array(F);
+    this.centroid = new Float32Array(F);
 
     // Band signals for pitch tracking.
     let b = biquad(x, sr, 'lp', k.bassCutHz);
     b = biquad(b, sr, 'lp', k.bassCutHz);
     this.bassSr = sr / 8;
     this.bassSig = decimate(b, 8);
-    let l = biquad(x, sr, 'hp', k.leadLowHz);
-    l = biquad(l, sr, 'lp', k.leadHighHz);
-    l = biquad(l, sr, 'lp', k.leadHighHz);
-    this.leadSr = sr / 2;
-    this.leadSig = decimate(l, 2);
 
     this.bass = { pitch: new Float32Array(F), energy: this.dbLow, active: null, done: [], stem: 'bass', minFrames: Math.max(1, Math.round(k.bassMinNote / this.hopSec)) };
     this.lead = { pitch: new Float32Array(F), energy: this.dbMid, active: null, done: [], stem: 'other', minFrames: Math.max(1, Math.round(k.leadMinNote / this.hopSec)) };
@@ -170,8 +174,9 @@ export class Analyzer {
     const midA = Math.round(200 / binHz), midB = Math.round(3000 / binHz);
     const highA = Math.round(5000 / binHz), highB = Math.min(N / 2, Math.round(12000 / binHz));
     let eL = 0, eM = 0, eH = 0, eA = 0, fL = 0, fM = 0, fH = 0;
-    let logSum = 0, linSum = 0, flatCount = 0;
+    let logSum = 0, linSum = 0, flatCount = 0, cNum = 0, cDen = 0;
     const flatA = Math.round(400 / binHz), flatB = Math.min(N / 2, Math.round(9000 / binHz));
+    const cA = Math.round(200 / binHz), cB = Math.min(N / 2, Math.round(8000 / binHz));
     for (let k = 0; k <= N / 2; k++) {
       const m = mags[k];
       const p = m * m;
@@ -184,7 +189,9 @@ export class Analyzer {
       if (k >= midA && k <= midB) { eM += p; fM += pos; }
       if (k >= highA && k <= highB) { eH += p; fH += pos; }
       if (k >= flatA && k <= flatB) { logSum += Math.log(p + 1e-12); linSum += p; flatCount++; }
+      if (k >= cA && k <= cB) { cNum += k * p; cDen += p; }
     }
+    this.centroid[f] = cDen > 1e-12 ? clamp(Math.log2(Math.max(1, (cNum / cDen) * binHz / 200)) / Math.log2(40), 0, 1) : 0;
     prevLog.set(curLog);
     const norm = 3 * (N / 4) * (N / 4);
     const db = (e: number) => 10 * Math.log10(e / norm + 1e-10);
@@ -201,8 +208,9 @@ export class Analyzer {
       this.bass.pitch[f] = fr > 0 ? hzToMidi(fr) : 0;
     }
     if (this.dbMid[f] > -45) {
-      const fr = yin(this.leadSig, Math.round(center * this.leadSr), 400, Math.floor(this.leadSr / 1500), Math.ceil(this.leadSr / 160), this.leadSr, this.k.leadYin, this.yinScratch);
-      this.lead.pitch[f] = fr > 0 ? hzToMidi(fr) : 0;
+      if ((f & 1) === 0) this.topLine[f] = this.topLineAt(f);
+      else this.topLine[f] = this.topLine[f & ~1];
+      this.lead.pitch[f] = this.topLine[f];
     }
   }
 
@@ -356,7 +364,7 @@ export class Analyzer {
     if (len <= P) return;
     const C = new Float64Array(len);
     const back = new Int32Array(len).fill(-1);
-    const alpha = 6;
+    const alpha = this.k.beatTightness;
     for (let i = 0; i < len; i++) {
       const f = s0 + i;
       const local = this.odf[f];
@@ -457,6 +465,57 @@ export class Analyzer {
     let d = 0, na = 0, nb = 0;
     for (let i = 0; i < 12; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
     return na > 0 && nb > 0 ? 1 - d / Math.sqrt(na * nb) : 0;
+  }
+
+  /**
+   * The melody's pitch as the top line of the mix: harmonic sums for every semitone in the melody band,
+   * then the highest candidate that is nearly as strong as the strongest and whose own
+   * fundamental really sounds (so neither the octave below nor the octave above wins).
+   */
+  private topLineAt(frame: number): number {
+    const m = this.magsTop;
+    // Centred a little before the frame: the long window otherwise hears each note ~35 ms early.
+    this.fftBig.magnitudes(this.x, Math.round(frame * HOP + N / 2 - 3 * HOP) - 2048, m);
+    const binHz = this.sr / 4096;
+    const at = (hz: number) => { const k = Math.round(hz / binHz); return k + 1 < m.length ? Math.max(m[k - 1], m[k], m[k + 1]) : 0; };
+    const lo = Math.max(40, Math.ceil(hzToMidi(this.k.leadLowHz))), hi = Math.min(100, Math.floor(hzToMidi(this.k.leadHighHz)));
+    let peak = 0;
+    for (let k = Math.round(this.k.leadLowHz * 0.9 / binHz); k < Math.round(this.k.leadHighHz * 1.2 / binHz); k++) if (m[k] > peak) peak = m[k];
+    if (peak <= 1e-6) return 0;
+    const sal = new Float32Array(hi + 1);
+    let best = 0;
+    for (let n = lo; n <= hi; n++) {
+      const f0 = 440 * 2 ** ((n - 69) / 12);
+      let sum = 0, w = 1;
+      for (let h = 1; h <= 6; h++) { sum += w * at(f0 * h); w *= 0.85; }
+      sal[n] = sum;
+      if (sum > best) best = sum;
+    }
+    for (let n = hi; n >= lo; n--) {
+      const f0 = 440 * 2 ** ((n - 69) / 12);
+      if (sal[n] >= this.k.leadClarity * best && at(f0) >= this.k.leadPresence * peak) return this.refinePitch(n, binHz);
+    }
+    return 0;
+  }
+
+  /**
+   * The exact pitch near semitone n, so slides glide instead of stepping: the strongest of the
+   * first three harmonics, its peak bin refined by parabolic interpolation.
+   */
+  private refinePitch(n: number, binHz: number): number {
+    const m = this.magsTop;
+    let bestH = 1, bestK = 0, bestV = 0;
+    for (let h = 1; h <= 3; h++) {
+      const f = 440 * 2 ** ((n - 69) / 12) * h;
+      const k0 = Math.floor((f * 0.966) / binHz), k1 = Math.ceil((f * 1.035) / binHz);
+      for (let k = Math.max(1, k0); k <= k1 && k + 1 < m.length; k++) if (m[k] > bestV * (h > bestH ? 1.15 : 1) && m[k] >= m[k - 1] && m[k] >= m[k + 1]) { bestV = m[k]; bestK = k; bestH = h; }
+    }
+    if (!bestK) return n;
+    const a = m[bestK - 1], b = m[bestK], c = m[bestK + 1];
+    const den = a - 2 * b + c;
+    const k = bestK + (Math.abs(den) > 1e-12 ? clamp((0.5 * (a - c)) / den, -0.5, 0.5) : 0);
+    const exact = hzToMidi((k * binHz) / bestH);
+    return Math.abs(exact - n) < 0.6 ? exact : n;
   }
 
   private chromaAt(frame: number): Float32Array {
@@ -634,7 +693,13 @@ export class Analyzer {
         const n0 = this.noveltyAt(b);
         const n1 = b + 1 <= F.length ? this.noveltyAt(b + 1) : 0;
         const nm = this.noveltyAt(b - 1);
-        boundary = n0 > this.k.sectionNovelty && n0 >= n1 && n0 > nm;
+        // Sections last a while; only a drastic change (a drop, a breakdown) cuts one short.
+        // And the bar is set by this song: busy, ever-changing music needs a bigger change to count.
+        const seen = this.novelty.filter(x => x !== undefined).sort((x, y) => x - y);
+        const typical = seen.length >= 8 ? seen[Math.floor(seen.length * 0.5)] * 1.25 : 0;
+        const base = Math.max(this.k.sectionNovelty, typical);
+        const need = b - this.lastSectionBar >= this.k.sectionMinBars ? base : base * 2.2;
+        boundary = n0 > need && n0 >= n1 && n0 > nm;
       }
       if (boundary || b - this.phraseStart >= 4) {
         if (b > this.phraseStart) this.emitPhrase(this.phraseStart, b - 1);
@@ -728,7 +793,11 @@ export class Analyzer {
       events.push(e);
       return true;
     };
-    for (const o of this.onsets) take({ id: '', t: o.t, dur: o.kind === 'kick' ? 0.12 : o.kind === 'snare' ? 0.1 : 0.04, stem: 'drums', kind: o.kind, pitch: null, vel: round3(o.vel) });
+    for (const o of this.onsets) {
+      // A soft "kick" off the eighth-note grid is usually a bass synth note, not a drum.
+      if (o.kind === 'kick' && this.k.kickGrid > 0 && o.vel < this.k.kickGrid && this.offGrid(o.t, 2) > 0.05) continue;
+      take({ id: '', t: o.t, dur: o.kind === 'kick' ? 0.12 : o.kind === 'snare' ? 0.1 : 0.04, stem: 'drums', kind: o.kind, pitch: null, vel: round3(o.vel) });
+    }
     for (const tr of [this.bass, this.lead]) {
       tr.done = tr.done.filter(e => !take(e) && e.t >= this.committedSec);
     }
@@ -754,12 +823,19 @@ export class Analyzer {
 
     // Envelopes at 50 Hz.
     const envTo = Math.floor(frontier * ENV_RATE);
-    const env: ScoreDelta['envelopes'] = { mix: [], bass: [], other: [], drums: [] };
+    const env: ScoreDelta['envelopes'] = { mix: [], bass: [], other: [], drums: [], contour: [], bright: [], rise: [], leadPitch: [], bassPitch: [] };
     for (let i = this.sentEnv; i < envTo; i++) {
       const f = clamp(this.timeFrame(i / ENV_RATE), 0, this.frames - 1);
-      env.mix!.push(round3(clamp((this.dbAll[f] + 50) / 50, 0, 1)));
+      const mix = clamp((this.dbAll[f] + 50) / 50, 0, 1);
+      env.mix!.push(round3(mix));
       env.bass!.push(round3(clamp((this.dbLow[f] + 50) / 50, 0, 1)));
       env.other!.push(round3(clamp((this.dbMid[f] + 50) / 50, 0, 1)));
+      this.curves(f, mix);
+      env.contour!.push(round3(this.contourVal));
+      env.bright!.push(round3(this.brightVal));
+      env.rise!.push(round3(this.riseVal));
+      env.leadPitch!.push(this.glide(this.lead.pitch, f));
+      env.bassPitch!.push(this.glide(this.bass.pitch, f));
     }
     // Drum envelope: decaying hits.
     const drumHits = events.filter(e => e.stem === 'drums');
@@ -781,6 +857,45 @@ export class Analyzer {
     };
   }
 
+  /**
+   * Advance the continuous curves by one envelope sample (1/50 s), in order:
+   * - contour: the melody's pitch as the top line of the mix (see topLineAt), median-filtered,
+   *   gliding rather than stepping, sinking back between phrases;
+   * - bright: the spectral centroid, smoothed;
+   * - rise: build-ups, where loudness and brightness have been climbing for a few seconds.
+   */
+  private curves(f: number, mix: number) {
+    const raw = this.topLine[f];
+    const h = this.contourHist;
+    if (raw > 0) {
+      h.push(raw); if (h.length > 5) h.shift();
+      const m = [...h].sort((a, b) => a - b)[h.length >> 1];
+      const target = clamp((m - 48) / 36, 0, 1);
+      this.contourVal += (target - this.contourVal) * 0.25;
+    } else {
+      // No melody: sink slowly, so the skyline falls back between phrases.
+      this.contourVal += (0.12 - this.contourVal) * 0.01;
+      if (h.length) h.shift();
+    }
+    this.brightVal += (this.centroid[f] - this.brightVal) * 0.08;
+    const x = 0.6 * mix + 0.4 * this.brightVal;
+    if (!this.curveInit) { this.emaFast = this.emaSlow = x; this.curveInit = true; }
+    this.emaFast += (x - this.emaFast) * (1 / (ENV_RATE * 1.5));
+    this.emaSlow += (x - this.emaSlow) * (1 / (ENV_RATE * 7));
+    const trend = clamp((this.emaFast - this.emaSlow) * 9, 0, 1);
+    // Builds swell slowly and let go quickly.
+    this.riseVal += (trend - this.riseVal) * (trend > this.riseVal ? 0.04 : 0.12);
+  }
+
+  /** A pitch track at frame f as MIDI to 0.05 semitones (median of 5 frames, 0 = silent). */
+  private glide(p: Float32Array, f: number): number {
+    const v: number[] = [];
+    for (let k = f - 2; k <= f + 2; k++) if (k >= 0 && k < this.frames && p[k] > 0) v.push(p[k]);
+    if (v.length < 3) return 0;
+    v.sort((a, b) => a - b);
+    return Math.round(v[v.length >> 1] * 20) / 20;
+  }
+
   private _beatsCache: Beat[] = [];
   private beatsOut(): Beat[] {
     const out = this._beatsCache;
@@ -799,6 +914,17 @@ export class Analyzer {
       out.push({ t: round3(this.frameTime(this.beatFrames[i])), bar, beat, downbeat: beat === 1, strength: round3(this.beatStrength[i]) });
     }
     return out;
+  }
+
+  /** Seconds from t to the nearest 1/n of a beat. */
+  private offGrid(t: number, n: number): number {
+    const beats = this.beatsOut();
+    if (beats.length < 2) return 0;
+    let lo = 0, hi = beats.length - 1;
+    while (lo < hi - 1) { const m = (lo + hi) >> 1; if (beats[m].t <= t) lo = m; else hi = m; }
+    const a = beats[lo].t, p = (beats[lo + 1]?.t ?? a + 0.5) - a;
+    const x = ((t - a) / p) * n;
+    return Math.abs(x - Math.round(x)) * p / n;
   }
 
   private gridPos(t: number): { bar: number; step: number } {

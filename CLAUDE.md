@@ -20,12 +20,13 @@ Read this before you touch anything. It covers the spirit first and the code sec
 
 ## How it works, in one breath
 
-Audio file → **analysis** (in a Web Worker) → a **score**: plain JSON of beats, sections and events, each with time, stem, kind, pitch, velocity and length → **renderers** read the score and schedule things so that each one crosses the viewer's line of sight exactly when it sounds. Renderers never touch raw audio.
+Audio file → **analysis** (in a Web Worker) → a **score**: plain JSON of beats, sections and events, each with time, stem, kind, pitch, velocity and length → **renderers** read the score and schedule things so that each one comes into view, at the leading edge of wherever the viewer is looking, exactly when it sounds. Whatever is sliding away behind is what has already played. Renderers never touch raw audio.
 
 ```
 src/
   analysis/   analyzer.ts  progressive onset, pitch, beat and section detection (no ML, much faster than real time)
               tuning.ts    every parser knob, shown on the Tuning screen (T)
+              autotune.ts  finds the knobs that suit one song by scoring parses for self-consistency
               worker.ts    runs the analyser off the main thread
   score/      types.ts     THE data format between analysis and rendering (read this first)
               midi.ts      MIDI in (sharper sync) and out; cache.ts stores parsed scores
@@ -36,7 +37,7 @@ src/
               types.ts        what a pack can say: layers, mapping rules, themes, light, fx, window
               around-the-world.ts  hidden until it gets its twist (?pack=around-the-world)
   render/     world.ts     sky, ground, carriage, stations, render loop, shader warm-up
-              spawner.ts   the scheduler: score events → models placed to cross your gaze on the beat
+              spawner.ts   the scheduler: score events → models placed to enter your view on the beat
               otherside.ts the mirrored second window
               models.ts    every model, built from boxes, cylinders and lathes; `T(SURF.x, ...)` picks the surface
               shaders.ts   TSL node materials: one procedural material paints brick, glass, rust, foliage...
@@ -56,7 +57,7 @@ src/
 5. Set `vehicle` ('train' gives ground, rails and a carriage; 'ship' gives space all round and an open canopy), `window` (size and colours of the carriage), `light` (sun over the length of the song) and `otherSide` ('trippy' for a psychedelic mirror).
 6. Add it to `PACKS` in `src/packs/index.ts` and it appears in the menu.
 
-Keep the golden rule: **everything that moves must land on its beat.** The spawner handles that for you if your models stand on y=0, centred on x=0, with +z facing the viewer.
+Keep the golden rule: **everything that moves must land on its beat** (by default it appears at the leading edge as it sounds; `rig.hitAt: 'centre'` times it to the middle of the view instead). The spawner handles that for you if your models stand on y=0, centred on x=0, with +z facing the viewer.
 
 ## Practicalities
 

@@ -47,6 +47,13 @@ export const STARSHIP: Pack = {
       models: ALL(['asteroid', 'asteroid-high', 'asteroid-low']), scale: [0.6, 1.8] },
     { depthMin: 600, depthMax: 900, density: ALL(0.25), models: ALL(['comet']), scale: [1.5, 3] },
   ],
+  // Held and sliding notes as ribbons of light hanging in space: the melody high, the bass low.
+  ridges: [
+    { pitch: 'leadPitch', depth: 60, spacing: 9, minDur: 0.45, pitchCenter: 69, float: { y: 9, perSemitone: 0.55 },
+      models: ALL(['light-ribbon']), tints: ALL(['#ffffff', '#ffc8f0', '#c8ffe8']) },
+    { pitch: 'bassPitch', depth: 40, spacing: 9, minDur: 0.5, pitchCenter: 40, float: { y: 1.5, perSemitone: 0.3 },
+      models: ALL(['light-ribbon']), tints: ALL(['#ffb070', '#ff8060']) },
+  ],
   idle: [
     { model: 'gate-strut', depth: 10, spacing: 60 },
     { model: 'nav-light', depth: 6, spacing: 8 },

@@ -1,6 +1,6 @@
 # Gondryator
 
-A browser music visualiser after Michel Gondry's *Star Guitar*: drop in a track and ride a train past scenery where every beat and note becomes an object that crosses the window exactly when it sounds. Built from `gondryator-spec.md` (draft v0.3).
+A browser music visualiser after Michel Gondry's *Star Guitar*: drop in a track and ride a train past scenery where every beat and note becomes an object that comes into view exactly when it sounds. Built from `gondryator-spec.md` (draft v0.3).
 
 ## Run it
 
@@ -75,6 +75,24 @@ Press `T` (or the 🎛 button, or open with `?tune`) to see what the music parse
 
 Every parser setting (`src/analysis/tuning.ts`) is a slider: move one and the track is re-parsed in place. "Apply to the show" restarts the ride with those settings (they are saved in the browser; tuned scores are not cached). "Copy" puts them on the clipboard as JSON.
 
+**Presets.** A preset menu sets starting points: Default, Dance and electronic (what auto-tune found on a real Star Guitar recording: a firmer beat, crisper kicks, a melody tracker that keeps quieter top notes), and Live band (a looser beat that can follow a drummer).
+
+**Auto-tune.** The ✨ Auto-tune button re-parses the loudest 32 seconds of the song about 26 times, nudging one setting at a time, and keeps whatever gives the most self-consistent parse (`src/analysis/autotune.ts`). There is no answer key, so a parse is scored on what any good parse of real music looks like: a steady beat; kicks and snares on the eighth-note grid and hats on the sixteenths; a plausible number of hits per bar for each instrument; and, when the mid band is busy, a melody that covers a fair share of the time and moves in steps. It also runs by itself in a worker the first time a song plays on default settings; if it finds something clearly better, the settings are kept for that song (`localStorage` key `gondryator.tuning.<file hash>`) and used from the next play. Settings applied from the tuning screen with a song loaded are kept for that song too. `?noautotune` turns the background run off. On the real Star Guitar it takes about 22 s in Node and lifts the score from 9.75 to 10.58 (melody clarity 0.6 → 0.41, bass confidence 0.15 → 0.22, kick decay 3.5 → 5 dB, beat steadiness 300 → 900).
+
+## Rising and falling
+
+The parser also writes three continuous curves into the score's envelopes (50 Hz, alongside the per-stem loudness):
+
+- `contour`: where the melody sits, 0 to 1 over four octaves, from the top line of the mix (a harmonic-sum pitch estimate every other frame that picks the highest clear voice). On the test tracks it correlates 0.91 and 0.93 with the true melody.
+- `bright`: spectral centroid, log-scaled; filters opening read as brightness rising.
+- `rise`: build-ups. Loudness and brightness trending up over a few seconds against the last few.
+
+Slides become ridges. The parser also writes the exact pitch of the melody and the bass (`leadPitch`, `bassPitch`: MIDI with fractions, from a parabolic peak refinement, so a glide is smooth, not a staircase). Wherever a line glides smoothly by a semitone or more for half a second or longer, a ride lays down a ridge along the way, each segment as high as the pitch when it comes into view: a mountain line (melody) and low hills (bass) from the train, lavender hills in Provence, ribbons of light in space. Separate notes stay separate objects (Alex: "a slide is a continuous movement, specific notes are individual objects"). On the real Star Guitar the melody glides 38 times (8% of the song). The demo track has a sliding synth line in its breakdown to show them. Build-ups charge the warp jump (streaks and zoom smear grow as the rise climbs), and brightness speeds up the colour cycling of the looks. The `contour` layer type still exists for packs, but no ride uses it.
+
+## The start of a ride
+
+Drop a song and the train glides up to a station board with its name, turning to the angled view on the way, and stops there. It leaves once the first stretch of the score is ready and every shader the ride needs is compiled (or after 15 s at most), so the loading hides behind a natural pause. The starship does the same.
+
 ## The frame analyser
 
 Press `P` (or the ⏱ button, or open with `?perf`) for a picture-in-picture strip of frame times against the show clock. Bars are green inside the display's frame budget, amber up to two frames, red beyond. Every frame carries marks for what happened in it: section, scenery, other-window and look changes, a model's first appearance, shaders compiled, new GPU geometry and textures, the sky reflections being re-baked, fireworks, station boards, score updates from the analyser, and long main-thread tasks (Chromium). Stutters show their marks; "Copy report" puts a plain-text report on the clipboard with every stutter, totals per cause, and frames counted against frames expected at the display's refresh rate.
@@ -89,15 +107,19 @@ Analysis on synthetic tracks with known ground truth (`tools/eval-analysis.mjs`)
 |---|---|---|
 | Speed | ~47× real time (Node), ~38× in the browser worker | ~44× |
 | Tempo | 123.7 | 99.7 |
-| Kicks (F1 at ±50 ms) | 96% | 96% |
+| Kicks (F1 at ±50 ms) | 98% | 98% |
 | Snares | 67% | 72% |
 | Hats | 61% | 52% |
 | Bass notes onset / pitch | 93% / 128 of 128 | 91% / 96 of 96 |
-| Lead notes onset / pitch | 71% / 64 of 96 | 72% / 62 of 80 |
-| Beats / downbeats | 70% / 70% (intro has no drums) | 87% / 75% |
-| Sections | all 4 boundaries found, plus 1 false one in the intro | all 4 found |
+| Lead notes onset recall / pitch | 100% / 96 of 96 (precision 40%: pad top notes count as melody) | 100% / 80 of 80 (precision 53%) |
+| Beats / downbeats | 85% / 84% (intro has no drums) | 98% / 97% |
+| Sections | all 4 boundaries found | 2 of 4 found |
 
-Section-7 refocus metric (top-tier events inside the central third at their time), automated wandering viewer: Star Guitar **100%** (140/140) with steering on, 49% with spawn-time placement only; Around the World **100%** (147/147: kicks and lead notes).
+On a real track (Star Guitar, kept local and out of the repo), the beat tracker was jittery: syncopated stabs pulled it off the grid and it averaged 131.5 bpm. The tracker now holds its tempo much harder (`beatTightness`, default 300, was effectively 6) and finds a steady 126.5 bpm, which also lifted the synthetic beat scores above. Soft "kicks" off the eighth-note grid, usually the bass synth, are dropped (`kickGrid`). Sections are limited to one per 8 bars unless the change is far bigger than usual for that song: 15 sections over 6.5 minutes, down from 36.
+
+**Timing.** Each object comes into view at the leading edge of the screen as its sound plays (`rig.hitAt: 'entry'`, the default), so everything you watch slide away is history; looking ahead along the line shows what is coming, which is allowed but not the intended view. Before this round objects were timed to the centre of the view (`hitAt: 'centre'`). The refocus metric now counts top-tier events just entering the view at their time (screen x between 0.6 and 1.15).
+
+Section-7 refocus metric (measured with centre timing: top-tier events inside the central third at their time), automated wandering viewer: Star Guitar **100%** (140/140) with steering on, 49% with spawn-time placement only; Around the World **100%** (147/147: kicks and lead notes).
 
 Startup: the first frontier needs about 20 s of analysed audio (beats stabilise, then whole 4-bar phrases are committed), which takes under a second at these speeds.
 
@@ -106,7 +128,7 @@ Frame rate could not be measured meaningfully here (software rendering: 11 to 40
 ## Not done yet, and why
 
 - **Demucs stems and Basic Pitch:** this container has no GPU and cannot reach Hugging Face, so the 126 MB HT-Demucs model could not be downloaded or benchmarked (spec milestone 1). The score already carries `analysis.mode` (`bands` | `stems` | `midi`) and the stem fields, so a stems engine can drop in behind the same worker interface. The benchmark has to run on the target laptop.
-- **Real music:** no network access to fetch test music, so everything was tuned on synthetic tracks. Expect lower accuracy on dense real mixes, especially lead notes and snares.
+- **Real music:** tuned on synthetic tracks plus one real song supplied locally (not in the repo). Expect lower accuracy on dense real mixes, especially lead notes and snares; auto-tune helps per song.
 - `replicate` / `loop-layer` spawn modes, `dolly-forward` / `locked-off` rigs, WebXR, glTF assets in packs. The Around the World troupes are simple box-and-capsule figures; they would benefit from proper modelled characters.
 - **Exports inside the claude.ai viewer:** downloads are blocked there, so the JSON/MIDI buttons only show in the standalone file.
 

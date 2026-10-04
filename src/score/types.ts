@@ -52,6 +52,14 @@ export interface Phrase {
   entering: Stem[];
 }
 
+/**
+ * Continuous curves at 50 Hz: per-band loudness (`mix`, `bass`, `other`, `drums`), plus the shapes
+ * between the hits: `contour` (the melody's pitch, 0 low .. 1 high, held through gaps),
+ * `bright` (how bright the sound is), `rise` (build-ups: loudness and brightness climbing),
+ * `leadPitch` / `bassPitch` (the exact pitch as MIDI with fractions, so slides glide; 0 = silent).
+ */
+export type EnvelopeKey = Stem | 'mix' | 'contour' | 'bright' | 'rise' | 'leadPitch' | 'bassPitch';
+
 export interface Envelope {
   /** Samples per second. */
   rate: number;
@@ -80,7 +88,7 @@ export interface Score {
   sections: Section[];
   phrases: Phrase[];
   events: ScoreEvent[];
-  envelopes: Partial<Record<Stem | 'mix', Envelope>>;
+  envelopes: Partial<Record<EnvelopeKey, Envelope>>;
   /** Everything with t < frontierSec is final and will never change. */
   frontierSec: number;
   final: boolean;
@@ -95,7 +103,7 @@ export interface ScoreDelta {
   sections: Section[];
   phrases: Phrase[];
   events: ScoreEvent[];
-  envelopes: Partial<Record<Stem | 'mix', number[]>>;
+  envelopes: Partial<Record<EnvelopeKey, number[]>>;
   envelopeRate: number;
   realtimeFactor: number;
 }
@@ -125,7 +133,7 @@ export function applyDelta(score: Score, d: ScoreDelta): void {
   for (const x of d.sections) score.sections.push(x);
   for (const x of d.phrases) score.phrases.push(x);
   for (const x of d.events) score.events.push(x);
-  for (const k of Object.keys(d.envelopes) as (Stem | 'mix')[]) {
+  for (const k of Object.keys(d.envelopes) as EnvelopeKey[]) {
     const env = (score.envelopes[k] ??= { rate: d.envelopeRate, values: [] });
     for (const v of d.envelopes[k]!) env.values.push(v);
   }
