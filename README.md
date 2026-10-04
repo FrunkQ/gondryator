@@ -4,7 +4,7 @@
 
 *Live inside a Michel Gondry video.*
 
-Drop in a song and the world outside the window starts keeping time: poles on the kick, sheds on the snare, a skyline that hums the melody. Ride the train, a riverboat through Paris or the top deck of a night bus. Turn round in your seat and the other window has gone somewhere else entirely: lavender fields, the space between the planets, or a psychedelic double of the world outside. It is a humble imitation of a genius, made with a lot of love and no small amount of awe.
+Drop in a song and the world outside the window starts keeping time: poles on the kick, sheds on the snare, a skyline that hums the melody. Ride the train, or take the open cockpit of a starship. Turn round in your seat and the other window has gone somewhere else entirely: lavender fields, the space between the planets, or a psychedelic vortex. It is a humble imitation of a genius, made with a lot of love and no small amount of awe.
 
 The originals, which you should watch first (and then again):
 

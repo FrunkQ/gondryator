@@ -5,6 +5,7 @@
 import type { EventKind, Stem } from '../score/types';
 
 export type ThemeName = string;
+export type FxLookName = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel';
 
 export interface PackLayer {
   id: string;
@@ -67,7 +68,7 @@ export interface IdleLayer { model: string; depth: number; spacing: number; jitt
 
 export interface SectionTheme {
   name: ThemeName;
-  ground: { base: string; stripes: string[]; rows?: boolean; water?: boolean };
+  ground: { base: string; stripes: string[]; rows?: boolean };
 }
 
 export interface RigSpec {
@@ -115,17 +116,17 @@ export interface Pack {
   light: { at: number; sky: string; horizon: string; sun: string; sunIntensity: number; sunElevation: number; fog?: number }[];
   title: { template: 'station-board'; stationPrefix?: string };
   /** Things that happen on structure: overpass at new sections, passing train in breakdowns. */
-  sectionEvents?: { onNewSection?: string; onBreakdown?: string };
+  sectionEvents?: { onNewSection?: string; onBreakdown?: string; /** How far out the breakdown convoy passes, m (default 4.3: the next track). */ breakdownDepth?: number };
   /** perform mode: the cast. Mapping rules send events to a troupe by its id (as `layer`). */
   troupes?: TroupeSpec[];
   /** perform mode: text and colours for the stage screen. */
   stage?: { floor: string; ring: string[]; screen: string };
   /** Effects: a look per section (cycled), or forced for some section labels. */
-  fx?: { cycle: ('clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold')[]; bySection?: Partial<Record<string, 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold'>> };
+  fx?: { cycle: FxLookName[]; bySection?: Partial<Record<string, FxLookName>> };
   /** Optional glTF models: name -> url. */
   assets?: Record<string, string>;
-  /** What you are riding: decides the track, grass and carriage dressing (default 'train'). */
-  vehicle?: 'train' | 'boat' | 'bus';
+  /** What you are riding: 'train' (ground, track, carriage) or 'ship' (space all round, an open canopy). */
+  vehicle?: 'train' | 'ship';
   /** The window across the aisle: another pack's id, or 'trippy' for a psychedelic mirror of this one. */
   otherSide?: string;
   window: { width: number; height: number; bottom: number; pillar: number; distance: number; frame: string; wall: string };

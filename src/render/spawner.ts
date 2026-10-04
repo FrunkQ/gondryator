@@ -289,14 +289,14 @@ export class Spawner {
         // A train passes on the next track, its middle crossing the window a beat after the section starts.
         const tm = sec.t + 1.5;
         const xm = this.rig.travel(tm);
-        const n = 7, carLen = 24.6, vx = -30;
+        const n = 7, carLen = 24.6, vx = -30, depth = se.breakdownDepth ?? 4.3;
         for (let i = 0; i < n; i++) {
           const o = this.pools.acquire(se.onBreakdown);
           if (!o) break;
           const base = xm + (i - (n - 1) / 2) * carLen;
-          o.x = base; o.z = -4.3; o.y = 0; o.sx = o.sy = o.sz = 1; o.vx = vx; o.t0 = tm; o.grow = 1;
+          o.x = base; o.z = -depth; o.y = 0; o.sx = o.sy = o.sz = 1; o.vx = vx; o.t0 = tm; o.grow = 1;
           o.color.setRGB(1, 1, 1);
-          this.live.push({ obj: o, t: tm, tier: 3, depth: 4.3, despawnAt: tm + 8, layer: null, baseX: base, focusY: 2, measured: true });
+          this.live.push({ obj: o, t: tm, tier: 3, depth, despawnAt: tm + 8, layer: null, baseX: base, focusY: 2, measured: true });
         }
       } else if (this.sectionPtr > 1 && se.onNewSection) {
         const o = this.pools.acquire(se.onNewSection);

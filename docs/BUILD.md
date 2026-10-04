@@ -56,17 +56,16 @@ The Star Guitar main window stays close to the original video. Turn round (drag,
 - `?noother` turns it off.
 - The main window stays photographic, like the original: the effects only come in as you turn round (forced looks via `X` or `?fx=` still apply everywhere). A milky summer haze (`haze` in the pack), a gravel works and French water towers bring it closer to the video.
 
-## Vehicles and the tour
+## The rides
 
-Three vehicles, each with a window true to life and a trippy one across the aisle (turn round to see it):
+Two rides, each with a view true to life and something else entirely across the aisle (turn round to see it):
 
-- **Train** (`star-guitar`): the homage to Star Guitar; the other window is Provence and Cosmos.
-- **Riverboat** (`riverboat`): down a Parisian river past quays, houseboats, Haussmann fronts and domes; a stone bridge passes overhead at each new section and a convoy of barges in the breakdown. The river is a rippled, reflective water surface.
-- **Night bus** (`night-bus`): the top deck through a city at blue hour; street lamps on the kick, bus shelters on the snare, shopfronts and neon diners on the bass, tower blocks on the melody, skyscrapers on the pads; a lit footbridge at each new section and a tram in the breakdown.
+- **Train** (`star-guitar`): the homage to Star Guitar; the other window is Provence and Cosmos (comets, halo gates, freighters and spires of light among the planets).
+- **Starship** (`starship`): an open cockpit, one sweep of glass from the console over your head, so far more of the screen is sky. Out of the main side: stars, nebulae and traffic keeping time (lattice struts with a light ring on the kick, cargo pods and asteroids on the snare, nav lights on the hats, freighters as long as the bass note, spires of light at the melody's pitch, planets on the pads). At every new section the ship jumps through a ring gate; in the breakdown a star-liner convoy glides past. Out of the other side: a psychedelic double of it all (`otherSide: 'trippy'`) in front of a vortex that spins with the music. The consoles blink along with the track.
 
-For the riverboat and the bus, the other window is a psychedelic mirror of the same world (`otherSide: 'trippy'` in the pack) over a floor of beat-pulsing colour rings.
+The riverboat and night bus from an earlier round were dropped (they live in the git history).
 
-The default ride is the **tour**: at a section change (at least 40 s after the last hop, not in the last 20 s), the view fades to black for half a second, the next vehicle is built, its shaders are compiled behind the curtain, and the ride carries on with the music. It only hops while the frame rate holds above 40 fps; pick a single vehicle from the menu to stay put. `?pack=riverboat` (etc.) starts on one vehicle without touring.
+**Warp jumps and new looks.** Every section change is a warp jump: a zoom smear towards the centre, star streaks, a flash and a field-of-view kick. On the train it shows out of the other window only; on the starship, everywhere. Two looks join the cycle: `hyper` (stars stream out of the centre and the view punches in on the kick) and `tunnel` (the world wrapped round a wormhole you fall down). Force them with `X` or `?fx=hyper` / `?fx=tunnel`.
 
 Around the World is hidden from the menu while it waits for its twist; `?pack=around-the-world` still opens it.
 

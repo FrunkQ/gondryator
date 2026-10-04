@@ -124,9 +124,6 @@ body.running.idle #stage { cursor: none; }
 #frames .fa-spike { color: #ffb3b5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #frames .fa-spike i { color: #9aa1ad; }
 
-/* Tour: the curtain between vehicles. */
-#fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.45s ease; z-index: 30; }
-#fade.on { opacity: 1; }
 
 /* A quiet invitation to fork: present, never in the way. */
 #fork { position: absolute; top: 10px; left: 12px; z-index: 20; display: flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px; background: rgba(10, 12, 18, 0.35); color: rgba(255,255,255,0.75); font: 12px/1.3 system-ui, sans-serif; opacity: 0.55; transition: opacity 0.3s; backdrop-filter: blur(3px); }

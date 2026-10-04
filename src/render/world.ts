@@ -8,7 +8,7 @@ import type { CameraRig } from './rig';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { makeGroundMaterial, makeWaterMaterial, makeWindowGlassMaterial, makeGrassMaterial, U as SU } from './shaders';
+import { makeGroundMaterial, makeWindowGlassMaterial, makeGrassMaterial, makeShipSkyMaterial, makeCanopyMaterial, makeConsoleMaterial, U as SU } from './shaders';
 import { makePipeline, FX_UNIFORMS } from './fx';
 import { FLAGS } from './flags';
 import { perf } from '../ui/frames';
@@ -55,10 +55,15 @@ export class World {
 
   /** 'train': ground tiles, track and carriage; 'stage': an open floor for a set built by the show. */
   readonly mode: 'train' | 'stage';
+  /** The starship: space all round, no ground, an open canopy instead of a carriage. */
+  readonly ship: boolean;
+  private shipSky: THREE.Mesh | null = null;
 
   constructor(private pack: Pack) {
     this.mode = pack.rig.type === 'lateral-rail' ? 'train' : 'stage';
+    this.ship = pack.vehicle === 'ship';
     this.camera = new THREE.PerspectiveCamera(pack.rig.fov, 16 / 9, 0.05, 4000);
+    this.baseFov = pack.rig.fov;
     this.camera.rotation.order = 'YXZ';
   }
 
@@ -85,7 +90,7 @@ export class World {
     sc2.left = -70; sc2.right = 70; sc2.top = 70; sc2.bottom = -70; sc2.near = 1; sc2.far = 500;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.04;
-    if (this.mode === 'train' && FLAGS.physSky) {
+    if (this.mode === 'train' && FLAGS.physSky && !this.ship) {
       this.phys = new SkyMesh();
       this.phys.scale.setScalar(6000);
       this.phys.frustumCulled = false;
@@ -103,10 +108,20 @@ export class World {
     }
     if (this.mode === 'train') {
       // The ground (fields, a river or a road), then what only a railway has: grass, rails, wires.
-      const v = this.pack.vehicle ?? 'train';
-      this.buildGround();
-      if (v === 'train') { this.buildGrass(); this.buildTrack(); }
-      this.buildCabin();
+      if (this.ship) {
+        this.shipSky = new THREE.Mesh(new THREE.SphereGeometry(3000, 64, 32), makeShipSkyMaterial());
+        this.shipSky.renderOrder = -10;
+        this.shipSky.frustumCulled = false;
+        sc.add(this.shipSky);
+        this.sky.visible = false;
+        sc.background = new THREE.Color(0x000000);
+        this.buildCockpit();
+      } else {
+        this.buildGround();
+        this.buildGrass();
+        this.buildTrack();
+        this.buildCabin();
+      }
     } else {
       const floor = new THREE.Mesh(new THREE.CircleGeometry(3500, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: new THREE.Color(this.pack.stage?.floor ?? 0x2a2730).multiplyScalar(0.3), roughness: 0.95, metalness: 0, envMapIntensity: 0.1 }));
       floor.receiveShadow = true;
@@ -129,7 +144,7 @@ export class World {
     const minHFov = 60;
     const vf = this.pack.rig.fov;
     const hf = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(vf / 2)) * this.camera.aspect));
-    this.camera.fov = hf < minHFov ? THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(minHFov / 2)) / this.camera.aspect)) : vf;
+    this.camera.fov = this.baseFov = hf < minHFov ? THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(minHFov / 2)) / this.camera.aspect)) : vf;
     this.camera.updateProjectionMatrix();
   }
 
@@ -164,7 +179,7 @@ export class World {
     const fogA = a.fog ?? 0.0014, fogB = b.fog ?? fogA;
     this.fog.density = fogA + (fogB - fogA) * f;
     this.fog.color.copy(hor);
-    (this.scene.background as THREE.Color).copy(hor);
+    if (!this.ship) (this.scene.background as THREE.Color).copy(hor);
 
     // Sun moves from the right (ahead) in the morning, over, to behind in the evening.
     const az = THREE.MathUtils.degToRad(-60 + 140 * u);
@@ -202,7 +217,7 @@ export class World {
     this.sun.intensity = inten * 1.35;
     this.hemi.color.copy(sky).lerp(new THREE.Color(0xffffff), 0.35);
     this.hemi.groundColor.set(0xa89f80).lerp(sunC, 0.15);
-    this.hemi.intensity = this.phys ? 0.3 + 0.2 * (inten / 2.3) : 1.3 + 0.4 * (inten / 2.3);
+    this.hemi.intensity = this.ship ? 0.45 : this.phys ? 0.3 + 0.2 * (inten / 2.3) : 1.3 + 0.4 * (inten / 2.3);
     (this.sunDisc.material as THREE.MeshBasicMaterial).color.copy(sunC).lerp(new THREE.Color(0xffffff), 0.5);
     this.sunDisc.userData.dir = dir;
 
@@ -266,7 +281,7 @@ export class World {
 
   private buildGround() {
     for (const th of this.pack.themes) {
-      this.groundMats.set(th.name, FLAGS.procedural ? (th.ground.water ? makeWaterMaterial : makeGroundMaterial)(this.groundTexture(th)) : new THREE.MeshStandardMaterial({ map: this.groundTexture(th) }));
+      this.groundMats.set(th.name, FLAGS.procedural ? makeGroundMaterial(this.groundTexture(th)) : new THREE.MeshStandardMaterial({ map: this.groundTexture(th) }));
     }
     // Both sides of the line: the main view (-z) and the other window (+z).
     const geo = new THREE.PlaneGeometry(TILE, 5200);
@@ -415,6 +430,53 @@ export class World {
     this.train.add(cabin);
   }
 
+
+  // ------------------------------------------------------------------ starship cockpit
+  /**
+   * An open canopy: one sweep of glass from below the console on the main side, over your head,
+   * down past the other side, held by a few slim ribs. Consoles of blinking buttons under each side.
+   */
+  private buildCockpit() {
+    const eye = this.pack.rig.eyeHeight;
+    const L = 20, R = 2.7, y0 = eye - 0.3, z0 = 0.75;
+    const under = 0.52; // how far the glass wraps below the horizontal, radians
+    const cockpit = new THREE.Group();
+    const glass = new THREE.Mesh(
+      new THREE.CylinderGeometry(R, R, L, 64, 1, true, Math.PI - under, Math.PI + 2 * under).rotateZ(-Math.PI / 2).translate(0, y0, z0),
+      makeCanopyMaterial());
+    glass.renderOrder = 10;
+    cockpit.add(glass);
+    const lit = (c: THREE.ColorRepresentation, e = 0.15) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.4, metalness: 0.7, emissive: new THREE.Color(c).multiplyScalar(e) });
+    const frame = lit(this.pack.window.frame);
+    const hull = lit(this.pack.window.wall, 0.2);
+    const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const add = (g: THREE.BufferGeometry, m: THREE.Material) => { if (!parts.has(m)) parts.set(m, []); parts.get(m)!.push(g); };
+    // Ribs: thin arcs every few metres, none straight ahead.
+    for (let k = -3; k < 3; k++) {
+      add(new THREE.TorusGeometry(R + 0.02, 0.03, 6, 48, Math.PI + 2 * under).rotateZ(-under).rotateY(Math.PI / 2).translate((k + 0.5) * 3.4, y0, z0), frame);
+    }
+    // Sills along both lower edges of the glass, with a light strip.
+    const sillY = y0 - Math.sin(under) * R, sillZ = Math.cos(under) * R;
+    const strip = new THREE.MeshBasicMaterial({ color: 0x7fe8ff, toneMapped: false });
+    for (const sz of [-1, 1]) {
+      add(new THREE.BoxGeometry(L, 0.12, 0.3).translate(0, sillY - 0.06, z0 + sz * sillZ), frame);
+      add(new THREE.BoxGeometry(L, 0.025, 0.025).translate(0, sillY + 0.01, z0 + sz * (sillZ - 0.16)), strip);
+    }
+    // Floor, and bulkheads closing each end.
+    const floorY = eye - 1.5;
+    add(new THREE.BoxGeometry(L, 0.06, 2 * sillZ).translate(0, floorY, z0), hull);
+    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.12, R * 2 + 0.6, 2 * R + 0.4).translate(sx * L / 2, y0 + 0.3, z0), hull);
+    // Consoles: a sloping desk under each side of the canopy.
+    const desk = makeConsoleMaterial();
+    for (const sz of [-1, 1]) {
+      const g = new THREE.BoxGeometry(L - 0.4, 0.3, 0.75).rotateX(sz * -0.28).translate(0, sillY - 0.35, z0 + sz * (sillZ - 0.5));
+      add(g, desk);
+      add(new THREE.BoxGeometry(L - 0.4, sillY - 0.5 - floorY, 0.08).translate(0, (sillY - 0.5 + floorY) / 2, z0 + sz * (sillZ - 0.85)), hull);
+    }
+    for (const [m, gs] of parts) cockpit.add(new THREE.Mesh(mergeGeometries(gs, false)!, m));
+    this.train.add(cockpit);
+  }
+
   // ------------------------------------------------------------------ stations
   stationBoard(x: number, info: StationInfo, opts: { end?: boolean; trackside?: boolean } = {}) {
     const grp = new THREE.Group();
@@ -423,13 +485,13 @@ export class World {
     if (!opts.trackside) this.platform(grp, canopyMat);
     else {
       // The title card: a lineside goods shed, its name board fixed to the wall facing the line.
-      const pad = new THREE.Mesh(new THREE.BoxGeometry(22, 0.1, 4), new THREE.MeshStandardMaterial({ color: 0x9d968a }));
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(22, 0.1, 4), new THREE.MeshStandardMaterial({ color: this.ship ? 0x5b6168 : 0x9d968a }));
       pad.position.set(0, 0.05, -6.3);
       grp.add(pad);
-      const shed = new THREE.Mesh(new THREE.BoxGeometry(18, 5.6, 6), new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.9 }));
+      const shed = new THREE.Mesh(new THREE.BoxGeometry(18, 5.6, 6), new THREE.MeshStandardMaterial({ color: this.ship ? 0x8d949c : 0xd8c9a8, roughness: this.ship ? 0.5 : 0.9, metalness: this.ship ? 0.6 : 0 }));
       shed.position.set(0, 2.8, -8.3 - 3);
       grp.add(shed);
-      const sr = new THREE.Mesh(new THREE.BoxGeometry(18.6, 0.35, 6.8), new THREE.MeshStandardMaterial({ color: 0xa75a3c }));
+      const sr = new THREE.Mesh(new THREE.BoxGeometry(18.6, 0.35, 6.8), new THREE.MeshStandardMaterial({ color: this.ship ? 0x3e5f86 : 0xa75a3c }));
       sr.position.set(0, 5.75, -8.3 - 3);
       grp.add(sr);
     }
@@ -441,7 +503,7 @@ export class World {
 
   private platform(grp: THREE.Group, canopyMat: THREE.Material) {
     // Platform along the window side.
-    const plat = new THREE.Mesh(new THREE.BoxGeometry(180, 1.1, 5.5), new THREE.MeshStandardMaterial({ color: 0xbdb5a3 }));
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(180, 1.1, 5.5), new THREE.MeshStandardMaterial({ color: this.ship ? 0x6f767e : 0xbdb5a3 }));
     plat.position.set(0, 0.55, -2.35 - 2.75 - 0.4);
     grp.add(plat);
     const edge = new THREE.Mesh(new THREE.BoxGeometry(180, 0.06, 0.4), new THREE.MeshStandardMaterial({ color: 0xe8d36a }));
@@ -458,10 +520,10 @@ export class World {
     canopy.rotation.x = 0.06;
     grp.add(canopy);
     // Station building behind the platform.
-    const bldg = new THREE.Mesh(new THREE.BoxGeometry(34, 7, 9), new THREE.MeshStandardMaterial({ color: 0xe1d2b2 }));
+    const bldg = new THREE.Mesh(new THREE.BoxGeometry(34, 7, 9), new THREE.MeshStandardMaterial({ color: this.ship ? 0x9da2a8 : 0xe1d2b2 }));
     bldg.position.set(-6, 3.5, -16);
     grp.add(bldg);
-    const bRoof = new THREE.Mesh(new THREE.BoxGeometry(35, 0.6, 10), new THREE.MeshStandardMaterial({ color: 0xa75a3c }));
+    const bRoof = new THREE.Mesh(new THREE.BoxGeometry(35, 0.6, 10), new THREE.MeshStandardMaterial({ color: this.ship ? 0x3e5f86 : 0xa75a3c }));
     bRoof.position.set(-6, 7.2, -16);
     grp.add(bRoof);
   }
@@ -557,6 +619,9 @@ export class World {
     this.train.position.copy(tmpPos);
     this.train.quaternion.copy(tmpQuat);
     if (!xr) this.camera.rotation.set(pitch, -yaw, 0); else this.camera.rotation.set(0, 0, 0);
+    // A warp jump throws the field of view wide for a moment: the whoosh.
+    const fov = this.baseFov * (1 + 0.32 * FX_UNIFORMS.warp.value);
+    if (!xr && Math.abs(fov - this.camera.fov) > 0.01) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     // Motion blur: travel speed over a 1/60 s shutter, projected (uv per metre of depth).
     if (this.mode === 'train') {
       const v = rig.speedAt(s);
@@ -568,6 +633,7 @@ export class World {
     const trainX = tmpPos.x;
     this.sky.position.set(trainX, 0, tmpPos.z);
     this.phys?.position.set(trainX, 0, tmpPos.z);
+    this.shipSky?.position.set(trainX, this.pack.rig.eyeHeight, tmpPos.z);
     // Keep the shadow box centred on what the camera sees.
     this.sun.target.position.set(trainX, 0, tmpPos.z - 30);
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDir, 200);
@@ -638,7 +704,7 @@ export class World {
     this.warmJobs.push(...jobs);
   }
   private warmJobs: (() => Promise<void>)[] = [];
-  /** Shader builds still queued (the tour waits for these behind its fade). */
+  /** Shader builds still queued. */
   get warmPending() { return this.warmJobs.length + (this.warming ? 1 : 0); }
   private warming = false;
   /** Run the next warm-up job, if the last one has finished. Called once a frame. */
@@ -682,5 +748,6 @@ export class World {
     if (next !== this.pixelRatio) { this.pixelRatio = next; this.renderer.setPixelRatio(next); }
   }
   blurScale = 1;
+  private baseFov = 50;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
 }

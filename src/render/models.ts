@@ -127,14 +127,14 @@ function canopy(x: number, y: number, z: number, r: number, color: number, seed:
 }
 
 /** A lumpy rock: an icosphere with its vertices pushed in and out (deterministic). */
-function rockBlob(r: number, seed: number, color: number, x: number, y: number, z: number): Part {
+function rockBlob(r: number, seed: number, color: number, x: number, y: number, z: number, stretch: [number, number, number] = [1.3, 0.8, 1]): Part {
   const g = new THREE.IcosahedronGeometry(r, 1);
   const pos = g.getAttribute('position');
   for (let i = 0; i < pos.count; i++) {
     const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
     const n = Math.sin(vx * 3.1 + seed) * Math.cos(vy * 2.7 + seed * 1.7) * Math.sin(vz * 3.7 + seed * 0.3);
     const k = 1 + 0.35 * n;
-    pos.setXYZ(i, vx * k * 1.3, vy * k * 0.8, vz * k);
+    pos.setXYZ(i, vx * k * stretch[0], vy * k * stretch[1], vz * k * stretch[2]);
   }
   g.computeVertexNormals();
   g.translate(x, y, z);
@@ -292,6 +292,81 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
   ]),
   'moon': () => merge([T1(SURF.rock, sphere(14, 0, 45, 0, 0xb8b4ac, 1, 1, 1, 20))]),
 
+  // Train window, Cosmos: a comet streaking along the line, and halo gates standing in the void.
+  'comet': () => merge([
+    T1(SURF.glow, sphere(1.6, 0, 42, 0, 0xdff4ff, 1, 1, 1, 12)),
+    T1(SURF.glow, colorize(new THREE.ConeGeometry(1.5, 26, 12, 1, true).rotateZ(-Math.PI / 2).translate(-13.5, 42, 0), 0x7fc8ff)),
+    T1(SURF.glow, colorize(new THREE.ConeGeometry(0.7, 40, 8, 1, true).rotateZ(-Math.PI / 2).translate(-20, 42.6, -0.5), 0xff9fe0)),
+  ]),
+  'halo-gate': () => merge([
+    T1(SURF.metal, colorize(new THREE.TorusGeometry(4.2, 0.35, 10, 48).translate(0, 7, 0), 0xb9c0c8)),
+    T1(SURF.glow, colorize(new THREE.TorusGeometry(3.7, 0.12, 6, 48).translate(0, 7, 0), 0x8fe8ff)),
+    ...[0, 1, 2, 3, 4, 5].map(k => T1(SURF.glow, sphere(0.28, Math.cos(k * Math.PI / 3) * 4.2, 7 + Math.sin(k * Math.PI / 3) * 4.2, 0.3, 0xff6fd8, 1, 1, 1, 6))),
+  ]),
+
+  // --- the starship: everything floats, around an eye height of 4 m ------------------------------
+  // Kick: a lattice strut with a light ring at eye level, the space version of the catenary pole.
+  'gate-strut': () => {
+    const p: Part[] = [];
+    for (const sx of [-0.45, 0.45]) p.push(T1(SURF.metal, box(0.22, 34, 0.22, sx, 3, 0, 0x8d949c)));
+    for (let y = -13; y < 20; y += 1.6) p.push(T1(SURF.metal, box(1.2, 0.08, 0.08, 0, y, 0, 0x6f767e, [0, 0, 0.6])));
+    p.push(T1(SURF.glow, cyl(0.62, 0.62, 0.22, 0, 4.4, 0, 0x6fd8ff, 16)));
+    p.push(T1(SURF.metal, cyl(0.7, 0.7, 0.12, 0, 4.2, 0, 0x5b6168, 16)));
+    p.push(T1(SURF.glow, sphere(0.2, 0, 20.2, 0, 0xff4f6b, 1, 1, 1, 6)), T1(SURF.glow, sphere(0.2, 0, -14.2, 0, 0xff4f6b, 1, 1, 1, 6)));
+    return merge(p);
+  },
+  // Hats: little navigation lights ticking past below the canopy.
+  'nav-light': () => merge([
+    T1(SURF.glow, colorize(new THREE.OctahedronGeometry(0.22, 0).translate(0, 1.9, 0), 0x9ff0ff)),
+    T1(SURF.metal, box(0.7, 0.04, 0.04, 0, 1.9, 0, 0x7d8286)),
+  ]),
+  // Snare: cargo pods and tumbling rocks.
+  'cargo-pod': () => merge([
+    T1(SURF.paint, box(4.2, 2.2, 2.2, 0, 3.4, 0, 0xd8d2c4)),
+    T1(SURF.paint, box(4.25, 0.4, 2.25, 0, 3.4, 0, 0xe0703a)),
+    ...[-1, 1].map(sx => T1(SURF.metal, cyl(0.6, 0.8, 0.5, sx * 2.35, 3.4, 0, 0x6f767e, 10).rotateZ(Math.PI / 2))),
+    T1(SURF.glow, sphere(0.14, 0, 4.6, 1.0, 0x7fff9f, 1, 1, 1, 6)),
+  ]),
+  'asteroid-big': () => merge([T1(SURF.rock, rockBlob(3.2, 3, 0x7d746a, 0, 6, 0, [1.05, 0.9, 1])), T1(SURF.rock, rockBlob(0.9, 11, 0x8a8076, 4.5, 9.5, 1, [1, 0.9, 1.1]))]),
+  'asteroid-high': () => merge([T1(SURF.rock, rockBlob(2.2, 5, 0x857b70, 0, 15, 0, [1, 0.85, 1.1]))]),
+  'asteroid-low': () => merge([T1(SURF.rock, rockBlob(2.6, 9, 0x6f675e, 0, -7, 0, [0.9, 1, 1.1]))]),
+  // Bass: freighters, their length set by how long the note holds.
+  'freighter': () => merge([
+    T1(SURF.metal, box(22, 4.6, 6, 0, 6, 0, 0xb4b8bc)),
+    T1(SURF.paint, box(22.1, 0.7, 6.05, 0, 4.4, 0, 0x3e5f86)),
+    T1(SURF.metal, box(4, 3, 4, -7, 9.8, 0, 0x9da2a8)),
+    T1(SURF.glow, box(3.4, 0.4, 0.1, -7, 10.4, 2.02, 0xfff0c8)),
+    ...[-3, 0, 3, 6].map(x => T1(SURF.paint, box(2.6, 2.4, 6.4, x, 9.5, 0, [0xc0582f, 0x6f8fa8, 0xd8b04a, 0x7a8a5a][(x + 3) / 3]))),
+    ...[-1, 1].map(sy => T1(SURF.glow, cyl(0.9, 1.2, 0.6, -11.3, 6 + sy * 1.2, 0, 0x7fd8ff, 12).rotateZ(Math.PI / 2))),
+    ...Array.from({ length: 9 }, (_, i) => T1(SURF.glow, box(0.5, 0.25, 0.05, -9 + i * 2.2, 7.2, 3.03, 0xffe7b8))),
+  ]),
+  'star-dock': () => merge([
+    T1(SURF.metal, cyl(3, 3, 18, 0, 12, 0, 0xc9ccd0, 16)),
+    T1(SURF.metal, colorize(new THREE.TorusGeometry(9, 0.9, 10, 40).rotateX(Math.PI / 2).translate(0, 12, 0), 0xd6d8dc)),
+    ...[0, 1, 2].map(k => T1(SURF.metal, box(18, 0.4, 0.4, 0, 12, 0, 0xa9adb3, [0, k * Math.PI / 3, 0]))),
+    ...Array.from({ length: 12 }, (_, i) => T1(SURF.glow, sphere(0.3, Math.cos(i * Math.PI / 6) * 9, 12.9, Math.sin(i * Math.PI / 6) * 9, 0xffd27a, 1, 1, 1, 6))),
+    T1(SURF.glow, cyl(3.05, 3.05, 0.5, 0, 16, 0, 0x8fe8ff, 16)),
+  ]),
+  // Melody: spires of light whose height follows the pitch.
+  'light-spire': () => merge([
+    T1(SURF.glass, colorize(new THREE.OctahedronGeometry(1.4, 0).scale(1, 10, 1).translate(0, 4, 0), 0x6fb8ff)),
+    T1(SURF.glow, colorize(new THREE.OctahedronGeometry(0.5, 0).scale(1, 9, 1).translate(0, 4, 0), 0xbfe8ff)),
+    T1(SURF.glow, sphere(0.6, 0, 18.5, 0, 0xffffff, 1, 1, 1, 8)),
+  ]),
+  // Section change: a ring gate the ship flies straight through.
+  'ring-gate': () => merge([
+    T1(SURF.metal, colorize(new THREE.TorusGeometry(12, 1.1, 12, 64).rotateY(Math.PI / 2).translate(0, 4, 0), 0xc4c9cf)),
+    T1(SURF.glow, colorize(new THREE.TorusGeometry(10.6, 0.22, 6, 64).rotateY(Math.PI / 2).translate(0, 4, 0), 0x8fe8ff)),
+    ...Array.from({ length: 8 }, (_, i) => T1(SURF.glow, box(0.5, 1.4, 1.4, 0.9, 4 + Math.sin(i * Math.PI / 4) * 12, Math.cos(i * Math.PI / 4) * 12, 0xff6fd8))),
+  ]),
+  // Breakdown: a star-liner convoy glides past, close enough to touch.
+  'star-liner': () => merge([
+    T1(SURF.paint, colorize(new THREE.CapsuleGeometry(1.5, 21, 6, 14).rotateZ(Math.PI / 2).translate(0, 4.2, 0), 0xe8e6e0)),
+    T1(SURF.glow, box(19, 0.5, 3.04, 0, 4.6, 0, 0xffe7b8)),
+    T1(SURF.paint, box(20, 0.3, 3.06, 0, 3.5, 0, 0x2a7a8e)),
+    T1(SURF.metal, box(3, 1.6, 0.2, -8, 6.1, 0, 0x9da2a8)),
+  ]),
+
   // --- events that pass over / along the train ------------------------------------------
   // A French château d'eau: a concrete bowl on a column, seen over the fields.
   'water-tower': () => merge([
@@ -319,133 +394,6 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     parts.push(...T(SURF.rock, cone(9, 7, -20, 3.5, 4, 0xbdb3a2, 14), cone(7, 5.5, 18, 2.75, 3, 0xc9bfae, 14), cone(5, 4, 30, 2, -4, 0xa99f8f, 12)));
     return merge(parts);
   },
-  // --- Paris by riverboat -------------------------------------------------------------
-  // The quay: a stone river wall with a paved quayside on top, laid end to end.
-  'quay': () => merge([
-    T1(SURF.stone, box(40.2, 3.0, 2.0, 0, 1.0, -1.0, 0xcdbf9f)),
-    T1(SURF.concrete, box(40.2, 0.3, 46, 0, 2.35, -24.5, 0xb9b0a0)),
-    T1(SURF.stone, box(40.2, 0.4, 0.5, 0, 2.6, -0.25, 0xd8cdb2)),
-  ]),
-  'mooring-post': () => merge([T1(SURF.metal, cyl(0.16, 0.2, 1.0, 0, 2.9, 0, 0x2f3437, 8)), T1(SURF.metal, sphere(0.2, 0, 3.4, 0, 0x2f3437, 1, 0.7, 1, 8))]),
-  'quay-lamp': () => merge([
-    T1(SURF.metal, cyl(0.07, 0.14, 4.4, 0, 4.6, 0, 0x2b3a33, 8)),
-    T1(SURF.metal, box(0.5, 0.12, 0.5, 0, 6.85, 0, 0x2b3a33)),
-    T1(SURF.glow, box(0.36, 0.5, 0.36, 0, 7.15, 0, 0xffe2a8)),
-    T1(SURF.metal, cone(0.36, 0.35, 0, 7.6, 0, 0x2b3a33, 4)),
-  ]),
-  'houseboat': () => merge([
-    T1(SURF.paint, box(16, 1.2, 4, 0, 0.4, 0, 0x2f4f6a)), T1(SURF.paint, box(16.1, 0.2, 4.05, 0, 1.0, 0, 0xe9e2d0)),
-    T1(SURF.wood, box(9, 2.2, 3.2, -1.5, 2.1, 0, 0x9c6b43)), roof(9.4, 3.6, 0.8, -1.5, 3.2, 0, 0x7f8a8c),
-    ...windowsOnFace(9, 2.2, 1.6, 1, 4, 1.2, 0x3c4a55),
-    T1(SURF.foliage, box(3, 0.6, 2, 5.5, 1.3, 0, 0x5e8a46)),
-  ]),
-  'barge': () => merge([
-    T1(SURF.paint, box(24, 1.6, 5, 0, 0.6, 0, 0x2e2e33)), T1(SURF.paint, box(24.1, 0.25, 5.05, 0, 1.35, 0, 0xb5452f)),
-    T1(SURF.rock, box(15, 0.9, 4.2, -2, 1.8, 0, 0xb8ab93)), T1(SURF.paint, box(3.4, 2.6, 4.2, 9.5, 2.6, 0, 0xe9e5da)),
-    ...windowsOnFace(3.4, 2.6, 2.1, 1, 2, 1.8, 0x34404a),
-  ]),
-  // A Haussmann building: cream stone, iron balconies, a grey zinc mansard with dormers.
-  'haussmann': () => {
-    const W = 16, H = 18, D = 12;
-    const parts: Part[] = [T1(SURF.stone, box(W, H, D, 0, H / 2, 0, 0xe4d6b8)), T1(SURF.stone, box(W + 0.2, 4.2, D + 0.2, 0, 2.1, 0, 0xd6c7a6))];
-    parts.push(...windowsOnFace(W, H - 1, D / 2, 5, 6, 4.4, 0x3d4650));
-    for (const y of [7.8, 14.4]) parts.push(T1(SURF.metal, box(W - 0.4, 0.9, 0.5, 0, y, D / 2 + 0.25, 0x22272a)));
-    parts.push(T1(SURF.metal, box(W, 3.2, D - 2.4, 0, H + 1.6, 0, 0x7e8790)));
-    for (let k = 0; k < 5; k++) parts.push(T1(SURF.metal, box(1.2, 1.5, 1, -W / 2 + 1.6 + k * 3.2, H + 1.4, D / 2 - 1.4, 0x8d969e)));
-    for (const x of [-5, 3]) parts.push(T1(SURF.brick, box(1, 2.2, 1.6, x, H + 3.8, 0, 0xb46d4e)));
-    return merge(parts);
-  },
-  'haussmann-row': () => merge([
-    T1(SURF.stone, box(12, 22, 12, 0, 11, 0, 0xe8dcc0)), ...windowsOnFace(12, 21, 6, 6, 4, 4.2, 0x3d4650),
-    T1(SURF.metal, box(12.2, 0.8, 0.5, 0, 16.6, 6.25, 0x22272a)),
-    T1(SURF.metal, box(12, 3.4, 9, 0, 23.7, 0, 0x7e8790)),
-  ]),
-  'plane-tree-quay': () => merge([cyl(0.35, 0.5, 5, 0, 4.9, 0, 0xa69a82, 8), ...canopy(0, 8.6, 0, 3.6, 0x6b8a45, 41)]),
-  'gilded-dome': () => merge([
-    T1(SURF.stone, box(30, 16, 30, 0, 8, 0, 0xe2d6bc)), T1(SURF.stone, cyl(10, 10, 12, 0, 22, 0, 0xe6dbc3, 24)),
-    T1(SURF.metal, lathe([[10.5, 28], [10, 31], [8, 36], [4.5, 40], [0.1, 42]], 0xc9a347, 24)),
-    T1(SURF.metal, cyl(0.8, 1.2, 6, 0, 45, 0, 0xd6b257, 8)),
-  ]),
-  'iron-tower': () => {
-    // An original wrought-iron lattice tower in the Parisian manner, glimpsed far off.
-    const parts: Part[] = [];
-    const leg = (sx: number, sz: number) => {
-      for (let i = 0; i < 6; i++) {
-        const y0 = i * 20, y1 = y0 + 20;
-        const r0 = 26 * Math.pow(1 - y0 / 140, 1.6) + 1.5, r1 = 26 * Math.pow(1 - y1 / 140, 1.6) + 1.5;
-        const a = new THREE.Vector3(sx * r0, y0, sz * r0), b = new THREE.Vector3(sx * r1, y1, sz * r1);
-        const g = new THREE.CylinderGeometry(0.9, 1.2, a.distanceTo(b), 4);
-        g.applyMatrix4(tmpM.makeRotationFromQuaternion(tmpQ.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize())));
-        g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
-        parts.push(T1(SURF.metal, colorize(g, 0x6d5a48)));
-      }
-    };
-    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx, sz);
-    parts.push(T1(SURF.metal, box(34, 2.5, 34, 0, 40, 0, 0x6d5a48)), T1(SURF.metal, box(14, 2, 14, 0, 80, 0, 0x6d5a48)));
-    parts.push(T1(SURF.metal, cyl(0.8, 3.5, 40, 0, 140, 0, 0x6d5a48, 6)), T1(SURF.glow, sphere(1.2, 0, 161, 0, 0xfff1c8, 1, 1, 1, 8)));
-    return merge(parts);
-  },
-  'stone-bridge': () => {
-    // An arched stone bridge across the river, passing overhead.
-    const parts: Part[] = [T1(SURF.stone, box(12, 2.4, 90, 0, 9.2, -20, 0xd3c6a6)), T1(SURF.stone, box(12.4, 1.1, 90, 0, 10.9, -20, 0xc7b997))];
-    for (const z of [-34, 6]) parts.push(T1(SURF.stone, box(9, 8.2, 6, 0, 4.1, z, 0xc9bb9b)));
-    for (const z of [-55, -20, 15]) parts.push(T1(SURF.metal, box(0.2, 1.3, 0.2, 5.8, 12, z, 0x2b3a33)));
-    return merge(parts);
-  },
-  // --- The night bus (top deck) ---------------------------------------------------------
-  'kerb': () => merge([
-    T1(SURF.concrete, box(30.2, 0.16, 0.3, 0, 0.08, 0, 0xbab6ad)),
-    T1(SURF.concrete, box(30.2, 0.14, 12, 0, 0.07, -6.1, 0x8f8b85)),
-  ]),
-  'bollard': () => merge([T1(SURF.metal, cyl(0.12, 0.14, 0.95, 0, 0.6, 0, 0x2e3236, 8)), T1(SURF.glow, cyl(0.125, 0.125, 0.06, 0, 0.95, 0, 0xfff0d0, 8))]),
-  'street-lamp': () => merge([
-    T1(SURF.metal, cyl(0.08, 0.15, 7.4, 0, 3.7, 0, 0x5b6066, 8)),
-    T1(SURF.metal, box(0.12, 0.12, 2.2, 0, 7.35, 1.05, 0x5b6066)),
-    T1(SURF.glow, box(0.45, 0.14, 0.8, 0, 7.25, 2.0, 0xffc77a)),
-  ]),
-  'bus-shelter': () => merge([
-    T1(SURF.metal, box(4.2, 0.12, 1.8, 0, 2.5, -0.5, 0x3a3f45)),
-    ...[-2, 2].map(x => T1(SURF.metal, box(0.1, 2.5, 0.1, x, 1.25, -1.3, 0x3a3f45))),
-    T1(SURF.glass, box(4, 2.2, 0.05, 0, 1.3, -1.35, 0x5a6870)),
-    T1(SURF.glow, box(1.2, 1.7, 0.12, 1.4, 1.25, -1.2, 0x9ab4d0)),
-  ]),
-  'parked-car': () => merge([
-    T1(SURF.paint, box(4.2, 0.8, 1.8, 0, 0.6, 0, 0x8a2f35)), T1(SURF.paint, box(2.4, 0.65, 1.6, -0.2, 1.3, 0, 0x8a2f35)),
-    T1(SURF.glass, box(2.2, 0.5, 1.65, -0.2, 1.3, 0, 0x26303a)),
-    ...[-1.4, 1.4].map(x => T1(SURF.rock, box(0.68, 0.68, 1.85, x, 0.34, 0, 0x1c1c1e))),
-    T1(SURF.glow, box(0.06, 0.15, 1.4, -2.12, 0.75, 0, 0xff3838)),
-  ]),
-  'shopfront': () => merge([
-    T1(SURF.brick, box(14, 9, 10, 0, 4.5, -5, 0x6e4a40)),
-    T1(SURF.glass, box(12, 2.8, 0.1, 0, 1.6, 0.05, 0x9aa6ad)),
-    T1(SURF.glow, box(12, 0.7, 0.2, 0, 3.4, 0.1, 0xff4fa0)),
-    ...windowsOnFace(14, 9, 0, 2, 5, 4.2, 0x3c4650),
-  ]),
-  'neon-diner': () => merge([
-    T1(SURF.paint, box(12, 4.2, 9, 0, 2.1, -4.5, 0xd8dcdc)),
-    T1(SURF.glass, box(10.5, 2, 0.1, 0, 1.7, 0.05, 0xb3c0c4)),
-    T1(SURF.glow, box(11, 0.35, 0.2, 0, 3.6, 0.1, 0x4fe0ff)),
-    T1(SURF.glow, box(3.2, 1.2, 0.2, 0, 5.2, -0.5, 0xff5f6d)),
-  ]),
-  'tower-block': () => merge([
-    T1(SURF.concrete, box(12, 34, 12, 0, 17, 0, 0x8f8f92)),
-    ...windowsOnFace(12, 34, 6, 12, 5, 1.5, 0x3a4450),
-    T1(SURF.glow, box(0.6, 0.6, 0.6, 5.5, 34.4, 5.5, 0xff3030)),
-  ]),
-  'skyscraper': () => merge([
-    T1(SURF.glass, box(26, 120, 26, 0, 60, 0, 0x3e5568)),
-    T1(SURF.glass, box(18, 30, 18, 0, 135, 0, 0x3e5568)),
-    T1(SURF.metal, cyl(0.6, 1.0, 26, 0, 163, 0, 0x8a9096, 6)), T1(SURF.glow, sphere(1.1, 0, 177, 0, 0xff3030, 1, 1, 1, 8)),
-  ]),
-  'footbridge': () => merge([
-    T1(SURF.metal, box(3.4, 1.2, 60, 0, 7.6, -14, 0x3d4a58)), T1(SURF.glass, box(3.2, 1.6, 60, 0, 9, -14, 0x5a6c7a)),
-    T1(SURF.glow, box(3.5, 0.12, 60, 0, 8.25, -14, 0x9ad8ff)),
-    ...[-30, 6].map(z => T1(SURF.metal, box(1.2, 7, 1.2, 0, 3.5, z, 0x3d4a58))),
-  ]),
-  'tram': () => merge([
-    T1(SURF.paint, box(24, 2.6, 2.6, 0, 1.9, 0, 0xe8e6e0)), T1(SURF.glow, box(24.05, 1.0, 2.62, 0, 2.2, 0, 0xffe7b8)),
-    T1(SURF.paint, box(24.1, 0.3, 2.65, 0, 0.9, 0, 0x2a7a6e)), T1(SURF.metal, box(2, 0.9, 1.4, 0, 3.6, 0, 0x2e3236)),
-  ]),
   'overpass': () => merge([
     T1(SURF.concrete, box(7, 1.4, 70, 0, 8.2, -20, 0xbdb7aa)),
     box(7.2, 1.0, 0.3, 0, 9.4, 15, 0x9d978a), box(7.2, 1.0, 0.3, 0, 9.4, -55, 0x9d978a),

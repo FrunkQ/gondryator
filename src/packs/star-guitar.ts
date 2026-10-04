@@ -71,7 +71,7 @@ export const STAR_GUITAR: Pack = {
   title: { template: 'station-board' },
   // The main window stays photographic, like the original; the looks bloom as you turn round to the
   // other window (see FxDirector.amount).
-  fx: { cycle: ['clean', 'prism', 'trip', 'fold', 'kaleido', 'thermal', 'echo', 'liquid'], bySection: { breakdown: 'liquid', intro: 'clean' } },
+  fx: { cycle: ['clean', 'prism', 'hyper', 'trip', 'fold', 'tunnel', 'kaleido', 'thermal', 'echo', 'liquid'], bySection: { breakdown: 'liquid', intro: 'clean' } },
   sectionEvents: { onNewSection: 'overpass', onBreakdown: 'train-car' },
   window: { width: 1.6, height: 1.0, bottom: -0.42, pillar: 0.26, distance: 1.0, frame: '#7d8483', wall: '#c4bdac' },
 };

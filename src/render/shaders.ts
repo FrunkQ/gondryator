@@ -12,7 +12,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, attribute, vec2, vec3, vec4, float, mix, select, abs, floor, fract, sin, cos, clamp, smoothstep, step,
   positionGeometry, normalGeometry, positionWorld, normalWorld, vertexColor, fwidth, length, max, min, dot, bumpMap, time,
-  mx_noise_float, mx_worley_noise_float, hash, cameraPosition, pow, materialColor, viewportSharedTexture, screenUV, uv, positionLocal, normalLocal,
+  mx_noise_float, mx_worley_noise_float, hash, cameraPosition, pow, atan, acos, materialColor, viewportSharedTexture, screenUV, uv, positionLocal, normalLocal,
 } from 'three/tsl';
 
 /** Uniforms shared by every procedural material and the post effects; the FX director writes them. */
@@ -128,7 +128,10 @@ export function makeSceneryMaterial(opts: { trip?: any } = {}): THREE.MeshStanda
   const lat = p.y.mul(0.08).add(mx_noise_float(p.mul(0.05)).mul(1.4));
   const gasCol = float(0.75).add(sin(lat.mul(9.0)).mul(0.2)).add(sin(lat.mul(23.0).add(1.0)).mul(0.08));
   const crater = mx_worley_noise_float(p.mul(0.12));
-  const rockCol = float(0.7).add(smoothstep(0.05, 0.3, crater).mul(0.35)).add(fine.mul(0.05).mul(fadeFine));
+  // Big craters for moons, small pits for asteroids, and a mottled tone so rocks never look banded.
+  const pits = mx_worley_noise_float(p.mul(0.9));
+  const mottle = mx_noise_float(p.mul(0.45)).mul(0.5).add(0.5);
+  const rockCol = float(0.55).add(smoothstep(0.05, 0.3, crater).mul(0.25)).add(smoothstep(0.02, 0.18, pits).mul(0.2)).add(mottle.mul(0.18)).add(fine.mul(0.06).mul(fadeFine));
   const spikes = mx_noise_float(p.mul(vec3(9.0, 2.0, 9.0))).mul(0.5).add(0.5);
   const lavCol = float(0.7).add(spikes.mul(0.5));
   const patternF = float(1)
@@ -180,7 +183,7 @@ export function makeSceneryMaterial(opts: { trip?: any } = {}): THREE.MeshStanda
     .add(is(SURF.concrete).mul(joint.oneMinus().add(fine.mul(0.2).mul(fadeFine))))
     .add(is(SURF.foliage).mul(leaf))
     .add(is(SURF.plaster).mul(fine.mul(0.15).mul(fadeFine)))
-    .add(is(SURF.rock).mul(smoothstep(0.0, 0.25, crater)))
+    .add(is(SURF.rock).mul(smoothstep(0.0, 0.25, crater).mul(0.6).add(smoothstep(0.0, 0.15, pits).mul(0.4))))
     .add(is(SURF.lavender).mul(spikes));
   m.normalNode = bumpMap(height, 0.035);
   // Trip looks make the scenery dance: a squash on the kick and a wobble that travels up.
@@ -220,39 +223,6 @@ export function makeGroundMaterial(map: THREE.Texture): THREE.MeshStandardNodeMa
   const field = pow(materialColor.rgb, vec3(1.5)).mul(vec3(0.95, 1.05, 0.8));
   m.colorNode = vec4(mix(field.mul(detail), tripCol, U.trip.mul(0.85)), 1);
   m.normalNode = bumpMap(n2.mul(near).add(tufts.mul(near)), 0.08);
-  m.emissiveNode = tripCol.mul(U.trip).mul(U.kick.mul(0.5));
-  return m;
-}
-
-/** The trippy window's ground: rings of colour pulsing out from the viewer on the beat. */
-export function makeTripFloorMaterial(): THREE.MeshBasicNodeMaterial {
-  const m = new THREE.MeshBasicNodeMaterial({ fog: false });
-  const wp = positionWorld;
-  const flow = mx_noise_float(vec3(wp.x.mul(0.012), U.showTime.mul(0.1), wp.z.mul(0.012)));
-  const rings = length(wp.xz.sub(cameraPosition.xz)).mul(0.025).sub(U.showTime.mul(0.45)).add(flow.mul(1.5));
-  const stripe = smoothstep(0.42, 0.5, fract(rings.mul(3.0))).mul(smoothstep(0.58, 0.5, fract(rings.mul(3.0))));
-  const col = pow(palette(rings.add(U.hue)), vec3(2.0));
-  m.colorNode = col.mul(float(0.25).add(U.kick.mul(0.35))).add(col.mul(stripe).mul(float(0.6).add(U.kick)));
-  return m;
-}
-
-/** River water: the theme colour, rippled, glossy enough to carry the sky and the quays. */
-export function makeWaterMaterial(map: THREE.Texture): THREE.MeshStandardNodeMaterial {
-  const m = new THREE.MeshStandardNodeMaterial({ map, roughness: 0.14, metalness: 0.1 });
-  const wp = positionWorld;
-  const d = length(cameraPosition.xz.sub(wp.xz));
-  const near = smoothstep(220, 8, d);
-  const t = U.showTime;
-  // Two scales of ripple drifting with the current, plus a long swell.
-  const r1 = mx_noise_float(vec3(wp.x.mul(0.35).add(t.mul(0.4)), t.mul(0.3), wp.z.mul(0.7)));
-  const r2 = mx_noise_float(vec3(wp.x.mul(1.6).add(t.mul(0.9)), t.mul(0.8), wp.z.mul(2.2)));
-  const swell = sin(wp.x.mul(0.05).add(wp.z.mul(0.11)).add(t.mul(0.6))).mul(0.5);
-  const flow = mx_noise_float(vec3(wp.x.mul(0.01), t.mul(0.08), wp.z.mul(0.01)));
-  const rings = length(wp.xz.sub(cameraPosition.xz)).mul(0.03).sub(t.mul(0.5)).add(flow);
-  const tripCol = pow(palette(rings.add(U.hue)), vec3(2.2)).mul(float(0.35).add(U.kick.mul(0.4)));
-  const water = pow(materialColor.rgb, vec3(1.4)).mul(float(0.85).add(r1.mul(0.08)));
-  m.colorNode = vec4(mix(water, tripCol, U.trip.mul(0.85)), 1);
-  m.normalNode = bumpMap(r1.mul(0.6).add(r2.mul(0.25).mul(near)).add(swell), 0.12);
   m.emissiveNode = tripCol.mul(U.trip).mul(U.kick.mul(0.5));
   return m;
 }
@@ -341,6 +311,79 @@ export function makeSpaceMaterial(reveal: any): THREE.MeshBasicNodeMaterial {
   m.colorNode = col.add(vec3(1.0, 0.55, 0.9).mul(edge).mul(3.0));
   m.opacityNode = step(n, reveal);
   m.alphaTest = 0.5;
+  return m;
+}
+
+/**
+ * The starship's sky, all the way round. Out of the main canopy: deep space, stars and slow
+ * nebulae. Out of the other side (+z): a psychedelic vortex that spins and pulses with the music.
+ */
+export function makeShipSkyMaterial(): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, fog: false, depthWrite: false });
+  const d = positionLocal.normalize();
+  const stars = (k: number, th: number) => {
+    const c = floor(d.mul(k));
+    const h = hash(c.dot(vec3(1.0, 57.0, 113.0)));
+    const f = fract(d.mul(k)).sub(0.5);
+    return step(th, h).mul(smoothstep(0.35, 0.0, length(f)));
+  };
+  const twinkle = sin(U.showTime.mul(3.0).add(hash(floor(d.mul(420.0)).dot(vec3(3, 7, 11))).mul(40.0))).mul(0.3).add(0.7);
+  const field = stars(420, 0.982).mul(twinkle).add(stars(170, 0.991).mul(1.5)).add(stars(64, 0.996).mul(3.2));
+  // Real side: two nebulae (teal and rose) with dark dust lanes through them.
+  const n1 = mx_noise_float(d.mul(1.7).add(vec3(3.1, 0, U.showTime.mul(0.004)))).mul(0.5).add(0.5);
+  const n2 = mx_noise_float(d.mul(4.3).add(9.0)).mul(0.5).add(0.5);
+  const lanes = smoothstep(0.42, 0.62, mx_noise_float(d.mul(7.0).add(2.0)).mul(0.5).add(0.5));
+  const glowA = pow(n1.mul(n2), 2.4).mul(2.2);
+  const glowB = pow(smoothstep(0.35, 0.9, mx_noise_float(d.mul(2.6).add(5.0)).mul(0.5).add(0.5)), 2.0).mul(0.9);
+  const neb = vec3(0.12, 0.55, 0.7).mul(glowA).add(vec3(0.75, 0.22, 0.45).mul(glowB)).mul(float(1).sub(lanes.mul(0.7)));
+  const real = vec3(0.003, 0.004, 0.012).add(neb.mul(float(0.55).add(U.kick.mul(0.12)))).add(vec3(field));
+  // Trip side: a vortex centred on the other window.
+  const ang = atan(d.y, d.x);
+  const rad = acos(clamp(d.z, -1.0, 1.0));
+  const swirl = rad.mul(3.2).sub(U.showTime.mul(0.35)).add(ang.mul(0.477));
+  const bands = sin(swirl.mul(12.566)).mul(0.5).add(0.5);
+  const rays = sin(ang.mul(12.0).add(U.showTime.mul(0.6)).add(rad.mul(4.0))).mul(0.5).add(0.5);
+  const trip = pow(palette(swirl.add(U.hue).add(rays.mul(0.15))), vec3(1.8))
+    .mul(float(0.18).add(bands.mul(0.32)).add(U.kick.mul(0.45)).add(rays.mul(0.1)))
+    .add(vec3(field).mul(0.6));
+  const side = smoothstep(-0.2, 0.3, d.z);
+  m.colorNode = mix(real, trip, side);
+  return m;
+}
+
+/** The starship's canopy: almost nothing, a faint sheen and a lattice that shimmers on the kick. */
+export function makeCanopyMaterial(): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const p = uv().mul(vec2(60.0, 90.0));
+  const row = floor(p.y);
+  const q = vec2(p.x.add(row.mul(0.5)), p.y);
+  const f = fract(q).sub(0.5);
+  const cell = max(abs(f.x), abs(f.y));
+  const lattice = smoothstep(0.44, 0.5, cell);
+  // The lattice shows towards the canopy's edges and frame; the middle stays clear.
+  const edge = smoothstep(0.05, 0.0, uv().x).add(smoothstep(0.95, 1.0, uv().x)).add(smoothstep(0.04, 0.0, abs(uv().x.sub(0.5))).mul(0.4));
+  const pulse = float(0.25).add(U.kick.mul(0.9)).add(U.hat.mul(0.2));
+  const sweep = smoothstep(0.08, 0.0, abs(fract(uv().y.mul(2.0).sub(U.showTime.mul(0.25))).sub(0.5))).mul(0.3);
+  const tint = mix(vec3(0.45, 0.85, 1.0), pow(palette(uv().y.add(U.hue)), vec3(1.5)), U.trip.mul(0.8));
+  const a = lattice.mul(clamp(edge, 0, 1)).mul(pulse.add(sweep)).mul(0.35);
+  // Additive: the canopy can only ever add light, so the view through it is never dimmed.
+  m.blending = THREE.AdditiveBlending;
+  m.colorNode = tint.mul(a.add(0.012));
+  return m;
+}
+
+/** The starship's console: rows of buttons blinking along with the track. */
+export function makeConsoleMaterial(): THREE.MeshStandardNodeMaterial {
+  const m = new THREE.MeshStandardNodeMaterial({ color: 0x2a2f36, roughness: 0.45, metalness: 0.6 });
+  const p = positionLocal.xz.mul(vec2(7.0, 9.0));
+  const cell = floor(p);
+  const h = hash(cell.dot(vec2(1.0, 57.0)));
+  const f = fract(p).sub(0.5);
+  const key = smoothstep(0.36, 0.3, max(abs(f.x), abs(f.y)));
+  const lit = step(0.5, hash(cell.dot(vec2(3.0, 11.0)).add(floor(U.showTime.mul(float(1.5).add(h.mul(4.0)))))));
+  const col = pow(palette(h.mul(0.8).add(U.hue.mul(0.5))), vec3(1.6));
+  const top = smoothstep(0.5, 0.8, normalLocal.y);
+  m.emissiveNode = col.mul(key).mul(top).mul(lit.mul(float(0.7).add(U.kick.mul(1.6))).add(0.08));
   return m;
 }
 

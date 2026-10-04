@@ -15,10 +15,10 @@ import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { U, palette } from './shaders';
 import type { Score } from '../score/types';
 
-export type FxLook = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold';
-export const FX_LOOKS: FxLook[] = ['clean', 'prism', 'trip', 'kaleido', 'liquid', 'thermal', 'echo', 'fold'];
+export type FxLook = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel';
+export const FX_LOOKS: FxLook[] = ['clean', 'prism', 'trip', 'kaleido', 'liquid', 'thermal', 'echo', 'fold', 'hyper', 'tunnel'];
 
-interface Weights { fold?: number; rain?: number; kal: number; liquid: number; rgb: number; thermal: number; trip: number; echo: number; bloom: number; punch: number }
+interface Weights { fold?: number; rain?: number; hyper?: number; tunnel?: number; kal: number; liquid: number; rgb: number; thermal: number; trip: number; echo: number; bloom: number; punch: number }
 const LOOKS: Record<FxLook, Weights> = {
   clean:   { kal: 0, liquid: 0,   rgb: 0.12, thermal: 0, trip: 0,    echo: 0,    bloom: 0.25, punch: 0.25 },
   prism:   { kal: 0, liquid: 0,   rgb: 1,    thermal: 0, trip: 0.3,  echo: 0.15, bloom: 0.8,  punch: 0.7 },
@@ -29,10 +29,14 @@ const LOOKS: Record<FxLook, Weights> = {
   echo:    { kal: 0, liquid: 0.3, rgb: 0.5,  thermal: 0, trip: 0.2,  echo: 1,    bloom: 0.7,  punch: 0.5 },
   // The world folds over: the sky becomes a mirror of the ground, turning slowly.
   fold:    { fold: 1, kal: 0, liquid: 0.15, rgb: 0.5, thermal: 0, trip: 0.4, echo: 0.2, bloom: 0.8, punch: 0.6 },
+  // Hyperspace: stars stream out of the centre and everything smears towards it on the kick.
+  hyper:   { hyper: 1, kal: 0, liquid: 0, rgb: 0.7, thermal: 0, trip: 0.35, echo: 0.35, bloom: 1, punch: 1 },
+  // Wormhole: the world itself is wrapped into a tunnel you fall down, ringed in the palette.
+  tunnel:  { tunnel: 1, kal: 0, liquid: 0.1, rgb: 0.5, thermal: 0, trip: 0.6, echo: 0.3, bloom: 0.9, punch: 0.6 },
 };
 
 const W = {
-  fold: uniform(0), kal: uniform(0), liquid: uniform(0), rgb: uniform(0), thermal: uniform(0), echo: uniform(0), bloom: uniform(0.25), punch: uniform(0),
+  fold: uniform(0), hyper: uniform(0), tunnel: uniform(0), warp: uniform(0), kal: uniform(0), liquid: uniform(0), rgb: uniform(0), thermal: uniform(0), echo: uniform(0), bloom: uniform(0.25), punch: uniform(0),
   glitch: uniform(0), aspect: uniform(16 / 9), kalRot: uniform(0), segments: uniform(6),
   /** Motion blur: screen-space smear per metre of depth (uv * m), from travel speed and shutter. */
   blurK: uniform(0), blurDir: uniform(new THREE.Vector2(1, 0)),
@@ -63,6 +67,12 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     // Kick punch: a quick zoom towards the centre.
     const zoom = float(1).sub(U.kick.mul(W.punch).mul(0.035));
     let u = uv0.sub(0.5).mul(zoom).add(0.5);
+    // Wormhole: angle round the centre and inverse distance become the coordinates, so the
+    // scene is wrapped round a tunnel that streams towards you.
+    const tc = u.sub(0.5).mul(vec2(W.aspect, 1));
+    const tr = length(tc);
+    const ut = vec2(atan(tc.y, tc.x).div(6.28318).add(0.5).add(U.showTime.mul(0.02)), float(0.22).div(tr.add(0.04)).add(U.showTime.mul(0.45)));
+    u = mix(u, ut, W.tunnel.mul(smoothstep(0.0, 0.08, tr)));
     // Kaleidoscope: fold the angle into mirrored wedges around the centre.
     const c = u.sub(0.5).mul(vec2(W.aspect, 1));
     const r = length(c);
@@ -93,9 +103,11 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     // (the carriage itself, within a few metres, travels with the camera and stays sharp)
     const smear = clamp(W.blurK.div(max(viewZ.negate(), 0.5)), 0, 0.05).mul(smoothstep(2.5, 3.5, viewZ.negate()));
     const step = W.blurDir.mul(smear).div(5.0);
+    // Warp: a zoom smear towards the centre (a section jump, or the hyperspace look on the kick).
+    const zb = W.warp.mul(0.22).add(W.hyper.mul(float(0.02).add(U.kick.mul(0.06))));
     const acc = vec3(0).toVar();
     for (let i = 0; i < 6; i++) {
-      const o = step.mul(i - 2.5);
+      const o = step.mul(i - 2.5).sub(u.sub(0.5).mul(zb.mul(i / 5)));
       acc.addAssign(vec3(src.sample(u.add(off).add(o)).r, src.sample(u.add(o)).g, src.sample(u.sub(off).add(o)).b));
     }
     // Trip looks repaint the sky: a rolling sunburst in the palette, spinning with the kicks.
@@ -103,7 +115,19 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     const sc = uv0.sub(vec2(0.5, 0.35)).mul(vec2(W.aspect, 1));
     const rays = sin(atan(sc.y, sc.x).mul(14.0).add(W.kalRot.mul(3.0))).mul(0.5).add(0.5);
     const skyCol = pow(palette(length(sc).mul(1.4).sub(U.showTime.mul(0.15)).add(U.hue).add(rays.mul(0.12))), vec3(1.8)).mul(float(1.4).add(rays.mul(0.8)).add(U.kick.mul(1.5)));
-    return vec4(mix(acc.div(6.0), skyCol, skyMask), 1);
+    // Star streaks pouring out of the centre: fast and long in a warp jump.
+    const sc2 = uv0.sub(0.5).mul(vec2(W.aspect, 1));
+    const rr = length(sc2);
+    const lanes = atan(sc2.y, sc2.x).mul(150.0 / 6.28318);
+    const lane = floor(lanes);
+    const lh = hash(lane);
+    const head = fract(lh.mul(13.7).add(time.mul(float(0.25).add(lh.mul(0.6))).mul(float(1).add(W.warp.mul(5.0)))) ).mul(1.3);
+    const len = float(0.015).add(W.warp.mul(0.4)).add(W.hyper.mul(0.05).add(U.kick.mul(W.hyper).mul(0.08)));
+    const thin = smoothstep(0.5, 0.15, abs(fract(lanes).sub(0.5)));
+    const streak = smoothstep(head.sub(len), head, rr).mul(float(1).sub(smoothstep(head, head.add(0.003), rr))).mul(smoothstep(0.55, 0.56, hash(lane.add(7.0)))).mul(smoothstep(0.02, 0.12, rr)).mul(thin);
+    const streakCol = mix(vec3(0.75, 0.9, 1.0), palette(lh.add(U.hue)), 0.45).mul(streak).mul(W.warp.mul(1.6).add(W.hyper.mul(0.6)));
+    const flash = pow(W.warp, 4.0).mul(0.45);
+    return vec4(mix(acc.div(6.0), skyCol, skyMask).add(streakCol).add(flash), 1);
   })();
 
   const warpedTex = convertToTexture(warped);
@@ -134,13 +158,18 @@ export class FxDirector {
   locked: FxLook | null = null;
   /** How much of the look shows, 0..1: a pack can keep one view clean (Star Guitar's main window). */
   amount = 1;
-  private cur: Weights = { fold: 0, rain: 0, ...LOOKS.clean };
+  private cur: Weights = { fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS.clean };
   private ptr = 0;
   private lastS = -Infinity;
   private kick = 0; private snare = 0; private hat = 0;
   private secIdx = -1;
   private glitch = 0;
+  private warp = 0;
   private hue = 0;
+  /** The warp jump shows from every window (the starship), not just where the looks show. */
+  warpAll = false;
+  /** 0..1, the current warp jump: the world widens the field of view with it. */
+  get warpLevel() { return FX_UNIFORMS.warp.value; }
 
   constructor(private cycle: FxLook[], private bySection: Partial<Record<string, FxLook>> = {}) {}
 
@@ -175,16 +204,17 @@ export class FxDirector {
       const sec = sc.sections[idx];
       if (sec) { energy = sec.energy; label = sec.label; }
       if (idx !== this.secIdx) {
-        if (this.secIdx >= 0) this.glitch = 1;
+        if (this.secIdx >= 0) { this.glitch = 1; this.warp = 1; }
         this.secIdx = idx;
         this.look = this.bySection[label] ?? this.cycle[idx % this.cycle.length];
       }
     } else this.look = 'clean';
-    const target = { fold: 0, rain: 0, ...LOOKS[this.locked ?? this.look] };
+    const target = { fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS[this.locked ?? this.look] };
     if (label === 'breakdown') target.rain = 1;
     const k = 1 - Math.exp(-dt / 0.8);
     for (const key of Object.keys(target) as (keyof Weights)[]) this.cur[key] += (target[key] - this.cur[key]) * k;
     this.glitch *= Math.exp(-dt / 0.12);
+    this.warp *= Math.exp(-dt / 0.55);
     // Beat phase from the tempo map.
     let phase = 0;
     if (sc && sc.beats.length) {
@@ -199,6 +229,8 @@ export class FxDirector {
     U.energy.value = energy; U.trip.value = this.cur.trip * a; U.night.value = night;
     U.hue.value = this.hue; U.beatPhase.value = phase; U.showTime.value = s;
     W.fold.value = (this.cur.fold ?? 0) * a; U.rain.value = this.cur.rain ?? 0;
+    W.hyper.value = (this.cur.hyper ?? 0) * a; W.tunnel.value = (this.cur.tunnel ?? 0) * a;
+    W.warp.value = this.warp * (this.warpAll ? 1 : a);
     W.kal.value = this.cur.kal * a; W.liquid.value = this.cur.liquid * a; W.rgb.value = this.cur.rgb * a; W.thermal.value = this.cur.thermal * a;
     W.echo.value = this.cur.echo * a; W.bloom.value = LOOKS.clean.bloom + (this.cur.bloom - LOOKS.clean.bloom) * a;
     W.punch.value = this.cur.punch * a; W.glitch.value = this.glitch * a;

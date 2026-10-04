@@ -10,7 +10,7 @@ Read this before you touch anything. It covers the spirit first and the code sec
 
 **Don't copy. Get inspired.** Never recreate his shots, sets, characters or anyone's artwork frame for frame. Never pull in their footage, songs or logos. Take the *idea* (every beat becomes something you can see) and invent your own worlds. Every model in this repo is original and procedural, and new ones should be too.
 
-**Be playful.** The person you are working with probably came here to have fun. Suggest the surprising thing. Make the lamp posts blink on the hi-hats. Send a whale past the riverboat on the breakdown. Ask "what if the bus drove through a cake?" If a change makes someone grin, it is probably right. If it is only "correct", keep going.
+**Be playful.** The person you are working with probably came here to have fun. Suggest the surprising thing. Make the lamp posts blink on the hi-hats. Send a whale past the starship on the breakdown. Ask "what if the train drove through a cake?" If a change makes someone grin, it is probably right. If it is only "correct", keep going.
 
 **Show that AI can be a creative partner.** You are not here to churn out boilerplate. You are here to be the friend who says "ooh, and what if...". Build something with your human that neither of you would have made alone.
 
@@ -31,7 +31,7 @@ src/
               midi.ts      MIDI in (sharper sync) and out; cache.ts stores parsed scores
   packs/      a "pack" is a vehicle or show, written entirely as data:
               star-guitar.ts  the train (homage to the video)
-              riverboat.ts    Paris by boat;  night-bus.ts  the city at night from the top deck
+              starship.ts     an open cockpit in space, a psychedelic vortex out of the other side
               other-side.ts   the train's other window: Provence and Cosmos
               types.ts        what a pack can say: layers, mapping rules, themes, light, fx, window
               around-the-world.ts  hidden until it gets its twist (?pack=around-the-world)
@@ -40,21 +40,21 @@ src/
               otherside.ts the mirrored second window
               models.ts    every model, built from boxes, cylinders and lathes; `T(SURF.x, ...)` picks the surface
               shaders.ts   TSL node materials: one procedural material paints brick, glass, rust, foliage...
-              fx.ts        post-processing looks (prism, trip, kaleido, liquid, thermal, echo, fold)
+              fx.ts        post-processing looks (prism, trip, kaleido, liquid, thermal, echo, fold, hyper, tunnel) and warp jumps
               pool.ts      instanced-mesh pools, so nothing allocates per frame
               flock.ts     starlings and fireworks
   ui/         look.ts (drag/keys/gyro), tuning.ts (piano roll), frames.ts (frame analyser, P), vr.ts
-  main.ts     wires it all together: loading, phases, the tour between vehicles
+  main.ts     wires it all together: loading, phases, switching rides
 ```
 
 ## Make your own vehicle (the fun bit)
 
-1. Copy `src/packs/riverboat.ts` to `src/packs/your-ride.ts`.
+1. Copy `src/packs/starship.ts` to `src/packs/your-ride.ts`.
 2. Pick your `layers`: for each one, a depth from the window, the models per theme, and how it scales with velocity, pitch (`pitchCenter`/`heightPerSemitone`) or note length (`lengthByDur`).
 3. `mapping` decides which sounds go to which layer (kick, snare, hat, bass, melody, pads).
 4. Add new models in `render/models.ts`. They are plain functions that merge primitives. Mark the materials with `T(SURF.glass, ...)`, `T(SURF.glow, ...)` and so on.
-5. Set `vehicle` ('train', 'boat' or 'bus' decides rails, grass and dressing), `window` (size and colours of the carriage), `light` (sun over the length of the song) and `otherSide` ('trippy' for a psychedelic mirror).
-6. Add it to `PACKS` in `src/packs/index.ts`. The tour picks it up automatically.
+5. Set `vehicle` ('train' gives ground, rails and a carriage; 'ship' gives space all round and an open canopy), `window` (size and colours of the carriage), `light` (sun over the length of the song) and `otherSide` ('trippy' for a psychedelic mirror).
+6. Add it to `PACKS` in `src/packs/index.ts` and it appears in the menu.
 
 Keep the golden rule: **everything that moves must land on its beat.** The spawner handles that for you if your models stand on y=0, centred on x=0, with +z facing the viewer.
 

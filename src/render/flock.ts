@@ -36,6 +36,9 @@ export class SkyLife {
   private ripple = 0;
   private colors: THREE.Color[];
 
+  /** No starlings in space. */
+  set birdsVisible(v: boolean) { this.birds.visible = v; }
+
   constructor(private stage: boolean) {
     // A bird is a flattened V: two thin wings.
     const wing = (sx: number) => new THREE.BufferGeometry().setFromPoints([
