@@ -13,7 +13,7 @@ import {
   Fn, uniform, attribute, vec2, vec3, vec4, float, mix, select, abs, floor, fract, sin, cos, clamp, smoothstep, step,
   positionGeometry, normalGeometry, positionWorld, normalWorld, vertexColor, fwidth, length, max, min, dot, bumpMap, time,
   mx_noise_float, mx_worley_noise_float, hash, cameraPosition, pow, atan, acos, materialColor, viewportSharedTexture, screenUV, uv, positionLocal, normalLocal,
-  asin, texture, exp, normalize, cross,
+  asin, texture, exp, normalize, cross, If, Loop, mod, log2,
 } from 'three/tsl';
 
 /** Uniforms shared by every procedural material and the post effects; the FX director writes them. */
@@ -409,6 +409,9 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const m = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, fog: false, depthWrite: false });
   const d = positionLocal.normalize();
   const az = atan(d.x, d.z.negate());             // 0 ahead (-z), +/- pi behind
+  // Patterns use the azimuth mirrored about the front-back line: the raw angle jumps from +pi to
+  // -pi right behind you, which showed as a seam; |az| meets itself there, so nothing can tear.
+  const azP = abs(az);
   const el = asin(clamp(d.y, -1.0, 1.0));          // -pi/2 .. pi/2
   // The pattern's clock: visualiser.ts advances it, faster as the song winds up for a lift.
   const t = V.phase;
@@ -416,9 +419,9 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   // Symmetry: mirror the sky about the horizon (layers.w).
   const elM = mix(el, abs(el), V.layers.w);
   // Kaleidoscope: fold the azimuth into mirrored segments.
-  const segs = max(V.shape.z, 1.0);
+  const segs = max(floor(V.shape.z.add(0.5)), 1.0);
   const seg = fract(az.div(6.28318).mul(segs).add(0.5));
-  const azK = select(V.shape.z.greaterThan(0.5), abs(seg.sub(0.5)).mul(6.28318).div(segs), az);
+  const azK = select(V.shape.z.greaterThan(0.5), abs(seg.sub(0.5)).mul(6.28318).div(segs), azP);
   // Swirl: the further from the horizon, the more it turns.
   const azS = azK.add(elM.mul(V.shape.y).add(sin(t.mul(0.3)).mul(V.shape.y).mul(0.5)));
   // Sub breathe (element 10): the whole pattern swells with the bass.
@@ -506,7 +509,7 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const ribbon = (y: number, lvl: any, freq: number, colShift: number) => {
     const yy = float(y).add(sin(az.mul(freq).add(U.showTime.mul(1.3 + freq * 0.2))).mul(lvl.mul(0.12)));
     const a = smoothstep(lvl.mul(0.05).add(0.004), 0.0, abs(el.sub(yy)));
-    return V.pa.add(V.pb.mul(cos(V.pc.mul(float(colShift).add(az.div(6.28318))).add(V.pd).mul(6.28318)))).mul(a).mul(lvl);
+    return V.pa.add(V.pb.mul(cos(V.pc.mul(float(colShift).add(azP.div(6.28318))).add(V.pd).mul(6.28318)))).mul(a).mul(lvl);
   };
   const ribbons = ribbon(-0.35, V.bands.x, 6.0, 0.0).add(ribbon(-0.05, V.bands.y, 3.0, 0.33)).add(ribbon(0.3, V.bands.z, 9.0, 0.66)).mul(1.4);
   // Starfield (3): stars streaming out of your gaze, faster with the energy.
@@ -529,9 +532,9 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const fade = smoothstep(-0.02, -0.4, d.y);
   const floorCol = paletteAt(hash(fc.dot(vec2(7.0, 3.0))).add(U.hue)).mul(lit.mul(0.8).add(lines.mul(0.6))).mul(below).mul(fade.mul(0.8).add(0.2));
   // Bass mountains (9): a wireframe range on the horizon as tall as the bass is loud.
-  const hgt = float(0.03).add(V.bands.y.mul(float(0.12).add(mx_noise_float(vec2(az.mul(3.0), U.showTime.mul(0.15))).mul(0.5).add(0.5).mul(0.3))));
+  const hgt = float(0.03).add(V.bands.y.mul(float(0.12).add(mx_noise_float(vec2(azP.mul(3.0), U.showTime.mul(0.15))).mul(0.5).add(0.5).mul(0.3))));
   const outline = smoothstep(0.012, 0.0, abs(el.sub(hgt)));
-  const hatch = smoothstep(0.15, 0.0, abs(fract(az.mul(40.0)).sub(0.5))).mul(step(el, hgt)).mul(step(-0.02, el)).mul(0.35);
+  const hatch = smoothstep(0.15, 0.0, abs(fract(azP.mul(40.0)).sub(0.5))).mul(step(el, hgt)).mul(step(-0.02, el)).mul(0.35);
   const mountains = paletteAt(el.mul(2.0).add(0.2)).mul(outline.add(hatch)).mul(float(0.6).add(V.bands.y));
   // Note circle (13): the twelve note names in a ring round your gaze; each lights as it is played.
   const pcIdx = floor(qa.div(6.28318).add(0.5).mul(12.0));
@@ -539,9 +542,9 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const band = smoothstep(0.08, 0.0, abs(qr.sub(0.75))).mul(smoothstep(0.45, 0.4, abs(fract(qa.div(6.28318).add(0.5).mul(12.0)).sub(0.5))));
   const circle = palette(pcIdx.div(12.0)).mul(band).mul(act.mul(1.8).add(0.05)).mul(step(0.0, dot(d, V.gaze)));
   // Aurora (14): curtains of light across the sky, swaying with the pads.
-  const ax = az.mul(3.0).add(mx_noise_float(vec2(az.mul(1.5), U.showTime.mul(0.08))).mul(1.5));
+  const ax = azP.mul(3.0).add(mx_noise_float(vec2(azP.mul(1.5), U.showTime.mul(0.08))).mul(1.5));
   const curtain = pow(abs(sin(ax.mul(4.0).add(U.showTime.mul(0.2)))), 6.0).mul(smoothstep(0.12, 0.45, el)).mul(smoothstep(1.3, 0.6, el));
-  const aurora = mix(vec3(0.1, 1.0, 0.6), paletteAt(el.add(az.div(6.28318))), 0.5).mul(curtain).mul(V.pad.mul(1.4).add(0.1));
+  const aurora = mix(vec3(0.1, 1.0, 0.6), paletteAt(el.add(azP.div(6.28318))), 0.5).mul(curtain).mul(V.pad.mul(1.4).add(0.1));
   // Nebula (15): soft clouds that bloom with the pads.
   const neb = pow(mx_noise_float(d.mul(1.8).add(U.showTime.mul(0.02))).mul(0.5).add(0.5).mul(mx_noise_float(d.mul(4.2).add(3.0)).mul(0.5).add(0.5)), 2.0);
   const nebula = paletteAt(neb.add(U.hue)).mul(neb).mul(V.pad.mul(1.6).add(0.15));
@@ -580,7 +583,8 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
     .add(bassCol.mul(V.E2.x)).add(mountains.mul(V.E2.y))
     .add(waveCol.mul(V.E2.w)).add(circle.mul(V.E3.y))
     .add(aurora.mul(V.E3.z)).add(nebula.mul(V.E3.w))
-    .add(fractCol.mul(V.E4.x));
+    .add(fractCol.mul(V.E4.x))
+    .add(moreElements(V, { d, az, azP, el, q, qa, qr, paletteAt, front: step(0.0, dot(d, V.gaze)) }));
   // The song's arc (visualiser.ts updateArc): muted and dim early on, full colour at the climax;
   // greyer and darker while it holds its breath before a drop, then a burst of light as it lets go.
   // Three journeys, one per era (journey = weights of colour rise, complexity bloom, thaw):
@@ -642,21 +646,234 @@ export function makeSpriteMaterial(style: 'petal' | 'flat' | 'spike' = 'petal'):
 }
 
 /**
+ * The second set of twenty sky elements (slots 21..41; visualiser.ts ELEMENTS has the list).
+ * Each one is only worked out while its weight is above zero (one branch per element), so a big
+ * library costs nothing while it waits its turn. Inspirations: classic music visualisers (the bar
+ * spectrum, Milkdrop's caustics), the demoscene (checker tunnels, copper bars, rotozoomers,
+ * metaballs, Julia sets, truchet tiles, fire) and club lighting (lasers, the glitterball).
+ */
+function moreElements(V: any, g: any) {
+  // (an Fn, because If and Loop need a shader function to put their branches in)
+  return Fn(() => moreElementsBody(V, g))();
+}
+
+function moreElementsBody(V: any, g: any) {
+  const { d, azP, el, q, qa, qr, paletteAt, front } = g;
+  const az = g.az;
+  const out = vec3(0.0).toVar();
+  const E = [V.E0, V.E1, V.E2, V.E3, V.E4, V.E5, V.E6, V.E7, V.E8, V.E9, V.E10];
+  const w = (i: number) => E[i >> 2][['x', 'y', 'z', 'w'][i & 3]];
+  const on = (i: number, build: () => any) => {
+    If(w(i).greaterThan(0.001), () => { out.addAssign(build().mul(w(i))); });
+  };
+  const T = U.showTime;
+  // 21 Spectrum: the classic bar analyser round the horizon, with its reflection below.
+  on(21, () => {
+    const sb = azP.div(3.14159).mul(48.0), sbi = floor(sb);
+    const k = mod(sbi, 3.0);
+    const lv = select(k.lessThan(0.5), V.bands.x, select(k.lessThan(1.5), V.bands.y, V.bands.z))
+      .mul(float(0.55).add(hash(sbi.add(floor(T.mul(7.0)))).mul(0.45)));
+    const h = float(0.03).add(lv.mul(0.45));
+    const ae = abs(el);
+    const bar = step(ae, h).mul(smoothstep(0.5, 0.36, abs(fract(sb).sub(0.5))));
+    const seg = step(0.3, fract(ae.mul(60.0)));
+    return paletteAt(sbi.div(48.0).add(U.hue.mul(0.5))).mul(bar).mul(seg).mul(select(el.lessThan(0.0), float(0.3), float(1.0))).mul(ae.div(h).add(0.4));
+  });
+  // 22 Checker tunnel: falling down a chequered tube round your gaze; the kick shoves you on.
+  on(22, () => {
+    const tu = qa.div(6.28318).mul(10.0).add(T.mul(0.08));
+    const tv = float(0.6).div(qr.add(0.04)).add(T.mul(1.6)).add(V.kickT.mul(-0.0)).add(U.kick.mul(0.4));
+    const chk = abs(step(0.5, fract(tu)).sub(step(0.5, fract(tv))));
+    return paletteAt(floor(tv).mul(0.07).add(U.hue)).mul(chk.mul(0.75).add(0.12)).mul(smoothstep(0.0, 0.5, qr)).mul(front).mul(0.8);
+  });
+  // 23 Copper bars: Amiga raster bars bouncing up and down the sky.
+  on(23, () => {
+    const acc = vec3(0.0).toVar();
+    for (let i = 0; i < 6; i++) {
+      const y = sin(T.mul(0.7 + i * 0.13).add(i * 1.1)).mul(0.55);
+      const x = el.sub(y).div(0.05);
+      const bar = exp(x.mul(x).negate());
+      acc.addAssign(paletteAt(float(i / 6).add(U.hue)).mul(pow(bar, 0.7)).mul(float(0.5).add(bar.mul(0.8))));
+    }
+    return acc.mul(float(0.6).add(U.kick.mul(0.5)));
+  });
+  // 24 Synthwave sun: a striped sun sinking into the horizon ahead of you, swelling with the bass.
+  on(24, () => {
+    const dA = atan(sin(az.sub(V.gazeAz)), cos(az.sub(V.gazeAz)));
+    const rho = length(vec2(dA, el.sub(0.14)));
+    const R = float(0.3).mul(float(1.0).add(V.bands.y.mul(0.2)).add(U.kick.mul(0.05)));
+    const disk = smoothstep(R, R.sub(0.008), rho);
+    const cut = mix(float(1.0), step(0.38, fract(float(0.14).sub(el).mul(24.0).sub(T.mul(0.5)))), step(el, 0.14));
+    const sun = mix(vec3(1.0, 0.85, 0.25), vec3(1.0, 0.18, 0.55), smoothstep(0.44, -0.16, el)).mul(disk).mul(cut).mul(1.3);
+    const halo = exp(rho.sub(R).max(0.0).mul(-7.0)).mul(0.35).mul(float(1.0).sub(disk));
+    return sun.add(mix(vec3(1.0, 0.3, 0.6), paletteAt(rho), 0.3).mul(halo)).mul(step(-0.005, el));
+  });
+  // 25 Metaballs: five blobs orbiting your gaze, swelling with the bass, merging and parting.
+  on(25, () => {
+    const field = float(0.0).toVar();
+    for (let i = 0; i < 5; i++) {
+      const c = vec2(cos(T.mul(0.5 + i * 0.11).add(i * 1.3)), sin(T.mul(0.7 + i * 0.13).add(i * 2.1))).mul(0.5);
+      const r = float(0.11 + i * 0.01).mul(float(1.0).add(V.bands.y.mul(0.7)).add(U.kick.mul(0.3)));
+      const dd = q.sub(c);
+      field.addAssign(r.mul(r).div(dot(dd, dd).add(0.0001)));
+    }
+    const edge = smoothstep(0.25, 0.0, abs(field.sub(1.0)));
+    const fill = smoothstep(0.9, 1.6, field);
+    return paletteAt(field.mul(0.15).add(U.hue)).mul(edge.mul(1.2).add(fill.mul(0.35))).mul(front);
+  });
+  // 26 Julia set: its shape is steered by the melody's pitch, so the tune bends the fractal.
+  on(26, () => {
+    const a = V.pitches.x.mul(0.21).add(T.mul(0.04));
+    const c = vec2(cos(a), sin(a)).mul(0.7885);
+    const ca = cos(T.mul(0.05)), sa = sin(T.mul(0.05));
+    const z = vec2(q.x.mul(ca).sub(q.y.mul(sa)), q.x.mul(sa).add(q.y.mul(ca))).mul(1.5).toVar();
+    const n = float(0.0).toVar();
+    Loop(28, () => {
+      z.assign(vec2(z.x.mul(z.x).sub(z.y.mul(z.y)), z.x.mul(z.y).mul(2.0)).add(c));
+      n.addAssign(step(dot(z, z), 4.0));
+    });
+    const f = n.div(28.0);
+    return paletteAt(f.mul(1.5).add(U.hue)).mul(pow(f, 1.6)).mul(1.4).mul(front).mul(smoothstep(1.8, 1.1, qr));
+  });
+  // 27 Stained glass: cells on the sky with glowing leading; cells flash on the hats.
+  on(27, () => {
+    const p = d.mul(5.0).add(vec3(0.0, T.mul(0.05), 0.0));
+    const f1 = mx_worley_noise_float(p);
+    const lead = smoothstep(0.5, 0.8, f1);
+    const cellId = floor(p.add(0.5));
+    const flash = step(0.82, hash(cellId.dot(vec3(1.0, 57.0, 113.0)).add(floor(T.mul(6.0))))).mul(U.hat.add(0.15));
+    return paletteAt(hash(cellId.dot(vec3(7.0, 3.0, 11.0))).add(U.hue)).mul(float(1.0).sub(lead).mul(flash.mul(0.9).add(0.12))).add(vec3(lead.mul(0.25)));
+  });
+  // 28 Moire: two sets of rings drifting through each other.
+  on(28, () => {
+    const p1 = vec2(sin(T.mul(0.23)), cos(T.mul(0.17))).mul(0.35), p2 = vec2(cos(T.mul(0.19)), sin(T.mul(0.29))).mul(0.35);
+    const m = sin(length(q.sub(p1)).mul(70.0).sub(T.mul(2.0))).mul(sin(length(q.sub(p2)).mul(70.0).sub(T.mul(2.3))));
+    return paletteAt(length(q.sub(p1)).add(U.hue)).mul(smoothstep(0.2, 0.9, m)).mul(0.7).mul(front).mul(smoothstep(2.2, 0.6, qr));
+  });
+  // 29 Lissajous: the oscilloscope classic, its frequencies picked by the melody and bass notes.
+  on(29, () => {
+    const fa = mod(floor(V.pitches.x), 5.0).add(1.0), fb = mod(floor(V.pitches.y), 4.0).add(1.0);
+    const dmin = float(9.0).toVar();
+    Loop(120, ({ i }) => {
+      const sP = float(i).div(120.0).mul(6.28318);
+      const p = vec2(sin(fa.mul(sP).add(T.mul(0.6))), sin(fb.mul(sP))).mul(0.62);
+      dmin.assign(min(dmin, length(q.sub(p))));
+    });
+    return paletteAt(T.mul(0.05).add(U.hue)).mul(smoothstep(0.014, 0.0, dmin).mul(1.6).add(smoothstep(0.08, 0.0, dmin).mul(0.25))).mul(front).mul(float(0.7).add(V.bands.z));
+  });
+  // 30 Hex pulse: a honeycomb in front of you; each kick sends a ripple out through the cells.
+  on(30, () => {
+    const hs = q.mul(7.0);
+    const r = vec2(1.0, 1.732), h = r.mul(0.5);
+    const a = mod(hs, r).sub(h), b = mod(hs.sub(h), r).sub(h);
+    const gv = select(dot(a, a).lessThan(dot(b, b)), a, b);
+    const id = hs.sub(gv);
+    const hd = max(dot(abs(gv), normalize(vec2(1.0, 1.732))), abs(gv).x);
+    const x = length(id).div(7.0).sub(V.kickT.mul(1.2)).div(0.09);
+    const ring = exp(x.mul(x).negate()).mul(exp(V.kickT.mul(-1.2)));
+    return paletteAt(length(id).mul(0.04).add(U.hue)).mul(smoothstep(0.42, 0.5, hd).mul(0.35).add(ring.mul(float(0.5).sub(hd)).mul(2.5))).mul(front);
+  });
+  // 31 Galaxy: a spiral turning overhead, its stars thickening with the pads.
+  on(31, () => {
+    const ra = acos(clamp(d.y, -1.0, 1.0));
+    const th = atan(d.z, d.x);
+    const arms = sin(th.mul(3.0).sub(log2(ra.add(0.02)).mul(4.0)).add(T.mul(0.4)));
+    const spiral = pow(arms.mul(0.5).add(0.5), 4.0).mul(smoothstep(1.3, 0.05, ra));
+    const dust = step(0.985, hash(floor(d.mul(240.0)).dot(vec3(1.0, 57.0, 113.0)))).mul(spiral.add(0.1));
+    return paletteAt(ra.mul(0.6).add(U.hue)).mul(spiral.mul(V.pad.mul(0.8).add(0.35))).add(vec3(dust.mul(1.4)));
+  });
+  // 32 Lasers: fans of beams from below the horizon, sweeping; the snare fires them.
+  on(32, () => {
+    const acc = float(0.0).toVar();
+    for (let o = -1; o <= 1; o++) {
+      const dA = atan(sin(az.sub(V.gazeAz).sub(o * 0.7)), cos(az.sub(V.gazeAz).sub(o * 0.7)));
+      const v = vec2(dA, el.add(0.3));
+      for (let k = 0; k < 7; k++) {
+        const ph = float(-1.0 + k * 0.33).add(sin(T.mul(1.1 + o * 0.3).add(k)).mul(0.25));
+        const dist = abs(v.x.mul(cos(ph)).sub(v.y.mul(sin(ph))));
+        const along = v.x.mul(sin(ph)).add(v.y.mul(cos(ph)));
+        acc.addAssign(exp(dist.mul(-260.0)).mul(step(0.0, along)).mul(smoothstep(1.6, 0.0, along)));
+      }
+    }
+    return paletteAt(el.mul(0.5).add(U.hue)).mul(acc).mul(U.snare.mul(1.6).add(0.25));
+  });
+  // 33 Truchet: arcs tiled in front of you that flip, tile by tile, on the beat.
+  on(33, () => {
+    const p = q.mul(6.0);
+    const cid = floor(p);
+    const flip = step(0.5, hash(cid.dot(vec2(1.0, 57.0)).add(floor(T.mul(2.0)))));
+    const f = fract(p);
+    const ff = vec2(mix(f.x, float(1.0).sub(f.x), flip), f.y);
+    const dd = min(abs(length(ff).sub(0.5)), abs(length(ff.sub(1.0)).sub(0.5)));
+    return paletteAt(hash(cid.dot(vec2(3.0, 7.0))).add(U.hue)).mul(smoothstep(0.07, 0.0, dd)).mul(front).mul(smoothstep(2.2, 0.5, qr));
+  });
+  // 34 Fire: flames licking up from the horizon, as tall as the bass and the energy.
+  on(34, () => {
+    const n = mx_noise_float(vec3(azP.mul(5.0), el.mul(7.0).sub(T.mul(2.4)), T.mul(0.3)));
+    const top = float(0.06).add(V.bands.y.mul(0.25)).add(U.energy.mul(0.15));
+    const f = clamp(top.sub(el).div(top).add(n.mul(0.45)), 0.0, 1.0).mul(step(-0.03, el));
+    return mix(mix(vec3(0.9, 0.12, 0.02), vec3(1.0, 0.85, 0.35), f), paletteAt(f.add(U.hue)), 0.25).mul(pow(f, 2.0)).mul(1.5);
+  });
+  // 35 Caustics: light through water rippling across the sky, brightening with the pads.
+  on(35, () => {
+    const p = d.xz.div(d.y.add(1.2)).mul(6.0);
+    const ii = p.toVar();
+    const c = float(1.0).toVar();
+    for (let n = 0; n < 4; n++) {
+      const tt = T.mul(0.35).mul(1.0 - 3.5 / (n + 1));
+      ii.assign(p.add(vec2(cos(tt.sub(ii.x)).add(sin(tt.add(ii.y))), sin(tt.sub(ii.y)).add(cos(tt.add(ii.x))))));
+      c.addAssign(float(1.0).div(length(vec2(p.x.div(sin(ii.x.add(tt)).div(0.005)), p.y.div(cos(ii.y.add(tt)).div(0.005))))));
+    }
+    const cc = pow(abs(float(1.17).sub(pow(c.div(4.0), 1.4))), 8.0);
+    return mix(vec3(0.1, 0.5, 0.7), paletteAt(cc.add(U.hue)), 0.5).mul(clamp(cc, 0.0, 2.0)).mul(V.pad.mul(0.8).add(0.3)).mul(smoothstep(-0.2, 0.3, el));
+  });
+  // 36 Rotozoomer: a plaid that spins and zooms in front of you, kicked round on the beat.
+  on(36, () => {
+    const an = T.mul(0.3).add(U.beatPhase.mul(0.15));
+    const zm = float(1.6).add(sin(T.mul(0.4)).mul(0.8)).add(U.kick.mul(0.3));
+    const p = vec2(q.x.mul(cos(an)).sub(q.y.mul(sin(an))), q.x.mul(sin(an)).add(q.y.mul(cos(an)))).mul(zm).mul(4.0);
+    const pat = sin(p.x).mul(sin(p.y)).add(sin(p.x.mul(0.5).add(p.y.mul(0.5))).mul(0.5));
+    return paletteAt(pat.mul(0.3).add(U.hue)).mul(smoothstep(-0.1, 0.4, pat).mul(0.7).add(0.1)).mul(front).mul(smoothstep(2.4, 0.6, qr));
+  });
+  // 37 Light rain: columns of falling light, as bright as the melody is loud.
+  on(37, () => {
+    const cx = azP.div(3.14159).mul(80.0), ci = floor(cx);
+    const sp = float(0.25).add(hash(ci).mul(0.5));
+    const head = float(1.3).sub(fract(hash(ci.add(5.0)).mul(7.0).add(T.mul(sp).mul(0.5))).mul(2.6));
+    const tail = el.sub(head);
+    const trail = step(0.0, tail).mul(exp(tail.mul(-5.0))).mul(smoothstep(0.5, 0.25, abs(fract(cx).sub(0.5))));
+    const glyph = step(0.35, hash(ci.add(floor(el.mul(40.0))).add(floor(T.mul(3.0)))));
+    return mix(vec3(0.3, 1.0, 0.5), paletteAt(ci.mul(0.01).add(U.hue)), 0.5).mul(trail.mul(glyph.mul(0.6).add(0.4))).mul(V.bands.z.mul(1.2).add(0.2));
+  });
+  // 41 Glitterball: spots of light swept round the room by the ball (the ball itself is a mesh).
+  on(41, () => {
+    const rot = T.mul(V.glitter.x);
+    const rd = vec3(d.x.mul(cos(rot)).sub(d.z.mul(sin(rot))), d.y, d.x.mul(sin(rot)).add(d.z.mul(cos(rot))));
+    const cell = floor(rd.mul(18.0));
+    const lit = step(0.9, hash(cell.dot(vec3(1.0, 57.0, 113.0))));
+    const spot = smoothstep(0.42, 0.1, length(fract(rd.mul(18.0)).sub(0.5)));
+    return paletteAt(hash(cell.dot(vec3(5.0, 1.0, 3.0))).add(U.hue)).mul(lit.mul(spot)).mul(float(0.6).add(U.kick.mul(0.8)).add(V.glitter.y));
+  });
+  return out;
+}
+
+/**
  * A glitterball: flat mirror facets that flash white as they catch a few lights circling round,
  * and otherwise show a dim, tinted reflection of the room.
  */
-export function makeGlitterMaterial(): THREE.MeshBasicNodeMaterial {
+export function makeGlitterMaterial(opts: { tint?: any; flash?: any } = {}): THREE.MeshBasicNodeMaterial {
   const m = new THREE.MeshBasicNodeMaterial();
+  const tintU = opts.tint ?? vec3(0.35, 0.3, 0.5), flashU = opts.flash ?? float(0.0);
   const n = normalize(normalWorld);
   const v = normalize(positionWorld.sub(cameraPosition));
   const r = v.sub(n.mul(dot(v, n).mul(2.0)));
   const t = time.mul(0.9);
   const lamp = (a: any, b: any, c: any) => pow(max(dot(r, normalize(vec3(a, b, c))), 0.0), 60.0);
   const glint = lamp(cos(t), 0.5, sin(t)).add(lamp(cos(t.mul(1.3).add(2.1)), -0.2, sin(t.mul(1.3).add(2.1)))).add(lamp(cos(t.mul(0.7).add(4.0)), 0.8, sin(t.mul(0.7).add(4.0))));
-  const tint = vec3(0.35, 0.3, 0.5).add(vec3(0.25, 0.1, 0.35).mul(r.y.mul(0.5).add(0.5)));
+  const tint = vec3(tintU).add(vec3(0.25, 0.1, 0.35).mul(r.y.mul(0.5).add(0.5)));
   // A sparkle per facet: hash of the facet's (flat) normal, twinkling with time.
   const tw = smoothstep(0.93, 1.0, fract(hash(floor(n.mul(40.0)).dot(vec3(1.0, 57.0, 113.0))).add(time.mul(0.4))));
-  m.colorNode = tint.mul(0.5).add(glint.mul(3.0)).add(tw.mul(1.4));
+  m.colorNode = tint.mul(0.5).add(glint.mul(vec3(1.0).add(vec3(tintU).mul(2.0))).mul(float(3.0).add(flashU.mul(4.0)))).add(tw.mul(1.4));
   return m;
 }
 

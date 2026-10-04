@@ -84,6 +84,7 @@ Not everything has to be a ride. `src/render/visualiser.ts` is a whole show with
 | Big changes | sections compared by instrumentation (`findEras` in `visualiser.ts`) | a new chapter: a solo, a long intro, the drums dropping out | a whole new vibe, with its own journey (colour rise, complexity bloom or thaw) |
 
 Rules of thumb:
+- **Think about the shape of the music first.** Before adding an effect, ask where it belongs in a song's story: the long intro, the verse that comes back, the build, the drop, the breakdown, the last chorus. The drops are where this beats any VJ, so give a new effect a way to wind up before one and land on it.
 - **You can see the future, so use it.** A classic visualiser only hears the present. This one knows where the song is going, so it can save its brightest colours for the climax and wind up before a drop. Read ahead up to `score.frontierSec`.
 - **One kind of data, one kind of reaction.** Don't let the kick and the bass do the same thing; the viewer should be able to *see* which instrument is which.
 - **Discrete things for notes, continuous things for continuous data.** A note is an object that appears; a slide is a line that bends. (This came from Alex and it is right.)

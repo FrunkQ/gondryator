@@ -85,10 +85,32 @@ export const ELEMENTS: { name: string; group: Group }[] = [
   { name: 'starbursts', group: 'drums' },    // 18 a spiky star popping near your gaze per snare
   { name: 'confetti', group: 'drums' },      // 19 diamonds tumbling down on the hats
   { name: 'snowflakes', group: 'pads' },     // 20 a huge slow twelve-armed flake per long note
+  // The second twenty (shaders.ts moreElements): classic visualisers, the demoscene, the club.
+  { name: 'spectrum', group: 'mix' },        // 21 the bar analyser round the horizon
+  { name: 'checker tunnel', group: 'drums' },// 22 falling down a chequered tube, kicked on
+  { name: 'copper bars', group: 'mix' },     // 23 Amiga raster bars bouncing up the sky
+  { name: 'synthwave sun', group: 'bass' },  // 24 a striped sun on the horizon, swelling with the bass
+  { name: 'metaballs', group: 'bass' },      // 25 blobs orbiting your gaze, merging and parting
+  { name: 'julia set', group: 'melody' },    // 26 a fractal bent by the melody's pitch
+  { name: 'stained glass', group: 'drums' }, // 27 cells with glowing leading, flashing on the hats
+  { name: 'moire', group: 'mix' },           // 28 two sets of rings drifting through each other
+  { name: 'lissajous', group: 'melody' },    // 29 the oscilloscope figure, tuned by melody and bass
+  { name: 'hex pulse', group: 'drums' },     // 30 a honeycomb rippling out on every kick
+  { name: 'galaxy', group: 'pads' },         // 31 a spiral turning overhead
+  { name: 'lasers', group: 'drums' },        // 32 fans of beams fired by the snare
+  { name: 'truchet', group: 'mix' },         // 33 arc tiles flipping on the beat
+  { name: 'fire', group: 'bass' },           // 34 flames off the horizon, tall as the bass
+  { name: 'caustics', group: 'pads' },       // 35 light through water across the sky
+  { name: 'rotozoomer', group: 'mix' },      // 36 a spinning, zooming plaid
+  { name: 'light rain', group: 'melody' },   // 37 columns of falling light, bright with the melody
+  { name: 'comets', group: 'melody' },       // 38 a comet streaking across per melody note
+  { name: 'fireflies', group: 'drums' },     // 39 fireflies drifting up on the hats
+  { name: 'petal rain', group: 'pads' },     // 40 petals falling from every long note
+  { name: 'glitterball', group: 'mix' },     // 41 the ball spins up in front of you and throws light round the room
 ];
 const NE = ELEMENTS.length;
 /** The elements drawn as sprites (flowers, bubbles, starbursts, confetti, snowflakes). */
-const SPRITE_ELEMENTS = [12, 17, 18, 19, 20];
+const SPRITE_ELEMENTS = [12, 17, 18, 19, 20, 38, 39, 40];
 
 /** How the arc shows itself, one per era (see updateArc and the shader's arc block). */
 export const JOURNEYS = ['colour rise', 'complexity bloom', 'thaw'] as const;
@@ -229,6 +251,11 @@ export class Visualiser implements ShowDriver {
     crash: uniform(0), rise: uniform(0), bright: uniform(0.3),
     layers: uniform(new THREE.Vector4()), poly: uniform(new THREE.Vector4(5, 2, 0.4, 0)), bands: uniform(new THREE.Vector3()),
     E0: uniform(new THREE.Vector4(1, 0, 0, 0)), E1: uniform(new THREE.Vector4()), E2: uniform(new THREE.Vector4()), E3: uniform(new THREE.Vector4()), E4: uniform(new THREE.Vector4()),
+    E5: uniform(new THREE.Vector4()), E6: uniform(new THREE.Vector4()), E7: uniform(new THREE.Vector4()), E8: uniform(new THREE.Vector4()), E9: uniform(new THREE.Vector4()), E10: uniform(new THREE.Vector4()),
+    /** Melody and bass pitch now (MIDI, 0 = silent): the Julia set and the Lissajous figure follow them. */
+    pitches: uniform(new THREE.Vector2()),
+    /** The glitterball: spin speed (radians/s), flash, and its tint. */
+    glitter: uniform(new THREE.Vector2(0.6, 0)), glitterTint: uniform(new THREE.Vector3(0.35, 0.3, 0.5)),
     fold: uniform(new THREE.Vector4(0, 0.6, 1.3, 0.5)), frac: uniform(new THREE.Vector4(6, 1.2, 0.7, 0.5)),
     kickT: uniform(99), pad: uniform(0), dim: uniform(0),
     arc: uniform(0.3), tension: uniform(0), release: uniform(0), releaseT: uniform(99), phase: uniform(0), journey: uniform(new THREE.Vector3(1, 0, 0)),
@@ -250,7 +277,12 @@ export class Visualiser implements ShowDriver {
   private bursts = new SpritePool(polarShape(a => 0.12 + 0.88 * Math.abs(Math.cos(4 * a)) ** 14, 192), makeSpriteMaterial('spike'), 80);
   private confetti = new SpritePool(polarShape(a => 1 / (Math.abs(Math.cos(a)) + Math.abs(Math.sin(a)) * 1.8), 8), makeSpriteMaterial('flat'), 400);
   private flakes = new SpritePool(polarShape(a => 0.18 + 0.62 * Math.abs(Math.cos(6 * a)) ** 10 + 0.2 * Math.abs(Math.cos(18 * a)) ** 6, 384), makeSpriteMaterial('petal'), 40);
-  private pools = [this.flowers, this.bubbles, this.bursts, this.confetti, this.flakes];
+  /** A comet: a long teardrop, head at +x, streaking across the sky. */
+  private comets = new SpritePool(polarShape(a => (Math.cos(a) > 0 ? 0.3 + 0.7 * Math.cos(a) ** 0.5 : 0.3 * (1 + Math.cos(a)) + 0.02) * (Math.abs(Math.sin(a)) < 0.2 || Math.cos(a) > 0 ? 1 : 0.6), 96), makeSpriteMaterial('spike'), 60);
+  private fireflies = new SpritePool(polarShape(() => 1, 16), makeSpriteMaterial('spike'), 200);
+  /** One petal: a narrow ellipse. */
+  private petals = new SpritePool(polarShape(a => 1 / Math.sqrt(Math.cos(a) ** 2 + (2.6 * Math.sin(a)) ** 2), 32), makeSpriteMaterial('petal'), 240);
+  private pools = [this.flowers, this.bubbles, this.bursts, this.confetti, this.flakes, this.comets, this.fireflies, this.petals];
   private bassTimes = [-99, -99, -99, -99];
   private bassPtr = 0;
   private ptr = 0;
@@ -332,6 +364,7 @@ export class Visualiser implements ShowDriver {
   }
 
   private seekTo(s: number) {
+    if (s < this.arcPeakT) this.glitterDone = false;
     const ev = this.score.events;
     let lo = 0, hi = ev.length;
     while (lo < hi) { const m = (lo + hi) >> 1; if (ev[m].t <= s) lo = m + 1; else hi = m; }
@@ -416,6 +449,13 @@ export class Visualiser implements ShowDriver {
     else {
       sc = this.makeScene();
       sc.elements = this.orchestrate(s);
+      // The section holding the song's climax gets the glitterball, once.
+      const sec = sectionAt(this.score, s);
+      const next = this.score.sections[sec.index + 1]?.t ?? Infinity;
+      if (sectionStart && !this.glitterDone && this.arcPeakT >= s && this.arcPeakT < next) {
+        this.glitterDone = true;
+        sc.elements = (sec.section?.energy ?? 0.5) > 0.6 ? [41, 32] : [41];
+      }
       if (sectionStart) this.patterns.set(key, { scene: sc, seen: 0 });
     }
     // An exhale: a section clearly quieter than the last (a breakdown) thins out to one or two
@@ -462,6 +502,8 @@ export class Visualiser implements ShowDriver {
       if (!opts.length) break;
       pick.push(this.freshest(opts));
     }
+    // The glitterball holds a scene on its own, with at most its lasers or fireflies for company.
+    if (pick.includes(41)) return energy > 0.6 ? [41, r() < 0.5 ? 32 : 39] : [41];
     return pick;
   }
 
@@ -557,6 +599,7 @@ export class Visualiser implements ShowDriver {
           if (this.target[18] > 0) this.burst(e.t, e.vel, gazeAz);
         } else if (e.kind === 'hat') {
           if (this.target[19] > 0) this.sprinkle(e.t, e.vel, gazeAz);
+          if (this.target[39] > 0) this.firefly(e.t, e.vel, gazeAz);
         } else if (e.stem === 'bass' && e.kind === 'note') {
           this.bassTimes[this.bassPtr++ % 4] = e.t;
           if (this.target[17] > 0) this.bubble(e.t, e.pitch ?? 40, e.vel, e.dur, gazeAz);
@@ -564,6 +607,8 @@ export class Visualiser implements ShowDriver {
           this.noteAct[((e.pitch % 12) + 12) % 12] = Math.max(this.noteAct[((e.pitch % 12) + 12) % 12], 0.5 + e.vel * 0.5);
           if (this.target[12] > 0) this.bloom(e.t, e.pitch, e.vel, e.dur, gazeAz);
           if (this.target[20] > 0 && e.dur >= 1.2) this.flake(e.t, e.pitch, e.vel, gazeAz);
+          if (this.target[38] > 0 && e.dur < 1.2) this.comet(e.t, e.pitch, e.vel, gazeAz);
+          if (this.target[40] > 0 && e.dur >= 1.2) this.petalRain(e.t, e.pitch, e.vel, gazeAz);
         }
       }
     }
@@ -586,6 +631,9 @@ export class Visualiser implements ShowDriver {
     this.V.E0.value.set(w[0], w[1], w[2], w[3]); this.V.E1.value.set(w[4], w[5], w[6], w[7]);
     this.V.E2.value.set(w[8], w[9], w[10], w[11]); this.V.E3.value.set(w[12], w[13], w[14], w[15]);
     this.V.E4.value.set(w[16], w[17], w[18], w[19]);
+    this.V.E5.value.set(w[20], w[21], w[22], w[23]); this.V.E6.value.set(w[24], w[25], w[26], w[27]);
+    this.V.E7.value.set(w[28], w[29], w[30], w[31]); this.V.E8.value.set(w[32], w[33], w[34], w[35]);
+    this.V.E9.value.set(w[36], w[37], w[38], w[39]); this.V.E10.value.set(w[40], w[41], 0, 0);
     this.V.pulse0.value = s - this.bassTimes[0]; this.V.pulse1.value = s - this.bassTimes[1];
     this.V.pulse2.value = s - this.bassTimes[2]; this.V.pulse3.value = s - this.bassTimes[3];
     this.V.crash.value *= Math.exp(-dt / 0.22);
@@ -594,6 +642,8 @@ export class Visualiser implements ShowDriver {
     if (running) this.V.bands.value.set(sampleEnvelope(sc.envelopes.drums, s), sampleEnvelope(sc.envelopes.bass, s), sampleEnvelope(sc.envelopes.other, s));
     else this.V.bands.value.set(0, 0, 0);
     this.updateArc(s, dt, running);
+    this.V.pitches.value.set(running ? sampleEnvelope(sc.envelopes.leadPitch, s) : 0, running && sc.envelopes.bassPitch ? sampleEnvelope(sc.envelopes.bassPitch, s) : 0);
+    this.updateGlitterball(s, dt, running);
     this.updateWave(s, frontier, running);
     // The spawners are the notes themselves, so they stay bright even early in the arc.
     const light = 0.8 + this.arcLvl * 0.5 + this.V.release.value * 0.5;
@@ -852,6 +902,37 @@ export class Visualiser implements ShowDriver {
     });
   }
 
+  /** A comet for a melody note: streaks across the sky at the note's height, tail behind it. */
+  private comet(t: number, pitch: number, vel: number, gazeAz: number) {
+    const r = this.rand, dir = r() < 0.5 ? -1 : 1;
+    this.comets.add({
+      t0: t, life: 1.8, pop: 0.08, fadeOut: 0.8, grow: 0, wobble: 0,
+      az: gazeAz - dir * (0.6 + r() * 0.5), vAz: dir * (0.7 + r() * 0.4),
+      el: THREE.MathUtils.clamp((pitch - 62) / 30, -0.3, 0.9) + (r() - 0.5) * 0.1, vEl: -0.05,
+      size: 3 + vel * 3, spin: 0, hue: (((pitch % 12) + 12) % 12) / 12, sat: 0.6, vel: 0.6 + vel * 0.5,
+    });
+  }
+
+  /** Fireflies on the hats: small warm lights drifting up and wandering. */
+  private firefly(t: number, vel: number, gazeAz: number) {
+    const r = this.rand;
+    for (let i = 0; i < 2; i++) this.fireflies.add({
+      t0: t, life: 3.5, pop: 0.3, fadeOut: 1.5, grow: 0, wobble: 0.12,
+      az: gazeAz + (r() - 0.5) * 2.6, vAz: (r() - 0.5) * 0.06, el: -0.3 + r() * 0.5, vEl: 0.05 + r() * 0.06,
+      size: 0.35 + r() * 0.35, spin: 0, hue: 0.1 + r() * 0.08, sat: 0.9, vel: 0.5 + vel * 0.5,
+    });
+  }
+
+  /** Petal rain for a long note: a flurry of petals falling and turning. */
+  private petalRain(t: number, pitch: number, vel: number, gazeAz: number) {
+    const r = this.rand, hue = (((pitch % 12) + 12) % 12) / 12;
+    for (let i = 0; i < 10; i++) this.petals.add({
+      t0: t + i * 0.08, life: 6, pop: 0.3, fadeOut: 2, grow: 0, wobble: 0.08,
+      az: gazeAz + (r() - 0.5) * 2.4, vAz: (r() - 0.5) * 0.08, el: 0.7 + r() * 0.4, vEl: -0.16 - r() * 0.1,
+      size: 1.1 + r() * 0.8, spin: (r() - 0.5) * 3, hue: hue + (r() - 0.5) * 0.06, sat: 0.7, vel: 0.5 + vel * 0.5,
+    });
+  }
+
   /** A snowflake for a long note: huge, slow, high, turning gently. */
   private flake(t: number, pitch: number, vel: number, gazeAz: number) {
     const r = this.rand;
@@ -905,7 +986,10 @@ export class Visualiser implements ShowDriver {
     if (!this.ball) {
       const geo = new THREE.IcosahedronGeometry(3, 3).toNonIndexed();
       geo.computeVertexNormals();
-      this.ball = new THREE.Mesh(geo, makeGlitterMaterial());
+      const flash = uniform(0);
+      const mat = makeGlitterMaterial({ tint: this.V.glitterTint, flash });
+      mat.userData.flash = flash;
+      this.ball = new THREE.Mesh(geo, mat);
       this.ball.position.set(0, 7.8, -22);
       const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 20, 6), new THREE.MeshBasicMaterial({ color: 0x777788 }));
       cord.position.y = 12;
@@ -961,6 +1045,34 @@ export class Visualiser implements ShowDriver {
     (card.material as THREE.MeshBasicMaterial).map!.needsUpdate = true;
   }
 
+  /**
+   * The glitterball as a scene of its own (element 41): it hangs in front of you, spins faster with
+   * the energy, flashes on the kick, takes the scene's colours, and swings in closer on the drops.
+   */
+  private glitterSpin = 0;
+  private glitterDone = false;
+  private updateGlitterball(s: number, dt: number, running: boolean) {
+    const ball = this.ball, w = this.weights[41];
+    if (!ball || !running || s < 6) return;
+    ball.visible = w > 0.02;
+    if (!ball.visible) return;
+    const energy = sectionAt(this.score, s).section?.energy ?? 0.5;
+    const speed = 0.3 + energy * 1.4 + this.tensionLvl * 2 + this.V.release.value * 3;
+    this.glitterSpin += dt * speed;
+    ball.rotation.y = this.glitterSpin;
+    this.V.glitter.value.set(speed, this.V.release.value);
+    (ball.material as any).userData.flash.value = Math.max(this.kickLvl(s), this.V.release.value);
+    const p = this.V.pa.value, b = this.V.pb.value;
+    this.V.glitterTint.value.set(p.x + b.x * 0.5, p.y + b.y * 0.2, p.z - b.z * 0.3);
+    // In front of your gaze, closer (bigger) as the arc climbs and on a drop.
+    const dist = 18 - 6 * this.arcLvl - 5 * this.V.release.value;
+    const g = this.V.gaze.value;
+    ball.position.set(g.x * dist, g.y * dist + 1.2, g.z * dist);
+    ball.scale.setScalar(w * (1 + 0.06 * this.kickLvl(s)));
+  }
+
+  private kickLvl(s: number) { return Math.exp(-(s - this.lastKick) / 0.15); }
+
   private updateCard(s: number, running: boolean) {
     if (!this.card3d) return;
     // A slow breath and sway while it waits.
@@ -972,11 +1084,10 @@ export class Visualiser implements ShowDriver {
     m.opacity = running ? THREE.MathUtils.clamp(1 - (s - 2) / 3, 0, 1) : 1;
     this.card3d.visible = m.opacity > 0.01;
     const ball = this.ball;
-    if (ball && ball.visible) {
+    if (ball && ball.visible && (!running || s < 6)) {
       ball.rotation.y = tt * 0.8;
       // Once the music starts, the ball is hauled up out of sight.
       ball.position.y = 7.8 + (running ? Math.max(0, s - 1) ** 2 * 3 : 0);
-      if (running && s > 6) ball.visible = false;
       // Spots of light thrown round the room while it waits.
       if (!running && tt - this.lastSparkle > 0.12) {
         this.lastSparkle = tt;

@@ -88,6 +88,19 @@ Kaleidoscopes go deep in two ways. A scene can fold the base pattern's plane up 
 
 Around the World is hidden from the menu while it waits for its twist; `?pack=around-the-world` still opens it.
 
+## The second twenty elements
+
+`moreElements` in `render/shaders.ts` adds twenty sky elements (slots 21 to 41 in `ELEMENTS`):
+spectrum bars, a checker tunnel, copper bars, a synthwave sun, metaballs, a Julia set steered by
+the melody's pitch, stained glass, moiré, a Lissajous figure tuned by melody and bass, a hex
+pulse, a galaxy, lasers on the snare, truchet tiles, fire, caustics, a rotozoomer, light rain,
+and three sprite spawners (comets, fireflies, petal rain). Each sits inside its own `If` on its
+weight, so the library costs nothing while it waits. The glitterball (41) is a scene on its own:
+a mirror-ball mesh in front of your gaze that spins with the energy and tension, flashes on the
+kick, takes the scene's palette and swings closer on a drop, while the sky gets its moving spots.
+The section holding the song's climax always gets it, once. Patterns use the azimuth mirrored
+about the front-back line (`azP`), so there is no seam where the angle wraps behind you.
+
 ## Song structure: which parts come back
 
 Section labels used to come from loudness alone, so a dance track that stays loud (Star Guitar)
