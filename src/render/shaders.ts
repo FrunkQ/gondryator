@@ -627,13 +627,15 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
 export function makeSpriteMaterial(style: 'petal' | 'flat' | 'spike' = 'petal'): THREE.MeshBasicNodeMaterial {
   const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
   m.blending = THREE.AdditiveBlending;
-  const r = length(positionLocal.xy);
+  // positionGeometry, not positionLocal: on an instanced mesh positionLocal is already moved by
+  // the instance matrix, so the shape would be lost (that is why the flowers were slivers).
+  const r = length(positionGeometry.xy);
   if (style === 'flat') m.colorNode = vec3(0.9);
   else if (style === 'spike') m.colorNode = vec3(smoothstep(0.25, 0.0, r).mul(1.8).add(smoothstep(1.0, 0.0, r).mul(0.8)));
   else {
     const heart = smoothstep(0.35, 0.0, r).mul(1.6);
     const petal = smoothstep(1.0, 0.3, r).mul(0.7);
-    const veins = sin(atan(positionLocal.y, positionLocal.x).mul(18.0)).mul(0.15).add(0.85);
+    const veins = sin(atan(positionGeometry.y, positionGeometry.x).mul(18.0)).mul(0.15).add(0.85);
     m.colorNode = vec3(heart.add(petal.mul(veins)));
   }
   return m;
