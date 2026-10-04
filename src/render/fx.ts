@@ -276,7 +276,10 @@ export class FxDirector {
     const split = this.split && !this.locked;
     const a = 1;
     W.split.value = split ? 1 : 0; W.yaw.value = this.view.yaw; W.tanH.value = this.view.tanH;
-    W.warpAll.value = this.warpAll ? 1 : 0; W.trip.value = this.cur.trip;
+    W.warpAll.value = this.warpAll ? 1 : 0;
+    // The trip look's sunburst repaints the sky. The visualiser (which sets override) is all sky,
+    // so there it would cover the whole show with one rainbow star: it keeps its own colours.
+    W.trip.value = this.override ? 0 : this.cur.trip;
     U.energy.value = energy; U.night.value = night;
     // Surfaces in the world: the main side's scenery stays real, the far side takes the paint.
     U.trip.value = split ? 0 : this.cur.trip; U.tripFar.value = split ? this.cur.trip : 0;
