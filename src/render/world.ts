@@ -547,7 +547,7 @@ export class World {
     const z = wallZ + 0.1;
     // The board itself, screwed to the wall, facing the train.
     const tex = this.boardTexture(info, !!opts.end);
-    const bw = opts.end ? 7.4 : opts.trackside ? 8.5 : 6.4, bh = bw * (tex.image.height / tex.image.width);
+    const bw = opts.end ? 7.4 : opts.trackside ? 7.2 : 6.4, bh = bw * (tex.image.height / tex.image.width);
     const board = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), new THREE.MeshBasicMaterial({ map: tex, fog: false, toneMapped: false }));
     const cy = this.pack.rig.eyeHeight + (opts.trackside ? 0.35 : 1.3);
     board.position.set(0, cy, z);
@@ -575,9 +575,11 @@ export class World {
       this.clockCanvas.width = this.clockCanvas.height = 256;
       this.clockTex = new THREE.CanvasTexture(this.clockCanvas);
       this.clockTex.colorSpace = THREE.SRGBColorSpace;
-      this.clockSec = -1;
+      this.clockSec = -1; this.clockDrawn = '';
       this.drawClock();
-      const cx = info.art ? 6.9 : -6.9;
+      // To the right of the board, clear of the window pillar in the angled start view (the cover
+      // art, when there is some, hangs on the left).
+      const cx = bw / 2 + 1.4;
       const face = new THREE.Mesh(new THREE.CircleGeometry(1.05, 48), new THREE.MeshBasicMaterial({ map: this.clockTex, fog: false, toneMapped: false }));
       face.position.set(cx, cy, z + 0.12);
       grp.add(face);
@@ -595,7 +597,7 @@ export class World {
       grp.add(poster);
       const pf = new THREE.Mesh(new THREE.BoxGeometry(3.5, 3.5, 0.1), canopyMat);
       pf.position.set(9, 3.6, -11.52);
-      if (opts.trackside) { poster.position.set(-6.8, cy, z); pf.position.set(-6.8, cy, z - 0.06); }
+      if (opts.trackside) { poster.position.set(-(bw / 2 + 1.9), cy, z); pf.position.set(-(bw / 2 + 1.9), cy, z - 0.06); }
       grp.add(pf);
     }
   }
@@ -619,9 +621,14 @@ export class World {
   private clockCanvas: HTMLCanvasElement | null = null;
   private clockTex: THREE.CanvasTexture | null = null;
   private clockSec = -1;
+  private countdown: number | null = null;
+  private clockDrawn = '';
 
   /** The departures strip on the title stop: amber dot-matrix text, redrawn only when it changes. */
   setDeparture(text: string) {
+    // The clock counts the same seconds down on its face.
+    const n = /(\d+)s$/.exec(text)?.[1];
+    this.countdown = n ? Number(n) : text === 'Departing' ? 0 : null;
     const c = this.depCanvas;
     if (!c || !this.depTex || text === this.depText) return;
     this.depText = text;
@@ -650,7 +657,9 @@ export class World {
     if (!c || !this.clockTex) return;
     const now = new Date();
     const sec = now.getSeconds();
-    if (sec === this.clockSec) return;
+    const key = sec + ':' + this.countdown;
+    if (key === this.clockDrawn) return;
+    this.clockDrawn = key;
     this.clockSec = sec;
     const g = c.getContext('2d')!, r = c.width / 2;
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -662,6 +671,17 @@ export class World {
       g.save(); g.rotate((i / 60) * Math.PI * 2);
       if (i % 5 === 0) g.fillRect(-4, -r + 10, 8, 26); else g.fillRect(-1.5, -r + 10, 3, 9);
       g.restore();
+    }
+    // A departure countdown: a red wedge from twelve o'clock, one second per tick, shrinking to
+    // nothing as the train pulls away, with the seconds in a window under the hands.
+    if (this.countdown !== null) {
+      const left = Math.min(60, this.countdown);
+      g.beginPath(); g.moveTo(0, 0);
+      g.arc(0, 0, r - 40, -Math.PI / 2, -Math.PI / 2 + (left / 60) * Math.PI * 2);
+      g.closePath(); g.fillStyle = 'rgba(200,36,29,0.28)'; g.fill();
+      g.fillStyle = '#111312'; g.fillRect(-46, r * 0.32, 92, 44);
+      g.font = '700 34px ui-monospace, "Courier New", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#ffb22e'; g.fillText(left > 0 ? String(left) : 'GO', 0, r * 0.32 + 23);
     }
     const hand = (a: number, len: number, w: number, col: string) => {
       g.save(); g.rotate(a); g.fillStyle = col; g.fillRect(-w / 2, -len, w, len + 18); g.restore();

@@ -989,15 +989,15 @@ export class Visualiser implements ShowDriver {
   card(kind: 'landing' | 'title' | 'end', info: CardInfo): boolean {
     if (this.card3d) { this.group.remove(this.card3d); (this.card3d.material as THREE.MeshBasicMaterial).map?.dispose(); }
     const c = document.createElement('canvas');
-    c.width = 1024; c.height = 448;
+    c.width = 1024; c.height = 576;
     this.cardCanvas = c;
     this.cardText = { name: kind === 'landing' ? 'The non-Gondry view :(' : info.name, line2: kind === 'landing' ? 'Drop a music file' : info.line2, status: kind === 'title' ? 'Tuning in' : '' };
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
-    this.card3d = new THREE.Mesh(new THREE.PlaneGeometry(16, 7), m);
+    this.card3d = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), m);
     this.drawCard();
-    this.card3d.position.set(0, 1.5, -22);
+    this.card3d.position.set(0, 0.5, -22);
     // The glitterball, hung above the name while the show gets ready.
     if (!this.ball) {
       const geo = new THREE.IcosahedronGeometry(3, 3).toNonIndexed();
@@ -1052,7 +1052,22 @@ export class Visualiser implements ShowDriver {
     g.font = '400 42px system-ui, sans-serif';
     g.fillStyle = 'rgba(220,235,255,0.8)';
     g.fillText(line2, 512, 262, 960);
-    if (status) {
+    // A countdown gets big neon digits, so you can see when the show will kick in.
+    const count = /(\d+)s$/.exec(status)?.[1];
+    if (count) {
+      g.font = '700 40px ui-monospace, Menlo, monospace';
+      g.fillStyle = '#ffd36a'; g.shadowColor = '#ff9a00'; g.shadowBlur = 16;
+      g.fillText(status.replace(/\s*\d+s$/, '').toUpperCase(), 512, 345);
+      g.font = '900 170px system-ui, sans-serif';
+      const n = Number(count), hot = Math.max(0, Math.min(1, 1 - n / 10));
+      for (const [blur, alpha] of [[50, 0.7], [20, 1]] as const) {
+        g.shadowColor = hot > 0.5 ? '#ff3fa4' : '#2fd6ff'; g.shadowBlur = blur; g.globalAlpha = alpha;
+        g.strokeStyle = grad; g.lineWidth = 8; g.strokeText(count, 512, 470);
+      }
+      g.globalAlpha = 1; g.shadowColor = '#ffffff'; g.shadowBlur = 10;
+      g.fillStyle = '#fff4ff'; g.fillText(count, 512, 470);
+      g.shadowBlur = 0;
+    } else if (status) {
       g.font = '700 46px ui-monospace, Menlo, monospace';
       g.fillStyle = '#ffd36a'; g.shadowColor = '#ff9a00'; g.shadowBlur = 16;
       g.fillText(status.toUpperCase(), 512, 370, 980);
