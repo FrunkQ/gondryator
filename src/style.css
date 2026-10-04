@@ -153,3 +153,46 @@ body.fullscreen #fsx:hover { color: rgba(255,255,255,0.8); background: rgba(0,0,
 body.fullscreen #bar, body.fullscreen #credits, body.fullscreen #fork, body.fullscreen #status, body.fullscreen #toast,
 body.fullscreen #endcard, body.fullscreen.running #drop, body.fullscreen .debug, body.fullscreen #tuning, body.fullscreen #frames { display: none !important; }
 body.fullscreen #stage { cursor: none; }
+
+/* The door to the discothèque on the start screen (the non-Gondry view): a dark doorway above the
+   card whose neon edges pulse at about 125 bpm and wander through the colours. Hover and the door
+   swings open on the light inside. */
+#door {
+  position: absolute; right: 18px; bottom: calc(100% + 12px); padding: 0; border: 0; background: none;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; color: #fff;
+  animation: door-hue 6s linear infinite;
+}
+#door .sign {
+  font: 700 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #ffd6f6; text-shadow: 0 0 4px #ff4fd8, 0 0 12px #ff4fd8; animation: door-flicker 4.1s steps(1) infinite;
+}
+#door .frame {
+  position: relative; width: 56px; height: 88px; border-radius: 28px 28px 3px 3px; overflow: hidden; perspective: 160px;
+  border: 2px solid #ff4fd8; background: #08040e; animation: door-beat 0.48s ease-out infinite;
+}
+#door .glow {
+  position: absolute; inset: 0; animation: door-spin 3s linear infinite;
+  background: conic-gradient(from 0deg at 50% 70%, #ff4fd8, #4fd8ff, #ffe14f, #7cff4f, #ff4fd8);
+  filter: blur(6px) brightness(1.2);
+}
+#door .leaf {
+  position: absolute; inset: 0; transform-origin: 0 50%; transition: transform 0.5s cubic-bezier(.3,1.4,.5,1);
+  background: linear-gradient(90deg, #1a0f24, #24142f 60%, #1a0f24); box-shadow: inset 0 -10px 14px -8px #ff4fd8;
+}
+#door .knob { position: absolute; right: 8px; top: 52%; width: 5px; height: 5px; border-radius: 50%; background: #ffe14f; box-shadow: 0 0 4px #ffe14f; }
+#door:hover .leaf, #door:focus-visible .leaf { transform: rotateY(-68deg); }
+#door:hover .frame { animation-duration: 0.24s; }
+@keyframes door-beat {
+  0% { box-shadow: 0 0 4px #ff4fd8, 0 0 26px 4px #ff4fd8, inset 0 0 12px #ff4fd8; }
+  100% { box-shadow: 0 0 2px #ff4fd8, 0 0 8px 0 rgba(255,79,216,0.3), inset 0 0 3px #ff4fd8; }
+}
+@keyframes door-hue { to { filter: hue-rotate(360deg); } }
+@keyframes door-spin { to { transform: rotate(360deg) scale(1.4); } }
+@keyframes door-flicker { 0%, 100% { opacity: 1; } 71% { opacity: 0.35; } 72% { opacity: 1; } 89% { opacity: 0.6; } 90% { opacity: 1; } }
+/* Leaving the discothèque: the same doorway in daylight colours, no strobe. */
+body.disco #door { animation: none; }
+body.disco #door .frame { border-color: #e8c86a; animation: none; box-shadow: 0 0 10px rgba(232,200,106,0.5); }
+body.disco #door .sign { color: #f4f1ea; text-shadow: 0 0 6px rgba(232,200,106,0.8); animation: none; }
+body.disco #door .glow { background: linear-gradient(#9fb6cf, #ecdccb 60%, #a8aa68 60%); animation: none; filter: none; }
+@media (max-width: 640px) { #door { right: 10px; } #door .frame { width: 44px; height: 70px; } }
+@media (prefers-reduced-motion: reduce) { #door, #door .frame, #door .glow, #door .sign { animation: none; } }

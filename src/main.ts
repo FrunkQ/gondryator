@@ -129,6 +129,10 @@ class App {
   private async buildWorld(pack: Pack) {
     const prev = this.world;
     this.pack = pack;
+    // The door on the start screen leads to the discothèque, and back out to the trains from it.
+    document.body.classList.toggle('disco', pack.id === 'non-gondry');
+    const sign = document.querySelector('#door .sign');
+    if (sign) sign.textContent = pack.id === 'non-gondry' ? 'To the trains' : 'Discothèque';
     this.world = new World(pack);
     await this.world.init(this.canvas, params.has('webgl'), prev?.renderer);
     this.world.fxEnabled = params.get('fx') !== 'off';
@@ -717,6 +721,12 @@ class App {
       this.seek(0);
     });
     $('#another').addEventListener('click', () => input.click());
+    $('#door').addEventListener('click', async e => {
+      e.stopPropagation();
+      const to = this.pack.id === 'non-gondry' ? 'star-guitar' : 'non-gondry';
+      await this.switchPack(to);
+      $<HTMLSelectElement>('#pack').value = to;
+    });
     const scrub = $<HTMLInputElement>('#scrub');
     scrub.addEventListener('input', () => { if (this.score) this.seek((Number(scrub.value) / 1000) * this.score.track.durationSec); });
     const sel = $<HTMLSelectElement>('#pack');
