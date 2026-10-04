@@ -991,7 +991,8 @@ export class Visualiser implements ShowDriver {
     const c = document.createElement('canvas');
     c.width = 1024; c.height = 576;
     this.cardCanvas = c;
-    this.cardText = { name: kind === 'landing' ? 'The non-Gondry view :(' : info.name, line2: kind === 'landing' ? 'Drop a music file' : info.line2, status: kind === 'title' ? 'Tuning in' : '' };
+    const plain = kind === 'landing' && info.name === 'Gondryator';
+    this.cardText = { name: plain ? 'The non-Gondry view :(' : info.name, line2: plain ? 'Drop a music file' : info.line2, status: kind === 'title' ? 'Tuning in' : '' };
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });

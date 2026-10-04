@@ -196,3 +196,17 @@ body.disco #door .sign { color: #f4f1ea; text-shadow: 0 0 6px rgba(232,200,106,0
 body.disco #door .glow { background: linear-gradient(#9fb6cf, #ecdccb 60%, #a8aa68 60%); animation: none; filter: none; }
 @media (max-width: 640px) { #door { right: 10px; } #door .frame { width: 44px; height: 70px; } }
 @media (prefers-reduced-motion: reduce) { #door, #door .frame, #door .glow, #door .sign { animation: none; } }
+
+/* Listen along: a level meter while the next song records, and plain words if the signal is wrong. */
+#meter {
+  position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); width: min(420px, calc(100% - 32px));
+  padding: 12px 16px; border-radius: 12px; background: var(--glass); border: 1px solid var(--line);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: opacity 0.4s; pointer-events: none;
+}
+#meter .mlabel { font-size: 13px; letter-spacing: 0.04em; margin-bottom: 8px; display: flex; justify-content: space-between; }
+#meter .mbar { position: relative; height: 10px; border-radius: 5px; background: rgba(255,255,255,0.08); overflow: hidden; }
+#meter .mbar i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 5px; background: linear-gradient(90deg, #4fd88a 0%, #4fd88a 60%, #e8c86a 80%, #ff5a4f 100%); background-size: 420px 100%; }
+#meter .mbar b { position: absolute; top: 0; bottom: 0; width: 2px; left: 0; background: #fff; opacity: 0.8; }
+#meter .mwarn { font-size: 12px; color: #ffb27a; margin-top: 8px; min-height: 0; }
+#meter .mwarn:empty { display: none; }
+body.fullscreen #meter { display: none !important; }

@@ -253,6 +253,22 @@ class App {
     } catch (e) { console.warn('playlist: could not pre-parse', t.name, e); }
   }
 
+  /** Listen along, between rides: the meter, the muffled monitor, and any trouble with the signal. */
+  private updateMeter(l: ListenAlong) {
+    const waiting = !this.player.playing && this.phase !== 'run';
+    l.setMonitor(waiting && l.live);
+    const el = $('#meter');
+    el.classList.toggle('hidden', !waiting);
+    if (!waiting) return;
+    const sec = Math.floor(l.recordingSec);
+    (el.querySelector('.mlabel') as HTMLElement).innerHTML = `<span>🎧 Listening to the track${l.size ? ` (song ${l.size + 1})` : ''}</span><span>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</span>`;
+    (el.querySelector('.mbar i') as HTMLElement).style.width = `${Math.round(l.level * 100)}%`;
+    (el.querySelector('.mbar b') as HTMLElement).style.left = `${Math.round(Math.min(1, Math.sqrt(l.peak)) * 100)}%`;
+    const warn = el.querySelector('.mwarn') as HTMLElement;
+    const p = l.problem ?? '';
+    if (warn.textContent !== p) warn.textContent = p;
+  }
+
   /** The card while listening along and the next song is still recording. */
   private listenWait() {
     const l = this.playlist as ListenAlong;
@@ -618,6 +634,7 @@ class App {
       // The train sees its terminus coming; a stage only shows the end card once the music stops.
       if (score && score.final && !this.endBuilt && (this.world.mode === 'train' || s > score.track.durationSec)) this.buildEndStation();
     }
+    if (this.playlist instanceof ListenAlong) this.updateMeter(this.playlist);
     // Listening along: the first song (or a song that is still recording) is the wait.
     if (this.playlist instanceof ListenAlong && this.phase === 'landing' && !this.advancing) {
       if (this.playlist.peek()) void this.playNext();

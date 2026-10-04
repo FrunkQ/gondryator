@@ -13,7 +13,7 @@ import {
   Fn, uniform, attribute, vec2, vec3, vec4, float, mix, select, abs, floor, fract, sin, cos, clamp, smoothstep, step,
   positionGeometry, normalGeometry, positionWorld, normalWorld, vertexColor, fwidth, length, max, min, dot, bumpMap, time,
   mx_noise_float, mx_worley_noise_float, hash, cameraPosition, pow, atan, acos, materialColor, viewportSharedTexture, screenUV, uv, positionLocal, normalLocal,
-  asin, texture, exp, normalize, cross, If, Loop, mod, log2,
+  asin, texture, exp, normalize, cross, If, Loop, mod, log2, sqrt,
 } from 'three/tsl';
 
 /** Uniforms shared by every procedural material and the post effects; the FX director writes them. */
@@ -411,13 +411,15 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const az = atan(d.x, d.z.negate());             // 0 ahead (-z), +/- pi behind
   // Patterns use the azimuth mirrored about the front-back line: the raw angle jumps from +pi to
   // -pi right behind you, which showed as a seam; |az| meets itself there, so nothing can tear.
-  const azP = abs(az);
+  // A soft fold (not a hard abs) so the mirror line straight ahead is not a crease either.
+  const azP = sqrt(az.mul(az).add(0.0016)).sub(0.04);
   const el = asin(clamp(d.y, -1.0, 1.0));          // -pi/2 .. pi/2
   // The pattern's clock: visualiser.ts advances it, faster as the song winds up for a lift.
   const t = V.phase;
   const F = V.shape.x;
   // Symmetry: mirror the sky about the horizon (layers.w).
-  const elM = mix(el, abs(el), V.layers.w);
+  // Smoothly, so the fold at the horizon does not show as a horizontal seam.
+  const elM = mix(el, sqrt(el.mul(el).add(0.0025)).sub(0.05), V.layers.w);
   // Kaleidoscope: fold the azimuth into mirrored segments.
   const segs = max(floor(V.shape.z.add(0.5)), 1.0);
   const seg = fract(az.div(6.28318).mul(segs).add(0.5));
@@ -534,7 +536,7 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   // Bass mountains (9): a wireframe range on the horizon as tall as the bass is loud.
   const hgt = float(0.03).add(V.bands.y.mul(float(0.12).add(mx_noise_float(vec2(azP.mul(3.0), U.showTime.mul(0.15))).mul(0.5).add(0.5).mul(0.3))));
   const outline = smoothstep(0.012, 0.0, abs(el.sub(hgt)));
-  const hatch = smoothstep(0.15, 0.0, abs(fract(azP.mul(40.0)).sub(0.5))).mul(step(el, hgt)).mul(step(-0.02, el)).mul(0.35);
+  const hatch = smoothstep(0.15, 0.0, abs(fract(azP.mul(40.0)).sub(0.5))).mul(step(el, hgt)).mul(smoothstep(-0.06, 0.0, el)).mul(0.35);
   const mountains = paletteAt(el.mul(2.0).add(0.2)).mul(outline.add(hatch)).mul(float(0.6).add(V.bands.y));
   // Note circle (13): the twelve note names in a ring round your gaze; each lights as it is played.
   const pcIdx = floor(qa.div(6.28318).add(0.5).mul(12.0));
@@ -677,7 +679,7 @@ function moreElementsBody(V: any, g: any) {
     const ae = abs(el);
     const bar = step(ae, h).mul(smoothstep(0.5, 0.36, abs(fract(sb).sub(0.5))));
     const seg = step(0.3, fract(ae.mul(60.0)));
-    return paletteAt(sbi.div(48.0).add(U.hue.mul(0.5))).mul(bar).mul(seg).mul(select(el.lessThan(0.0), float(0.3), float(1.0))).mul(ae.div(h).add(0.4));
+    return paletteAt(sbi.div(48.0).add(U.hue.mul(0.5))).mul(bar).mul(seg).mul(mix(float(0.3), float(1.0), smoothstep(-0.08, 0.08, el))).mul(ae.div(h).add(0.4));
   });
   // 22 Checker tunnel: falling down a chequered tube round your gaze; the kick shoves you on.
   on(22, () => {
@@ -706,7 +708,7 @@ function moreElementsBody(V: any, g: any) {
     const cut = mix(float(1.0), step(0.38, fract(float(0.14).sub(el).mul(24.0).sub(T.mul(0.5)))), step(el, 0.14));
     const sun = mix(vec3(1.0, 0.85, 0.25), vec3(1.0, 0.18, 0.55), smoothstep(0.44, -0.16, el)).mul(disk).mul(cut).mul(1.3);
     const halo = exp(rho.sub(R).max(0.0).mul(-7.0)).mul(0.35).mul(float(1.0).sub(disk));
-    return sun.add(mix(vec3(1.0, 0.3, 0.6), paletteAt(rho), 0.3).mul(halo)).mul(step(-0.005, el));
+    return sun.add(mix(vec3(1.0, 0.3, 0.6), paletteAt(rho), 0.3).mul(halo)).mul(smoothstep(-0.04, 0.01, el));
   });
   // 25 Metaballs: five blobs orbiting your gaze, swelling with the bass, merging and parting.
   on(25, () => {
@@ -811,7 +813,7 @@ function moreElementsBody(V: any, g: any) {
   on(34, () => {
     const n = mx_noise_float(vec3(azP.mul(5.0), el.mul(7.0).sub(T.mul(2.4)), T.mul(0.3)));
     const top = float(0.06).add(V.bands.y.mul(0.25)).add(U.energy.mul(0.15));
-    const f = clamp(top.sub(el).div(top).add(n.mul(0.45)), 0.0, 1.0).mul(step(-0.03, el));
+    const f = clamp(top.sub(el).div(top).add(n.mul(0.45)), 0.0, 1.0).mul(smoothstep(-0.08, 0.0, el));
     return mix(mix(vec3(0.9, 0.12, 0.02), vec3(1.0, 0.85, 0.35), f), paletteAt(f.add(U.hue)), 0.25).mul(pow(f, 2.0)).mul(1.5);
   });
   // 35 Caustics: light through water rippling across the sky, brightening with the pads.

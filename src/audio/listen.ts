@@ -37,6 +37,14 @@ export class ListenAlong {
   onSong: ((t: Track) => void) | null = null;
   /** The sharing ended (the browser's "Stop sharing" button, or the tab closed). */
   onStop: (() => void) | null = null;
+  /** The level meter: smoothed loudness and peak, 0..1, and how long since the last sound. */
+  level = 0;
+  peak = 0;
+  private quietFor = 0;
+  private lastLoudAt = 0;
+  private clipped = 0;
+  private startedAt = 0;
+  private monitor: GainNode | null = null;
 
   private constructor(private ctx: AudioContext, private stream: MediaStream) {}
 
@@ -73,6 +81,15 @@ export class ListenAlong {
     mute.connect(ctx.destination); // a processor only runs when it leads somewhere
     proc.onaudioprocess = e => this.block(e.inputBuffer);
     this.proc = proc;
+    // While you wait, you hear the tab faintly and muffled, like music from someone else's
+    // headphones: proof it is coming through, without giving the song away.
+    const muffle = ctx.createBiquadFilter();
+    muffle.type = 'lowpass'; muffle.frequency.value = 520; muffle.Q.value = 0.9;
+    const mon = ctx.createGain();
+    mon.gain.value = 0;
+    src.connect(muffle); muffle.connect(mon); mon.connect(ctx.destination);
+    this.monitor = mon;
+    this.startedAt = this.lastLoudAt = ctx.currentTime;
     for (const t of this.stream.getTracks()) t.addEventListener('ended', () => this.stop());
   }
 
@@ -81,8 +98,18 @@ export class ListenAlong {
     const L = buf.getChannelData(0), R = buf.numberOfChannels > 1 ? buf.getChannelData(1) : L;
     let sum = 0;
     for (let i = 0; i < L.length; i += 4) sum += L[i] * L[i] + R[i] * R[i];
-    const loud = Math.sqrt(sum / (L.length / 2)) > SILENCE;
+    const rms = Math.sqrt(sum / (L.length / 2));
+    const loud = rms > SILENCE;
     const blockSec = L.length / buf.sampleRate;
+    // The meter (scaled so ordinary music sits around the middle) and the signal checks.
+    let pk = 0;
+    for (let i = 0; i < L.length; i += 2) pk = Math.max(pk, Math.abs(L[i]), Math.abs(R[i]));
+    const lv = Math.min(1, Math.sqrt(rms) * 1.6);
+    this.level = lv > this.level ? lv : this.level * 0.8 + lv * 0.2;
+    this.peak = Math.max(pk, this.peak * 0.97);
+    if (loud) this.lastLoudAt = this.ctx.currentTime;
+    this.quietFor = loud && rms < 0.015 ? this.quietFor + blockSec : loud ? 0 : this.quietFor;
+    this.clipped = pk >= 0.999 ? this.clipped + 1 : Math.max(0, this.clipped - 0.05);
     if (!loud && this.samples === 0) return; // silence before a song: nothing to keep
     this.left.push(L.slice());
     this.right.push(R.slice());
@@ -92,6 +119,23 @@ export class ListenAlong {
     if ((this.silentRun >= GAP_SEC && sec - this.silentRun >= MIN_SONG) || sec >= MAX_SONG) this.finish();
     // A long silence after something too short to be a song (an ad's tail, a click): drop it.
     else if (this.silentRun >= 4) this.clear();
+  }
+
+  /** Turns the muffled monitor on (while you wait) or off (while a ride plays the real thing). */
+  setMonitor(on: boolean) {
+    this.monitor?.gain.setTargetAtTime(on ? 0.35 : 0, this.ctx.currentTime, 0.4);
+  }
+
+  /** What is wrong with the signal, if anything, in words for the user. */
+  get problem(): string | null {
+    if (this.stopped) return 'Sharing stopped';
+    const silent = this.ctx.currentTime - this.lastLoudAt;
+    if (silent > 6) return this.ctx.currentTime - this.startedAt < 20 && this.songs.length === 0 && this.samples === 0
+      ? 'No sound from the tab yet. Is it playing? Share it again with "Also share tab audio" ticked if it stays silent.'
+      : 'No sound from the tab. Is the music paused?';
+    if (this.quietFor > 5) return 'Very quiet: turn the volume up in the music tab (its own slider, not the computer\'s)';
+    if (this.clipped > 8) return 'Too loud: it is distorting. Turn the music tab\'s volume down a little';
+    return null;
   }
 
   /** Seconds of the song recording now. */
@@ -126,6 +170,7 @@ export class ListenAlong {
     if (this.samples / this.ctx.sampleRate >= MIN_SONG) this.finish();
     this.stopped = true;
     this.proc?.disconnect();
+    this.monitor?.disconnect();
     this.stream.getTracks().forEach(t => t.stop());
     this.onStop?.();
   }
