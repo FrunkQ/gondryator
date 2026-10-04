@@ -6,7 +6,7 @@
 
 Drop in a song and the world outside the window starts keeping time: poles on the kick, sheds on the snare, a house for every note of the tune, mountains that bend with every slide. Ride the train, or take the open cockpit of a starship. Turn round in your seat and the other window has gone somewhere else entirely: lavender fields, the space between the planets, or a psychedelic vortex. It is a humble imitation of a genius, made with a lot of love and no small amount of awe.
 
-And for when you just want to sit still and drown in it, there's **[the non-Gondry view :(](https://gondryator.starsystemx.com/?pack=non-gondry)**. No train, no window, just forty-odd effects around you: plasma, lightning, flowers for every note, fractals bent by the melody, lasers on the snare, a synthwave sun, copper bars, and a glitterball for the big moment. Because it reads the whole song ahead, it knows where the drop is: it holds its breath, winds up, and lets go right on it. Parts that come back come back as themselves, in new colours.
+And for when you just want to sit still and drown in it, there's **[the non-Gondry view :(](https://gondryator.starsystemx.com/?pack=non-gondry)**. No train, no window, just forty-odd effects around you: plasma, lightning, flowers for every note, fractals bent by the melody, lasers on the snare, a synthwave sun, copper bars, and, now and then, a glitterball for the big moment. Because it reads the whole song ahead, it knows where the drop is: it holds its breath, winds up, and lets go right on it. Parts that come back come back as themselves, in new colours.
 
 The original, which you should watch first (and then again):
 

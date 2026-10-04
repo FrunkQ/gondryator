@@ -144,6 +144,21 @@ interface Scene {
   elements: number[];
 }
 
+/**
+ * Showpieces for the climax, one per song. The glitterball (41) is one of four, so it stays a
+ * treat; the rest pair a big backdrop with something that fires on the drums or the notes.
+ */
+const CLIMAXES: number[][] = [
+  [41],
+  [24, 32, 39],  // synthwave sun, lasers, fireflies
+  [31, 38, 18],  // galaxy overhead, comets, starbursts
+  [16, 5, 40],   // deep fractal kaleidoscope, lightning, petal rain
+  [26, 22, 19],  // julia set, checker tunnel, confetti
+  [34, 30, 12],  // fire off the horizon, hex pulse, flowers
+  [35, 23, 20],  // caustics, copper bars, snowflakes
+  [41],
+];
+
 /** Small, fast, seedable random numbers (mulberry32). */
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -449,12 +464,15 @@ export class Visualiser implements ShowDriver {
     else {
       sc = this.makeScene();
       sc.elements = this.orchestrate(s);
-      // The section holding the song's climax gets the glitterball, once.
+      // The section holding the song's climax gets a showpiece, once: the glitterball about one
+      // song in four (seeded, so a song keeps its own), otherwise one of the other big set pieces.
       const sec = sectionAt(this.score, s);
       const next = this.score.sections[sec.index + 1]?.t ?? Infinity;
       if (sectionStart && !this.glitterDone && this.arcPeakT >= s && this.arcPeakT < next) {
         this.glitterDone = true;
-        sc.elements = (sec.section?.energy ?? 0.5) > 0.6 ? [41, 32] : [41];
+        const big = (sec.section?.energy ?? 0.5) > 0.6;
+        const pick = CLIMAXES[rng(this.seed ^ 0x9e3779b9)() * CLIMAXES.length | 0];
+        sc.elements = pick[0] === 41 ? (big ? [41, 32] : [41]) : big ? pick : pick.slice(0, 2);
       }
       if (sectionStart) this.patterns.set(key, { scene: sc, seen: 0 });
     }
@@ -495,15 +513,13 @@ export class Visualiser implements ShowDriver {
     const pick: number[] = [];
     for (const g of order) {
       if (pick.length >= n) break;
-      pick.push(this.freshest(ELEMENTS.map((el, i) => ({ el, i })).filter(o => o.el.group === g && !pick.includes(o.i))));
+      pick.push(this.freshest(ELEMENTS.map((el, i) => ({ el, i })).filter(o => o.el.group === g && !pick.includes(o.i) && o.i !== 41)));
     }
     while (pick.length < n) {
-      const opts = ELEMENTS.map((el, i) => ({ el, i })).filter(o => active.includes(o.el.group) && !pick.includes(o.i));
+      const opts = ELEMENTS.map((el, i) => ({ el, i })).filter(o => active.includes(o.el.group) && !pick.includes(o.i) && o.i !== 41);
       if (!opts.length) break;
       pick.push(this.freshest(opts));
     }
-    // The glitterball holds a scene on its own, with at most its lasers or fireflies for company.
-    if (pick.includes(41)) return energy > 0.6 ? [41, r() < 0.5 ? 32 : 39] : [41];
     return pick;
   }
 

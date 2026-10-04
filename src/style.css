@@ -141,3 +141,15 @@ body.running.idle #stage { cursor: none; }
 #bar #deep { font-size: 12px; opacity: 0.65; white-space: nowrap; }
 #bar #deep:hover { opacity: 1; }
 #deep.hidden { display: none; }
+
+/* Full screen is for the big screen at a club: no interface at all, ever, apart from one tiny,
+   faint way out in the corner (Esc and F work too). */
+#fsx { display: none; }
+body.fullscreen #fsx {
+  display: block; position: absolute; top: 6px; right: 6px; z-index: 50; width: 22px; height: 22px; padding: 0;
+  font-size: 11px; line-height: 22px; border-radius: 50%; background: transparent; border: none; color: rgba(255,255,255,0.18);
+}
+body.fullscreen #fsx:hover { color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.4); }
+body.fullscreen #bar, body.fullscreen #credits, body.fullscreen #fork, body.fullscreen #status, body.fullscreen #toast,
+body.fullscreen #endcard, body.fullscreen.running #drop, body.fullscreen .debug, body.fullscreen #tuning, body.fullscreen #frames { display: none !important; }
+body.fullscreen #stage { cursor: none; }

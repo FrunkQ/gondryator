@@ -731,6 +731,9 @@ class App {
     $('#json').addEventListener('click', () => this.score && download(new Blob([JSON.stringify(this.score)], { type: 'application/json' }), slug(this.trackInfo.title) + '.score.json'));
     $('#mid').addEventListener('click', () => this.score && download(new Blob([scoreToMidi(this.score) as BlobPart], { type: 'audio/midi' }), slug(this.trackInfo.title) + '.mid'));
     $('#fs').addEventListener('click', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+    $('#fsx').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); });
+    // Full screen shows nothing but the show (style.css): made for a club's big screen.
+    document.addEventListener('fullscreenchange', () => document.body.classList.toggle('fullscreen', !!document.fullscreenElement));
     // The tuning screen: a piano roll of what the parser heard, with all its settings.
     this.tuner = new TuningScreen({
       audio: () => this.audioBuf,
