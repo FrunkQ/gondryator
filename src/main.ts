@@ -199,7 +199,7 @@ class App {
     if (this.playlist instanceof ListenAlong && this.playlist !== pl) this.playlist.stop();
     this.playlist = pl;
     if (pl instanceof ListenAlong) {
-      this.toast('Listening along. The ride runs one song behind the tab, so it can see each whole song coming: it starts when the first song ends.', 7000);
+      this.toast('Listening along. The ride runs one song behind the tab, so it can see each whole song coming: it starts when the first song ends. (Your own music files are still the best ride.)', 8000);
       return;
     }
     $('#next').classList.remove('hidden');
