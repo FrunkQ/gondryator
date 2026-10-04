@@ -250,7 +250,7 @@ export class TuningScreen {
         const y = yOf(s.t);
         g.fillStyle = '#f2c94c'; g.fillRect(0, y - 1, W, 2);
         g.font = 'bold 12px system-ui, sans-serif';
-        g.fillText(`${s.label.toUpperCase()}  energy ${s.energy.toFixed(2)}`, pianoX + 6, y - 5);
+        g.fillText(`${s.label.toUpperCase()}${s.group !== undefined ? ' ' + String.fromCharCode(65 + s.group) : ''}  energy ${s.energy.toFixed(2)}`, pianoX + 6, y - 5);
       }
       // Events.
       this.boxes.length = 0;

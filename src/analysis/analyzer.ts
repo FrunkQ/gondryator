@@ -92,6 +92,10 @@ export class Analyzer {
   private phrasesOut: Phrase[] = [];
   private phraseVecs: Float32Array[] = [];
   private sectionsOut: Section[] = [];
+  private sectionVecs: Float32Array[] = [];
+  private sectionStems: number[] = [];
+  private sectionDrums: boolean[] = [];
+  private groups = 0;
   private lastSectionBar = -999;
   private prevBlockActive: Set<Stem> = new Set();
   private padEvents: ScoreEvent[] = [];
@@ -746,14 +750,36 @@ export class Analyzer {
     const prevLabel = this.sectionsOut.length ? this.sectionsOut[this.sectionsOut.length - 1].label : null;
     const drums = active.has('drums');
     const remaining = this.duration - this.barTime(b);
+    // Which earlier section is this one coming back? Sounding alike (harmony, bass line, groove,
+    // who plays, how loud each band is) puts it in the same group, and a group keeps its label:
+    // that is what makes a chorus a chorus.
+    const vec = sectionVec(next, active);
+    let group = -1, best = SECTION_SAME;
+    this.sectionVecs.forEach((v, i) => { const c = cosine(vec, v); if (c >= best && this.sectionsOut[i].bar > 1) { best = c; group = this.sectionsOut[i].group ?? -1; } });
+    const known = group >= 0 ? this.sectionsOut.find(x => x.group === group && (x.label === 'verse' || x.label === 'chorus')) : undefined;
+    if (group < 0) group = this.groups++;
     let label: Section['label'];
     if (b === 1) label = 'intro';
     else if (!drums && remaining < 25 && this.framesDone >= this.frames) label = 'outro';
     else if (!drums && energy < 0.75) label = 'breakdown';
     else if (prevLabel === 'breakdown' && drums) label = 'drop';
-    else if (energy > 0.72 && drums) label = 'chorus';
-    else label = 'verse';
-    this.sectionsOut.push({ t: round3(this.barTime(b)), label, energy: Math.round(energy * 100) / 100, bar: b });
+    else if (known) label = known.label;
+    else {
+      // A new kind of section: a chorus if it is fuller or clearly louder than every groove so far.
+      const grooves = this.sectionsOut.filter((x, i) => x.bar > 1 && this.sectionStems[i] > 0 && this.sectionDrums[i]);
+      const stems = active.size;
+      if (!drums) label = 'verse';
+      else if (!grooves.length) label = energy > 0.72 && stems === 3 ? 'chorus' : 'verse';
+      else {
+        const maxE = Math.max(...grooves.map(x => x.energy));
+        const maxS = Math.max(...grooves.map(x => this.sectionStems[this.sectionsOut.indexOf(x)]));
+        label = energy >= maxE + 0.05 || (stems >= maxS && energy >= maxE - 0.03) ? 'chorus' : 'verse';
+      }
+    }
+    this.sectionVecs.push(vec);
+    this.sectionStems.push(active.size);
+    this.sectionDrums.push(drums);
+    this.sectionsOut.push({ t: round3(this.barTime(b)), label, energy: Math.round(energy * 100) / 100, bar: b, group });
     this.lastSectionBar = b;
   }
 
@@ -964,3 +990,24 @@ function meanVec(vs: Float32Array[]) {
   return out;
 }
 function avgOf<T>(xs: T[], f: (x: T) => number) { return xs.reduce((a, x) => a + f(x), 0) / Math.max(1, xs.length); }
+
+/** How alike two sections must sound (cosine of sectionVec) to count as the same part coming back. */
+const SECTION_SAME = 0.925;
+
+/**
+ * What a section sounds like, for spotting it when it comes back. Harmony is weighted down: many
+ * dance tracks loop one chord sequence all the way through, and it is the arrangement (the groove,
+ * who plays, how loud each band is) that tells a verse from a chorus.
+ */
+function sectionVec(bars: any[], active: Set<Stem>): Float32Array {
+  const v = new Float32Array(12 + 12 + 48 + 3 + 3 + 3);
+  writeNorm(v, 0, meanVec(bars.map(x => x.chroma)), 0.3);
+  writeNorm(v, 12, meanVec(bars.map(x => x.bassPc)), 0.3);
+  writeNorm(v, 24, meanVec(bars.map(x => x.grid)), 1.0);
+  (['drums', 'bass', 'other'] as Stem[]).forEach((st, i) => {
+    v[72 + i] = active.has(st) ? 1 : 0;
+    v[75 + i] = Math.min(3, avgOf(bars, x => x.density[i])) / 3 * 0.6;
+    v[78 + i] = (avgOf(bars, x => x.db[i]) + 60) / 40;
+  });
+  return v;
+}

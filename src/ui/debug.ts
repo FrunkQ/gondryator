@@ -51,7 +51,7 @@ export class DebugOverlay {
         g.fillStyle = SECTION_COLORS[a.label] ?? '#555';
         g.fillRect(x0, 4, x1 - x0, 12);
         g.fillStyle = '#fff';
-        if (xOf(a.t) >= left) g.fillText(`${a.label} ${a.energy.toFixed(2)}`, x0 + 3, 10);
+        if (xOf(a.t) >= left) g.fillText(`${a.label}${a.group !== undefined ? ' ' + String.fromCharCode(65 + a.group) : ''} ${a.energy.toFixed(2)}`, x0 + 3, 10);
       }
       // Phrases: tick marks with ids; repeats marked.
       for (const p of score.phrases) {

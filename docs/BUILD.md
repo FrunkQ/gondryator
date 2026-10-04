@@ -88,6 +88,19 @@ Kaleidoscopes go deep in two ways. A scene can fold the base pattern's plane up 
 
 Around the World is hidden from the menu while it waits for its twist; `?pack=around-the-world` still opens it.
 
+## Song structure: which parts come back
+
+Section labels used to come from loudness alone, so a dance track that stays loud (Star Guitar)
+came out as eleven "choruses" in a row. Now each new section is compared with every earlier one
+(`sectionVec` in `analysis/analyzer.ts`: the drum groove, who plays, how loud each band is, and
+the harmony and bass line weighted down, because many tracks loop one chord sequence throughout).
+A close match (cosine ≥ 0.925) joins that section's `group` and keeps its label. A new kind of
+section is a chorus if it is fuller or clearly louder than every groove so far, otherwise a verse.
+Star Guitar now reads: intro · A A · B B · breakdown · drop (A) · C · A · B · A · B B · outro.
+The non-Gondry view keys its pictures by group, so a returning part brings its picture back
+with a new palette and a different-sounding part gets a different one. The D overlay and the
+tuning screen show the group letter next to each section.
+
 ## Deep listen
 
 The fast parser (`analyzer.ts`) is hand-made DSP: it gets the drums, beats and sections right and is far faster than real time, but its melody tracker only hears one note at a time. After it finishes, "deep listen" runs Spotify's Basic Pitch, a small neural network (about 900 KB of model, Apache 2.0) that transcribes polyphonic music into notes, in its own worker on TensorFlow.js (WebGL when the worker can get it, plain JavaScript otherwise).

@@ -401,15 +401,15 @@ export class Visualiser implements ShowDriver {
 
   private crash() { this.V.crash.value = 1; this.crashPending = true; }
 
-  private newScene(s: number, label: string, sectionStart: boolean) {
-    const kept = this.patterns.get(label);
+  private newScene(s: number, label: string, key: string, sectionStart: boolean) {
+    const kept = this.patterns.get(key);
     const repeatable = label !== 'intro' && label !== 'outro';
     let sc: Scene;
     if (kept && repeatable) { kept.seen++; sc = this.makeScene(kept.scene); }
     else {
       sc = this.makeScene();
       sc.elements = this.orchestrate(s);
-      if (sectionStart) this.patterns.set(label, { scene: sc, seen: 0 });
+      if (sectionStart) this.patterns.set(key, { scene: sc, seen: 0 });
     }
     // An exhale: a section clearly quieter than the last (a breakdown) thins out to one or two
     // elements with long, slow trails, so the next lift has somewhere to go.
@@ -522,7 +522,7 @@ export class Visualiser implements ShowDriver {
     if (running) {
       // Scene changes: every section, and every new melody phrase (after a breath of 1.5 s).
       const { section: sec, index: idx } = sectionAt(sc, s);
-      if (idx !== this.secIdx && sec) { this.secIdx = idx; this.newScene(s, sec.label, true); }
+      if (idx !== this.secIdx && sec) { this.secIdx = idx; this.newScene(s, sec.label, sectionKey(sec), true); }
       // Twists: on each new phrase (four bars) once the picture has held for a few seconds, and
       // in any case before it has sat still for MAX_STILL seconds.
       let pi = this.phraseIdx;
@@ -534,7 +534,7 @@ export class Visualiser implements ShowDriver {
       if (s - this.lastChange > MAX_STILL) this.twist(s);
       const lead = sampleEnvelope(sc.envelopes.leadPitch, s);
       if (lead > 0) {
-        if (s - this.lastLeadT > 1.5 && s - this.lastSceneAt > 6 && sec) this.newScene(s, sec.label + ':phrase', false);
+        if (s - this.lastLeadT > 1.5 && s - this.lastSceneAt > 6 && sec) this.newScene(s, sec.label, sectionKey(sec) + ':phrase', false);
         this.lastLeadT = s;
       }
       // Events as they sound.
@@ -919,3 +919,11 @@ function polarShape(radius: (a: number) => number, N = 96) {
 
 /** A thin ring (a bubble seen side on). */
 function ringGeometry() { return new THREE.RingGeometry(0.82, 1, 48, 1); }
+
+/**
+ * Which picture a section gets: sections that sound alike (the analyser's groups) share one, so a
+ * chorus comes back as itself with a new palette, and a verse that sounds different looks different.
+ */
+function sectionKey(sec: { label: string; group?: number }) {
+  return sec.group === undefined ? sec.label : `group ${sec.group}`;
+}

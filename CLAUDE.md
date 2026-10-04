@@ -79,7 +79,7 @@ Not everything has to be a ride. `src/render/visualiser.ts` is a whole show with
 | Brightness | `envelopes.bright` | filters opening | glow, colour speed |
 | Build-ups and lifts | `envelopes.rise`, and lifts found ahead (`findLifts`: louder sections, loudness steps) | tension, then release | the clock rushes, rings converge on your gaze, the light strobes on the beat; a shockwave on the lift |
 | Beats and bars | `beats` (with `bar`, `beat`), `phrases` (4-bar blocks) | the grid | timing of anything that should feel "on the one" |
-| Sections | `sections` with `label` (intro, verse, chorus, breakdown, drop, outro) and `energy` | the story | a scene change; a returning label brings its pattern back with a new palette |
+| Sections | `sections` with `label` (intro, verse, chorus, breakdown, drop, outro), `energy`, and `group` (sections that sound alike share one) | the story | a scene change; a returning group brings its picture back with a new palette, a different-sounding part gets a different one |
 | The whole song | everything above, read ahead (the analysis runs far ahead of the music) | the journey | the arc: dark and muted at the start, full colour only at the climax, holding its breath (greyer, darker, trails pulling in) before a drop and bursting on it |
 | Big changes | sections compared by instrumentation (`findEras` in `visualiser.ts`) | a new chapter: a solo, a long intro, the drums dropping out | a whole new vibe, with its own journey (colour rise, complexity bloom or thaw) |
 

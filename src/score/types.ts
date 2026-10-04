@@ -38,6 +38,11 @@ export interface Section {
   energy: number;
   /** Bar number where the section starts. */
   bar: number;
+  /**
+   * Sections that sound alike share a group number (0, 1, 2... in order of first appearance), so a
+   * returning chorus can bring its picture back. Missing in scores from MIDI files.
+   */
+  group?: number;
 }
 
 export interface Phrase {
