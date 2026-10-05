@@ -51,6 +51,8 @@ body.dragging #stage::after {
 body.running #bar { display: flex; }
 body.running.idle #bar, body.running.idle #credits { opacity: 0; }
 body.running.idle #stage { cursor: none; }
+/* Paused mid-ride, the departure board sits above the controls. */
+body.paused #drop { bottom: max(84px, env(safe-area-inset-bottom)); }
 #bar button, #bar select { padding: 5px 10px; min-height: 30px; font-size: 13px; }
 #play { width: 40px; }
 #time { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--ink-dim); min-width: 84px; text-align: center; }

@@ -138,6 +138,9 @@ export class DebugOverlay {
       if (!tag && sec.group !== undefined) {
         if (!letters.has(sec.group)) letters.set(sec.group, String.fromCharCode(65 + letters.size));
         tag = (sec.label === 'drop' ? 'drop ' : '') + letters.get(sec.group);
+        // Back-to-back repeats alternate two takes in the visualiser: C1 C2 C1 C2.
+        const same = (k: number) => score.sections[k]?.group === sec.group;
+        if (same(i - 1) || same(i + 1)) { let run = 0; while (same(i - run - 1)) run++; tag += (run % 2) + 1; }
       }
       if (!tag) tag = sec.label;
       if (x1 - x0 > g.measureText(tag).width + 4) { g.fillStyle = '#fff'; g.fillText(tag, x0 + 3, y + h / 2); }

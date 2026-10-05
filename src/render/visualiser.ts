@@ -118,6 +118,21 @@ export const ELEMENTS: { name: string; group: Group }[] = [
   { name: 'unlimited bobs', group: 'melody' }, // 50 a shaded ball whose trail never clears, tracing figures
 ];
 const NE = ELEMENTS.length;
+/**
+ * Outros: how the show winds down over the song's last seconds (seeded per song). Each is one or
+ * two calm elements with a look; then everything fades to black, the trails dry up and no new
+ * sparks are thrown, so the curtain comes down on a clean screen.
+ */
+const OUTROS: { elements: number[]; look: FxLookName }[] = [
+  { elements: [3, 31], look: 'clean' },   // drifting off into the stars, the galaxy turning overhead
+  { elements: [14, 15], look: 'clean' },  // the aurora and the nebula, lights going down
+  { elements: [44], look: 'film' },       // the oil wheel on an old projector, flickering out
+  { elements: [35], look: 'liquid' },     // sinking under water, the light fading above
+  { elements: [49], look: 'clean' },      // the dot globe, turning slower as the lights go
+  { elements: [], look: 'clean' },        // the scene as it was, simply fading to black
+];
+/** The last stretch of a song given to its outro, and the fade to black at its very end. */
+const OUTRO_LEN = 12, OUTRO_FADE = 6;
 /** The elements drawn as sprites (flowers, bubbles, starbursts, confetti, snowflakes). */
 const SPRITE_ELEMENTS = [12, 17, 18, 19, 20, 38, 39, 40];
 
@@ -220,12 +235,23 @@ const CLIMAXES: number[][] = [
   [35, 23, 20],  // caustics, copper bars, snowflakes
   MEGADEMO, ATOMIC, LIQUID_LIGHT, RAVE, FIREWORKS, MAIN_STAGE, GLITCH,
 ];
+/** The closers that belong to no decade. */
+const TIMELESS = CLIMAXES.slice(2, 7);
 const DECADE_PIN = Number(new URLSearchParams(location.search).get('decade')) || 0;
-/** The closer for this song: its decade's, when the year is known (or pinned with ?decade=1980). */
+/**
+ * The closer for this song (seeded, so a song keeps its own). Its own decade's closer is a treat,
+ * not a habit: about one song in four of that era. Every other song draws from everything else,
+ * timeless set pieces more often, other decades' now and then. ?decade=1980 pins that decade's.
+ */
 function pickClimax(r: () => number, year: number | undefined): number[] {
-  const y = DECADE_PIN || year || 0;
-  const list = y ? DECADES[Math.max(1950, Math.min(2020, Math.floor(y / 10) * 10))] : CLIMAXES;
-  return list[Math.floor(r() * list.length)];
+  const any = (l: number[][]) => l[Math.floor(r() * l.length)];
+  if (DECADE_PIN) return any(DECADES[Math.max(1950, Math.min(2020, Math.floor(DECADE_PIN / 10) * 10))]);
+  const own = year ? DECADES[Math.max(1950, Math.min(2020, Math.floor(year / 10) * 10))] : [];
+  if (own.length && r() < 0.25) return any(own);
+  // Otherwise anything else: the decade pieces aren't locked to their decade, they just come up
+  // less often than the timeless ones, so a folder of songs from one era doesn't keep repeating.
+  const others = CLIMAXES.filter(c => !own.includes(c));
+  return r() < 0.6 ? any(TIMELESS) : any(others.filter(c => !TIMELESS.includes(c)));
 }
 
 /**
@@ -477,6 +503,7 @@ export class Visualiser implements ShowDriver {
   }
 
   private seekTo(s: number) {
+    if (s < this.outroStart) this.outroOn = false;
     if (s < this.arcPeakT) this.glitterDone = false;
     const ev = this.score.events;
     let lo = 0, hi = ev.length;
@@ -563,13 +590,32 @@ export class Visualiser implements ShowDriver {
   private crash() { this.V.crash.value = 1; this.crashPending = true; }
 
   private newScene(s: number, label: string, key: string, sectionStart: boolean) {
-    const kept = this.patterns.get(key);
     const repeatable = label !== 'intro' && label !== 'outro';
+    // Back-to-back repeats of one part (C C C C) alternate two takes on its pattern, C1 C2 C1 C2:
+    // the repetition still shows, but the second take wears a different look and one new element.
+    let base: Scene | undefined;
+    if (sectionStart && repeatable) {
+      const { index } = sectionAt(this.score, s);
+      let run = 0;
+      while (index - run - 1 >= 0 && sectionKey(this.score.sections[index - run - 1]) === key) run++;
+      if (run % 2 === 1) { base = this.patterns.get(key)?.scene; key += '#2'; }
+    }
+    const kept = this.patterns.get(key);
     let sc: Scene;
     if (kept && repeatable) { kept.seen++; sc = this.makeScene(kept.scene); }
-    else {
+    else if (base) {
+      sc = this.makeScene(base);
+      const looks = LOOKS.filter(l => l !== base!.look);
+      const fresh = this.orchestrate(s).filter(e => !base!.elements.includes(e));
+      const els = base.elements.slice();
+      if (fresh.length && els.length) els[Math.floor(this.rand() * els.length)] = fresh[0];
+      Object.assign(sc, { look: looks[Math.floor(this.rand() * looks.length)], elements: els });
+      this.patterns.set(key, { scene: sc, seen: 0 });
+    } else {
       sc = this.makeScene();
       sc.elements = this.orchestrate(s);
+      // What this part comes back as: its own pattern, never the one-off climax showpiece.
+      const plain = { ...sc, elements: sc.elements.slice() };
       // The section holding the song's climax gets a showpiece, once: the glitterball about one
       // song in four (seeded, so a song keeps its own), otherwise one of the other big set pieces.
       const sec = sectionAt(this.score, s);
@@ -579,7 +625,7 @@ export class Visualiser implements ShowDriver {
         const big = (sec.section?.energy ?? 0.5) > 0.6;
         const cr = rng(this.seed ^ 0x9e3779b9);
         const pick = pickClimax(cr, this.score.track.year);
-        const decade = !CLIMAXES.slice(2, 7).includes(pick);
+        const decade = !TIMELESS.includes(pick);
         sc.elements = pick === DISCO ? (big ? [41, 32] : [41]) : big || decade ? [...pick] : pick.slice(0, 2);
         const r = this.rand;
         if (pick === MEGADEMO) {
@@ -604,7 +650,7 @@ export class Visualiser implements ShowDriver {
           });
         }
       }
-      if (sectionStart) this.patterns.set(key, { scene: sc, seen: 0 });
+      if (sectionStart) this.patterns.set(key, { scene: plain, seen: 0 });
     }
     // An exhale: a section clearly quieter than the last (a breakdown) thins out to one or two
     // elements with long, slow trails, so the next lift has somewhere to go.
@@ -720,9 +766,15 @@ export class Visualiser implements ShowDriver {
     if (s < this.lastS - 0.05 || s > this.lastS + 1) this.seekTo(s);
     this.lastS = s;
 
+    // The outro: the song's last stretch gets a calm scene of its own, then fades to black.
+    const D = sc.final ? sc.track.durationSec : Infinity;
+    const fade = running ? THREE.MathUtils.clamp((s - (D - OUTRO_FADE)) / OUTRO_FADE, 0, 1) : 0;
+    this.fade = fade;
+    if (running && sc.final && s >= this.outroStart && !this.outroOn) this.startOutro(s);
     if (running) {
       // Scene changes: every section, and every new melody phrase (after a breath of 1.5 s).
       const { section: sec, index: idx } = sectionAt(sc, s);
+      if (this.outroOn) this.secIdx = idx;
       if (idx !== this.secIdx && sec) { this.secIdx = idx; this.newScene(s, sec.label, sectionKey(sec), true); }
       // Twists: on each new phrase (four bars) once the picture has held for a few seconds, and
       // in any case before it has sat still for MAX_STILL seconds.
@@ -730,19 +782,19 @@ export class Visualiser implements ShowDriver {
       while (pi + 1 < sc.phrases.length && sc.phrases[pi + 1].t <= s) pi++;
       if (pi !== this.phraseIdx) {
         this.phraseIdx = pi;
-        if (s - this.lastChange >= MIN_STILL) this.twist(s);
+        if (s - this.lastChange >= MIN_STILL && !this.outroOn) this.twist(s);
       }
-      if (s - this.lastChange > MAX_STILL) this.twist(s);
+      if (s - this.lastChange > MAX_STILL && !this.outroOn) this.twist(s);
       const lead = sampleEnvelope(sc.envelopes.leadPitch, s);
       if (lead > 0) {
-        if (s - this.lastLeadT > 1.5 && s - this.lastSceneAt > 6 && sec) this.newScene(s, sec.label, sectionKey(sec) + ':phrase', false);
+        if (s - this.lastLeadT > 1.5 && s - this.lastSceneAt > 6 && sec && !this.outroOn) this.newScene(s, sec.label, sectionKey(sec) + ':phrase', false);
         this.lastLeadT = s;
       }
       // Events as they sound.
       const ev = sc.events;
       while (this.ptr < ev.length && ev[this.ptr].t <= s && ev[this.ptr].t < frontier) {
         const e = ev[this.ptr++];
-        if (s - e.t > 0.3) continue;
+        if (s - e.t > 0.3 || fade > 0) continue; // (no new sparks once the lights are going down)
         if (e.kind === 'kick') this.lastKick = e.t;
         else if (e.kind === 'snare') {
           this.V.boltAz.value = gazeAz + (this.rand() - 0.5) * 1.6;
@@ -776,7 +828,7 @@ export class Visualiser implements ShowDriver {
     this.V.notes.needsUpdate = true;
     // Element weights ease towards the scene's choice.
     const kw = 1 - Math.exp(-dt / 0.6);
-    for (let i = 0; i < NE; i++) this.weights[i] += (this.target[i] - this.weights[i]) * kw;
+    for (let i = 0; i < NE; i++) this.weights[i] += (this.target[i] * (1 - fade) - this.weights[i]) * kw;
     // Sprites are added light, so on a bright backdrop they vanish: dim it while any are on.
     this.V.dim.value = 0.55 * Math.max(...SPRITE_ELEMENTS.map(i => this.weights[i]));
     const w = this.weights;
@@ -799,7 +851,7 @@ export class Visualiser implements ShowDriver {
     this.updateGlitterball(s, dt, running);
     this.updateWave(s, frontier, running);
     // The spawners are the notes themselves, so they stay bright even early in the arc.
-    const light = 0.8 + this.arcLvl * 0.5 + this.V.release.value * 0.5;
+    const light = (0.8 + this.arcLvl * 0.5 + this.V.release.value * 0.5) * (1 - fade);
     for (const p of this.pools) p.update(s, light);
     this.updateCard(s, running);
   }
@@ -1001,8 +1053,34 @@ export class Visualiser implements ShowDriver {
   /** The feedback the scene wants, bent by the arc: while the song holds its breath, the trails pull inwards. */
   get feedbackNow() {
     const f = this.feedback, t = this.tensionLvl;
-    if (t < 0.02) return f;
+    // The trails dry up as the lights go down, so nothing is left smeared on the screen.
+    if (this.fade > 0) return { ...f, amount: f.amount * (1 - this.fade) ** 2 };
+    if (t < 0.02 || this.outroOn) return f;
     return { amount: Math.max(f.amount, 0.75 * t), zoom: f.zoom + (0.975 - f.zoom) * t, turn: f.turn * (1 + t * 2), hue: f.hue };
+  }
+
+  /** Where the outro starts: the last OUTRO_LEN seconds, or a closing outro section a little before. */
+  private get outroStart() {
+    const sc = this.score;
+    if (!sc.final) return Infinity;
+    const D = sc.track.durationSec, last = sc.sections[sc.sections.length - 1];
+    const own = last?.label === 'outro' && last.t > D - 40 ? last.t : Infinity;
+    return Math.max(0, Math.min(D - OUTRO_LEN, own));
+  }
+
+  /** The outro scene: one of OUTROS (seeded), calm, with no trails, and nothing new thrown in. */
+  private startOutro(s: number) {
+    this.outroOn = true;
+    const r = rng(this.seed ^ 0x51ed270b);
+    const o = OUTROS[Math.floor(r() * OUTROS.length)];
+    const cur = this.current ?? this.makeScene();
+    const sc: Scene = o.elements.length
+      ? { ...cur, elements: o.elements, look: o.look, layers: [0, 0, 0, 0], fold: [0, cur.fold[1], cur.fold[2], cur.fold[3]], feedback: { amount: 0, zoom: 1, turn: 0, hue: 0 } }
+      : { ...cur, elements: cur.elements.filter(e => !SPRITE_ELEMENTS.includes(e)).slice(0, 2), feedback: { amount: 0, zoom: 1, turn: 0, hue: 0 } };
+    if (!sc.elements.length) sc.elements = [0];
+    this.applyScene(sc);
+    this.crash();
+    this.lastSceneAt = s;
   }
 
   // ------------------------------------------------------------------ spawners
@@ -1220,6 +1298,9 @@ export class Visualiser implements ShowDriver {
    */
   private glitterSpin = 0;
   private glitterDone = false;
+  private outroOn = false;
+  /** 0 until the last OUTRO_FADE seconds of the song, then rising to 1: the lights going down. */
+  private fade = 0;
   private updateGlitterball(s: number, dt: number, running: boolean) {
     const ball = this.ball, w = this.weights[41];
     if (!ball || !running || s < 6) return;
@@ -1234,10 +1315,10 @@ export class Visualiser implements ShowDriver {
     const p = this.V.pa.value, b = this.V.pb.value;
     this.V.glitterTint.value.set(p.x + b.x * 0.5, p.y + b.y * 0.2, p.z - b.z * 0.3);
     // In front of your gaze, closer (bigger) as the arc climbs and on a drop.
-    const dist = 18 - 6 * this.arcLvl - 5 * this.V.release.value;
+    const dist = 15 - 5 * this.arcLvl - 4 * this.V.release.value;
     const g = this.V.gaze.value;
     ball.position.set(g.x * dist, g.y * dist + 1.2, g.z * dist);
-    ball.scale.setScalar(w * (1 + 0.06 * this.kickLvl(s)));
+    ball.scale.setScalar(w * 1.6 * (1 + 0.06 * this.kickLvl(s)));
   }
 
   private kickLvl(s: number) { return Math.exp(-(s - this.lastKick) / 0.15); }

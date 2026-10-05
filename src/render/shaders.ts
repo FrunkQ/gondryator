@@ -1009,8 +1009,8 @@ function moreElementsBody(V: any, g: any) {
     const acc = vec3(0.0).toVar();
     const y = q.y;
     const a = T.mul(1.2).add(y.mul(float(1.5).add(sin(T.mul(0.4)).mul(2.0)).add(V.bands.y.mul(2.5))));
-    const x = q.x.sub(sin(y.mul(2.0).add(T)).mul(0.15));
-    const w = float(0.22).mul(float(1.0).add(U.kick.mul(0.15)));
+    const x = q.x.sub(sin(y.mul(2.0).add(T)).mul(0.22));
+    const w = float(0.34).mul(float(1.0).add(U.kick.mul(0.15)));
     for (let k = 0; k < 4; k++) {
       const a1 = a.add(k * 1.5708);
       const x1 = sin(a1).mul(w), x2 = sin(a1.add(1.5708)).mul(w);
@@ -1026,14 +1026,15 @@ function moreElementsBody(V: any, g: any) {
   on(48, () => {
     const col = vec3(0.0).toVar();
     const found = float(0.0).toVar();
+    const qk = q.div(1.5);
     const top = float(0.55);
-    const r0 = top.sub(q.y);
+    const r0 = top.sub(qk.y);
     Loop(40, ({ i }) => {
       If(found.lessThan(0.5), () => {
         const rr = r0.sub(float(i).mul(0.02));
         If(rr.greaterThanEqual(0.0), () => {
           const X = sin(rr.mul(5.0).add(T.mul(1.7))).mul(0.42).add(sin(rr.mul(11.0).sub(T.mul(1.1))).mul(float(0.12).add(V.bands.z.mul(0.2))));
-          const dx = abs(q.x.sub(X));
+          const dx = abs(qk.x.sub(X));
           If(dx.lessThan(0.05), () => {
             const g2 = float(1.0).sub(dx.div(0.05));
             col.assign(paletteAt(rr.mul(0.5).add(U.hue)).mul(float(0.25).add(pow(g2, 0.7).mul(1.1))).add(vec3(pow(g2, 8.0).mul(0.5))));
@@ -1065,8 +1066,8 @@ function moreElementsBody(V: any, g: any) {
       const p1 = vec3(p0.x.mul(cy).sub(p0.z.mul(sy)), p0.y, p0.x.mul(sy).add(p0.z.mul(cy)));
       const p = vec3(p1.x, p1.y.mul(cx).sub(p1.z.mul(sx)), p1.y.mul(sx).add(p1.z.mul(cx)));
       const persp = float(1.0).div(float(2.6).sub(p.z));
-      const proj = p.xy.mul(persp).mul(2.4);
-      const size = persp.mul(0.05).mul(float(1.0).add(U.kick.mul(0.5)));
+      const proj = p.xy.mul(persp).mul(3.5);
+      const size = persp.mul(0.072).mul(float(1.0).add(U.kick.mul(0.5)));
       const dd = length(q.sub(proj));
       const dotv = smoothstep(size, size.mul(0.3), dd).mul(float(0.35).add(p.z.add(1.0).mul(0.35)));
       acc.assign(max(acc, paletteAt(p.y.mul(0.3).add(U.hue)).mul(dotv).mul(1.5)));
@@ -1083,8 +1084,8 @@ function moreElementsBody(V: any, g: any) {
     Loop(48, ({ i }) => {
       If(found.lessThan(0.5), () => {
         const tt = T.sub(float(i).mul(0.035));
-        const pos = vec2(sin(tt.mul(fa)).mul(0.55).add(sin(tt.mul(0.37)).mul(0.15)), sin(tt.mul(1.7).add(0.5)).mul(0.4));
-        const dv = q.sub(pos).div(0.06);
+        const pos = vec2(sin(tt.mul(fa)).mul(0.8).add(sin(tt.mul(0.37)).mul(0.22)), sin(tt.mul(1.7).add(0.5)).mul(0.6));
+        const dv = q.sub(pos).div(0.09);
         const dist = length(dv);
         If(dist.lessThan(1.0), () => {
           const nz = sqrt(max(float(1.0).sub(dist.mul(dist)), 0.0));

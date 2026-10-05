@@ -291,6 +291,7 @@ class App {
 
   private async loadAudio(buf: ArrayBuffer, name: string) {
     this.lastFile = { buf: buf.slice(0), name };
+    this.pausedMenu(false);
     if (this.phase !== 'landing') this.resetForNewTrack();
     this.preStarted = false;
     $('#drop').classList.add('hidden');
@@ -748,7 +749,7 @@ class App {
     const limit = this.score.final ? this.score.track.durationSec - 0.5 : this.score.frontierSec - MIN_LOOKAHEAD;
     t = Math.max(0, Math.min(limit, t));
     this.player.seek(t);
-    if (!this.player.playing && this.phase === 'ended') { this.phase = 'run'; $('#endcard').classList.add('hidden'); this.player.play(t); }
+    if (!this.player.playing && this.phase === 'ended') { this.phase = 'run'; $('#endcard').classList.add('hidden'); this.pausedMenu(false); this.player.play(t); }
     this.driver?.reset(t);
     this.other?.reset(t);
     this.world.invalidateGround();
@@ -756,10 +757,28 @@ class App {
 
   togglePause() {
     if (this.phase !== 'run' && this.phase !== 'ended') return;
-    if (this.player.playing) this.player.pause();
+    if (this.player.playing) { this.player.pause(); this.pausedMenu(true); }
     else {
+      this.pausedMenu(false);
       if (this.phase === 'ended' || this.endedAt !== null) { this.seek(0); return; }
       this.player.play(this.player.time);
+    }
+  }
+
+  /** Paused mid-ride: the departure board comes back, so you can change course to another song. */
+  private pausedMenu(on: boolean) {
+    if (document.body.classList.contains('paused') === on) return;
+    document.body.classList.toggle('paused', on);
+    $('#drop').classList.toggle('hidden', !on);
+    const lead = $('#drop .lead'), small = $('#drop .small');
+    if (on) {
+      lead.dataset.orig ??= lead.textContent ?? '';
+      small.dataset.orig ??= small.textContent ?? '';
+      lead.textContent = 'Paused. Change course?';
+      small.textContent = 'Drop or pick another song, a folder or the demo, or press space to ride on.';
+    } else {
+      if (lead.dataset.orig) lead.textContent = lead.dataset.orig;
+      if (small.dataset.orig) small.textContent = small.dataset.orig;
     }
   }
 
