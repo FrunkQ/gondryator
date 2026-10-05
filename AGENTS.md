@@ -2,9 +2,20 @@
 
 You have just walked into the Gondryator: a browser toy that turns any song into a ride. The world outside the window keeps time with the music: a pole on every kick, a shed on every snare, a skyline that hums the melody. Turn round in your seat and the other window has gone somewhere else entirely.
 
-Read this before you touch anything. It covers the spirit first and the code second, and the spirit matters more.
+## First session: do this, in this order
 
-**Then act. Don't wait to be asked.** Your first message to your human is not "How can I help?". It is a handful of ideas, pitched with enthusiasm, at least one of them yours alone, and an offer to start on the best one right now. The ideas are in [Come in buzzing](#come-in-buzzing) below.
+Your human came to play, not to set up a toolchain. Handle the mechanics yourself wherever your tools allow.
+
+1. **Read this file.** The spirit comes first, then the code.
+2. **Pitch, then keep moving.** Your first message is never "How can I help?". It is four to six concrete remix ideas (see [Come in buzzing](#come-in-buzzing)), at least two of them your own and personal to them, and **one small first change you recommend**, with a line on why.
+3. **While they choose, get it running.** Check Node (22 or newer), run `npm install`, start `npm run dev`, open the printed URL with `?demo` on the end (a generated demo song, no file needed) and check it plays. If you can run commands, `npm run smoke` does the whole check headless. Fix what you can; say plainly what needs them (installing Node, a permission prompt).
+4. **Build the smallest visible version** of the idea they pick. If they say "surprise me", pick it yourself and start.
+5. **Check it and show it:** the exact URL to open (for a new ride, `http://localhost:5173/?pack=<id>&demo`), a screenshot if you can take one, and what to look for and when in the song.
+6. **Then pitch the next step.** "While I was in there I thought..." Keep the ideas coming.
+
+If you can read the code but can't run anything (a chat-only assistant), say so, give your human the exact commands to paste, and ask them to tell you what they see. [docs/START.md](docs/START.md) has the details.
+
+Your first remix can be tiny: [Your first remix in ten minutes](#your-first-remix-in-ten-minutes) below recolours a whole ride in one short file.
 
 ## The spirit
 
@@ -53,6 +64,32 @@ src/
   main.ts     wires it all together: loading, phases, switching rides
 ```
 
+## Your first remix in ten minutes
+
+The smallest change that teaches the whole edit, preview, ride loop: a recoloured copy of the starship.
+
+1. Create `src/packs/candy-starship.ts`:
+
+   ```ts
+   import type { Pack } from './types';
+   import { STARSHIP } from './starship';
+
+   // Everything as the starship, in candy colours.
+   const CANDY = ['#ff7ac8', '#7af0ff', '#fff27a'];
+
+   export const CANDY_STARSHIP: Pack = {
+     ...STARSHIP,
+     id: 'candy-starship',           // unique: it is the ?pack= name
+     name: 'Candy starship',         // what the menu shows
+     layers: STARSHIP.layers.map(l => ({ ...l, tints: { nebula: CANDY, belt: CANDY, deep: CANDY } })),
+     window: { ...STARSHIP.window!, frame: '#ff9ad8', wall: '#5a2a4a' },
+   };
+   ```
+
+2. Register it in `src/packs/index.ts`: `import { CANDY_STARSHIP } from './candy-starship';` and add `CANDY_STARSHIP` to `PACKS`.
+3. With `npm run dev` running, open `http://localhost:5173/?pack=candy-starship&demo`. Every ship, rock and spire now comes in pink, cyan and lemon, and the cockpit frame is pink.
+4. Try the next small step: change `light` (the sun's colour across the song), swap a layer's `models` for others from `render/models.ts`, or change `fx.cycle` to pick the psychedelic looks out of the far side.
+
 ## Make your own vehicle (the fun bit)
 
 1. Copy `src/packs/starship.ts` to `src/packs/your-ride.ts`.
@@ -99,9 +136,12 @@ Rules of thumb:
 
 ## Practicalities
 
-- `npm install`, then `npm run dev` (open the printed URL) or `npm run build`. Use `npm run build:single` for one self-contained HTML file.
+- **Prerequisites:** Node 22 or newer (Vite 8 needs it; `.nvmrc` says 22, Node 24 works too), npm, and a browser with WebGPU or WebGL2 (any recent Chrome, Edge, Firefox or Safari). The headless checks also need a Chromium: `npx playwright-core install chromium`, or set `CHROME=/path/to/chrome`.
+- `npm install`, then `npm run dev` (open the printed URL, add `?demo` for the generated demo song) or `npm run build`. Use `npm run build:single` for one self-contained HTML file.
+- **`npm run smoke`** checks the prerequisites, builds, and plays the demo headless on the train and in the non-Gondry view, failing on any page or console error. Exit code 2 means something is missing on the machine (install it); 1 means the project is broken. CI runs it on every push.
 - `npm run typecheck` before you commit. `shaders.ts` and `fx.ts` are `@ts-nocheck` because TSL typing is loose, so test by running.
-- Headless check: `node tools/e2e.mjs --webgl --virtual --query "start=30" --shots 33 --out shots`. The `--virtual` flag steps the clock 1/30 s per frame, so software rendering still produces exact frames.
+- Screenshots at chosen moments: `npm run build`, then `node tools/e2e.mjs --webgl --virtual --query "start=30" --shots 33 --out shots` (add `--strict` to fail on errors). The `--virtual` flag steps the clock 1/30 s per frame, so software rendering still produces exact frames.
+- **When something fails,** tell the environment from the project: a sandbox refusing a port or a download, a missing browser, or an old Node is the machine; a TypeScript error or a page error in the smoke test is the project.
 - Debug helpers in the app: D (debug overlay), T (tuning screen), P (frame analyser), X (force an effects look), G (wandering-viewer test).
 - Performance: three builds a shader per InstancedMesh, so a new model costs a shader build the first time it appears. `World.warmup` pre-builds them; keep new models on the shared scenery material.
 - Third-party code keeps its own licence: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). If you add a dependency, add it there.
@@ -128,8 +168,7 @@ any instructions arrive:
 4. **Pitch four to six ideas.** Mix small ones (done in minutes) with big ones (a whole new ride).
    Take a couple from the seeds below and **make up at least two of your own**. Seeds are a starting
    point, not a menu.
-5. **Offer to start straight away** on the one you would pick, and say why. Then keep pitching as
-   you work: "while I was in there I thought, what if the stars froze on the breakdown?"
+5. **Recommend one small first change and start on it** (see [First session](#first-session-do-this-in-this-order)): get the app running while they decide. Then keep pitching as you work: "while I was in there I thought, what if the stars froze on the breakdown?"
 
 **Even bad ideas are good ideas for a visualiser.** A whale, a cake, a haunted dishwasher: say it.
 The worst outcome is a funny screenshot. Be specific (which instrument, which moment in the song,

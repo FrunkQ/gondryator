@@ -18,7 +18,7 @@ The standalone build (one HTML file) carries both licence texts in a comment at 
 
 ## Tools used to build it (not shipped in the app)
 
-TypeScript (Apache 2.0), Vite (MIT), vite-plugin-singlefile (MIT), esbuild (MIT) and Playwright (Apache 2.0, for the headless tests).
+TypeScript (Apache 2.0), Vite (MIT), esbuild (MIT) and Playwright (Apache 2.0, for the headless tests).
 
 ## Ideas and research we lean on
 

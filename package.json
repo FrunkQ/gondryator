@@ -1,14 +1,16 @@
 {
   "name": "gondryator",
   "version": "1.0.0",
-  "description": "",
+  "description": "Live inside a Michel Gondry video: any song becomes a ride.",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "build:single": "tsc && vite build --mode single",
     "typecheck": "tsc",
     "make-tracks": "node tools/make-test-tracks.mjs",
-    "test": "node tools/e2e.mjs"
+    "test": "node tools/smoke.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "e2e": "node tools/e2e.mjs"
   },
   "keywords": [],
   "author": "",
@@ -23,9 +25,11 @@
     "esbuild": "^0.28.2",
     "playwright-core": "^1.63.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.2",
-    "vite-plugin-singlefile": "^2.3.3"
+    "vite": "^8.3.2"
   },
   "private": true,
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  }
 }

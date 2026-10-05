@@ -1,6 +1,9 @@
 // Headless end-to-end run: serves the built app, plays a track, takes screenshots and reports
 // the frame rate, sync state, and the section-7 refocus metric.
-//   node tools/e2e.mjs [--file test-tracks/test-124.mp3] [--wander] [--webgl] [--shots 6,14,30] [--out shots]
+//   node tools/e2e.mjs [--file test-tracks/test-124.mp3] [--wander] [--webgl] [--shots 6,14,30] [--out shots] [--strict]
+// Needs a build in dist/ (npm run build) and a Chromium: CHROME=/path/to/chrome, or Playwright's own
+// (npx playwright-core install chromium). --strict exits 1 on any page error or console error, or if
+// the ride never starts. `npm run smoke` does all of that for you from a fresh clone.
 import { chromium } from 'playwright-core';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -27,6 +30,7 @@ const server = http.createServer((req, res) => {
 }).listen(0);
 const port = server.address().port;
 
+if (!fs.existsSync(path.join(root, 'index.html'))) { console.error(`No build in ${root}/: run npm run build first.`); process.exit(2); }
 const browser = await chromium.launch({
   // CHROME=/path/to/chrome to choose a browser; otherwise Playwright's own (or this container's).
   executablePath: process.env.CHROME ?? (fs.existsSync('/opt/pw-browsers/chromium-1194/chrome-linux/chrome') ? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' : undefined),
@@ -35,8 +39,9 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: Number(arg('w', 1280)), height: Number(arg('h', 720)) } });
 page.setDefaultTimeout(180000);
 const logs = [];
-page.on('console', m => { const l = `[${m.type()}] ${m.text()}`; logs.push(l); if (m.type() === 'error' && !l.includes('404')) console.error(l.slice(0, 400)); });
-page.on('pageerror', e => { logs.push(`[pageerror] ${e.message}`); console.error('[pageerror]', e.message.slice(0, 400)); });
+const errors = [];
+page.on('console', m => { const l = `[${m.type()}] ${m.text()}`; logs.push(l); if (m.type() === 'error' && !l.includes('404')) { errors.push(l); console.error(l.slice(0, 400)); } });
+page.on('pageerror', e => { logs.push(`[pageerror] ${e.message}`); errors.push(`[pageerror] ${e.message}`); console.error('[pageerror]', e.message.slice(0, 400)); });
 if (has('progress')) setInterval(async () => { try { const g = await page.evaluate(() => window.__gondry && { p: window.__gondry.phase, s: window.__gondry.s, fps: window.__gondry.fps, o: window.__gondry.objects }); console.error('progress', JSON.stringify(g)); } catch {} }, 15000).unref();
 await page.goto(`http://localhost:${port}/?${query}`);
 await page.waitForTimeout(1500);
@@ -67,7 +72,17 @@ for (const at of shots) {
   await page.screenshot({ path: name });
   console.log(name, JSON.stringify({ phase: st?.phase, s: st?.s?.toFixed(2), fps: st?.fps?.toFixed(0), frontier: st?.frontier, final: st?.final, objects: st?.objects, backend: st?.backend, metric: st?.metric ? `${st.metric.hits}/${st.metric.total} ${JSON.stringify(st.metric.byLayer)}` : null, signalStop: st?.signalStop, viz: st?.viz, yaw: st?.yaw, sections: (st?.sections || []).map(x => x.label + '@' + x.t.toFixed(1)).join(' ') }));
 }
+const final = await page.evaluate(() => window.__gondry).catch(() => null);
 console.log('--- console ---');
 console.log(logs.slice(0, 40).join('\n'));
 await browser.close();
 server.close();
+if (has('strict')) {
+  const ran = final && final.phase !== 'landing' && final.phase !== 'title' && final.s > 0;
+  if (errors.length || !ran) {
+    console.error(`\nFAILED: ${errors.length} error(s)${ran ? '' : `, and the ride never got going (phase ${final?.phase ?? 'unknown'})`}.`);
+    for (const e of errors.slice(0, 10)) console.error('  ' + e.slice(0, 300));
+    process.exit(1);
+  }
+  console.log(`\nOK: the ride played to ${final.s.toFixed(1)} s with no errors.`);
+}
