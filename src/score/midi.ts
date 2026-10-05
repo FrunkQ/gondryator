@@ -1,5 +1,7 @@
 // Score <-> Standard MIDI File.
-// Export: type-1 MIDI, one track per stem/kind, with the tempo map (for UE5 tools such as Midi Engine 3).
+// Export: type-1 MIDI, one track per stem/kind, with the tempo map (for UE5 tools such as Midi Engine 3),
+// and a "structure" track: sections, phrases, downbeats and moments as markers and as notes, so a
+// DAW or a game engine can trigger on the song's shape as easily as on its drums.
 // Import: a user-supplied MIDI file replaces the matching analysis stages (best quality).
 
 import type { Score, ScoreEvent, Stem, EventKind } from './types';
@@ -41,6 +43,57 @@ function track(name: string, events: { tick: number; data: number[] }[]): number
 
 const DRUM_NOTE: Record<string, number> = { kick: 36, snare: 38, hat: 42, hit: 39 };
 
+/**
+ * Notes on the structure track (channel 16). Each is held for as long as the thing lasts, with the
+ * velocity saying how big it is: sections (by energy), phrases (loud when new, soft when a
+ * repeat), every downbeat, and each kind of moment (by size; stops and builds for their length).
+ */
+export const STRUCTURE_NOTE = { section: 48, phrase: 50, downbeat: 52, drop: 55, lift: 57, break: 59, stop: 60, build: 62 } as const;
+
+/** A meta event with text (1 text, 6 marker, 7 cue point). */
+function meta(type: number, text: string): number[] {
+  const bytes = [...text].map(c => c.charCodeAt(0) & 0x7f);
+  return [0xff, type, ...vlq(bytes.length), ...bytes];
+}
+
+function structureTrack(score: Score): number[] {
+  const out: { tick: number; data: number[] }[] = [];
+  const CH = 15;
+  const end = score.track.durationSec || score.frontierSec;
+  const note = (n: number, t: number, dur: number, vel: number) => {
+    const on = secToTicks(score, t), off = Math.max(on + 1, secToTicks(score, t + Math.max(0.05, dur)));
+    const v = Math.max(1, Math.min(127, Math.round(vel * 127)));
+    out.push({ tick: on, data: [0x90 | CH, n, v] }, { tick: off, data: [0x80 | CH, n, 0] });
+  };
+  // Sections, lettered like describeStructure: sections that sound alike share a letter.
+  const letter = new Map<number, string>();
+  score.sections.forEach((s, i) => {
+    const next = score.sections[i + 1]?.t ?? end;
+    let name: string = s.label;
+    if (s.group !== undefined) {
+      if (!letter.has(s.group)) letter.set(s.group, String.fromCharCode(65 + (letter.size % 26)));
+      name += ' ' + letter.get(s.group);
+    }
+    out.push({ tick: secToTicks(score, s.t), data: meta(0x06, `${name} (bar ${s.bar})`) });
+    note(STRUCTURE_NOTE.section, s.t, next - s.t, 0.2 + 0.8 * s.energy);
+  });
+  score.phrases.forEach((p, i) => {
+    const next = score.phrases[i + 1]?.t ?? end;
+    const txt = `phrase ${p.id}${p.repeatOf !== null ? ' repeat' : ''}${p.entering.length ? ' +' + p.entering.join('+') : ''}`;
+    out.push({ tick: secToTicks(score, p.t), data: meta(0x07, txt) });
+    note(STRUCTURE_NOTE.phrase, p.t, next - p.t, p.repeatOf === null ? 0.8 : 0.45);
+  });
+  const beats = score.beats;
+  beats.forEach((b, i) => { if (b.downbeat) note(STRUCTURE_NOTE.downbeat, b.t, ((beats[i + 1]?.t ?? b.t + 0.5) - b.t) * 0.5, 0.4 + 0.6 * b.strength); });
+  for (const m of score.moments ?? []) {
+    const beat = beats.find(b => b.t >= m.t - 0.01);
+    const len = m.dur ?? (beat ? ((beats[beats.indexOf(beat) + 1]?.t ?? beat.t + 0.5) - beat.t) : 0.5);
+    out.push({ tick: secToTicks(score, m.t), data: meta(0x06, `${m.kind} ${Math.round(m.size * 100)}%`) });
+    note(STRUCTURE_NOTE[m.kind], m.t, len, 0.3 + 0.7 * m.size);
+  }
+  return track('structure', out);
+}
+
 export function scoreToMidi(score: Score): Uint8Array {
   const tracks: number[][] = [];
   // Tempo track.
@@ -54,6 +107,7 @@ export function scoreToMidi(score: Score): Uint8Array {
     tempoEvents.push({ tick: secToTicks(score, s.t), data: [0xff, 0x06, txt.length, ...[...txt].map(c => c.charCodeAt(0))] });
   }
   tracks.push(track('tempo + sections', tempoEvents));
+  tracks.push(structureTrack(score));
 
   const groups = new Map<string, ScoreEvent[]>();
   for (const e of score.events) {
@@ -151,7 +205,8 @@ export function parseMidi(buf: ArrayBuffer): MidiImport {
     }
     return sec;
   };
-  const notes: RawNote[] = raw.map(r => ({ t: toSec(r.tick), dur: toSec(r.end) - toSec(r.tick), pitch: r.pitch, vel: r.vel, channel: r.channel, track: r.track }));
+  // Our own structure track (sections, phrases, moments) is markers, not music.
+  const notes: RawNote[] = raw.filter(r => names[r.track] !== 'structure').map(r => ({ t: toSec(r.tick), dur: toSec(r.end) - toSec(r.tick), pitch: r.pitch, vel: r.vel, channel: r.channel, track: r.track }));
 
   // Assign stems: channel 10 = drums; then by track name; else the lowest-pitched track is bass.
   const byTrack = new Map<number, RawNote[]>();

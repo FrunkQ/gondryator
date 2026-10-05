@@ -58,6 +58,29 @@ export interface Phrase {
 }
 
 /**
+ * A sudden change, found ahead of time, on the beat it lands on (snapped to the downbeat when one
+ * is within two beats and nearly as strong):
+ * - `drop`: a slam-in, a big step up in loudness with the drums arriving, or anything coming back
+ *   after a break, a stop or a build;
+ * - `lift`: a smaller step up (the band filling out, a new layer coming in);
+ * - `break`: the music thins out or the drums cut out, but something keeps playing;
+ * - `stop`: everything stops (a near-silence), for `dur` seconds;
+ * - `build`: a crescendo: `t` is where the climb starts and `dur` how long it climbs, so
+ *   `t + dur` is where it peaks (usually a drop).
+ */
+export interface Moment {
+  t: number;
+  kind: 'drop' | 'lift' | 'break' | 'stop' | 'build';
+  /** 0..1: how big the change is (decibels, plus the drums coming or going). */
+  size: number;
+  /** Bar and 1-based beat it lands on (same numbering as `beats`). */
+  bar: number;
+  beat: number;
+  /** Seconds: how long a stop lasts, or how long a build climbs. */
+  dur?: number;
+}
+
+/**
  * Continuous curves at 50 Hz: per-band loudness (`mix`, `bass`, `other`, `drums`), plus the shapes
  * between the hits: `contour` (the melody's pitch, 0 low .. 1 high, held through gaps),
  * `bright` (how bright the sound is), `rise` (build-ups: loudness and brightness climbing),
@@ -94,6 +117,11 @@ export interface Score {
   beats: Beat[];
   sections: Section[];
   phrases: Phrase[];
+  /**
+   * Sudden changes (drops, lifts, breaks, stops, builds), in time order. Missing in scores cached
+   * before they existed and in scores from MIDI files; treat missing as unknown, not as none.
+   */
+  moments?: Moment[];
   events: ScoreEvent[];
   envelopes: Partial<Record<EnvelopeKey, Envelope>>;
   /** Everything with t < frontierSec is final and will never change. */
@@ -109,6 +137,7 @@ export interface ScoreDelta {
   beats: Beat[];
   sections: Section[];
   phrases: Phrase[];
+  moments?: Moment[];
   events: ScoreEvent[];
   envelopes: Partial<Record<EnvelopeKey, number[]>>;
   envelopeRate: number;
@@ -124,6 +153,7 @@ export function emptyScore(track: Score['track'], durationSec: number): Score {
     beats: [],
     sections: [],
     phrases: [],
+    moments: [],
     events: [],
     envelopes: {},
     frontierSec: 0,
@@ -139,6 +169,7 @@ export function applyDelta(score: Score, d: ScoreDelta): void {
   for (const x of d.beats) score.beats.push(x);
   for (const x of d.sections) score.sections.push(x);
   for (const x of d.phrases) score.phrases.push(x);
+  if (d.moments) for (const x of d.moments) (score.moments ??= []).push(x);
   for (const x of d.events) score.events.push(x);
   for (const k of Object.keys(d.envelopes) as EnvelopeKey[]) {
     const env = (score.envelopes[k] ??= { rate: d.envelopeRate, values: [] });
@@ -155,6 +186,60 @@ export function sampleEnvelope(env: Envelope | undefined, t: number): number {
   if (i >= env.values.length - 1) return env.values[env.values.length - 1];
   const f = x - i;
   return env.values[i] * (1 - f) + env.values[i + 1] * f;
+}
+
+/**
+ * Where t sits on the 4/4 grid, for anticipating the music: the beat and bar it is in, how far
+ * through them it is (0..1), and when the next beat, downbeat and phrase start. Times past the
+ * last known beat carry on at the last beat's spacing. Null until the first beats are known.
+ */
+export interface GridPos {
+  bar: number;
+  /** 1-based beat in the bar. */
+  beat: number;
+  beatFrac: number;
+  barFrac: number;
+  /** Seconds per beat here. */
+  beatSec: number;
+  nextBeat: number;
+  nextDownbeat: number;
+  /** The phrase t is in (index into `phrases`, -1 before the first), and when the next one starts. */
+  phrase: number;
+  phraseFrac: number;
+  nextPhrase: number;
+}
+
+export function gridAt(score: Score, t: number): GridPos | null {
+  const B = score.beats;
+  if (B.length < 2) return null;
+  let lo = 0, hi = B.length - 1;
+  if (t < B[0].t) lo = 0;
+  else { while (lo < hi - 1) { const m = (lo + hi) >> 1; if (B[m].t <= t) lo = m; else hi = m; } if (t >= B[B.length - 1].t) lo = B.length - 1; }
+  const b = B[lo];
+  const beatSec = (lo + 1 < B.length ? B[lo + 1].t : b.t + (b.t - B[lo - 1].t)) - b.t;
+  // Past the last beat, extrapolate on the last spacing.
+  const k = t > b.t + beatSec ? Math.floor((t - b.t) / beatSec) : 0;
+  const t0 = b.t + k * beatSec;
+  const idx = b.beat - 1 + k;
+  const bar = b.bar + Math.floor(idx / 4), beat = (idx % 4) + 1;
+  const beatFrac = Math.min(1, Math.max(0, (t - t0) / beatSec));
+  let nextDownbeat = t0 + (4 - (beat - 1)) * beatSec;
+  for (let i = lo + 1; i < B.length && k === 0; i++) if (B[i].downbeat && B[i].t > t) { nextDownbeat = B[i].t; break; }
+  const P = score.phrases;
+  let phrase = -1;
+  for (let i = 0; i < P.length && P[i].t <= t + 1e-6; i++) phrase = i;
+  const cur = P[phrase];
+  const nextPhrase = P[phrase + 1]?.t ?? (cur ? cur.t + cur.bars * 4 * beatSec : nextDownbeat);
+  return {
+    bar, beat, beatFrac, barFrac: (beat - 1 + beatFrac) / 4, beatSec, nextBeat: t0 + beatSec, nextDownbeat,
+    phrase, phraseFrac: cur ? Math.min(1, Math.max(0, (t - cur.t) / Math.max(1e-3, nextPhrase - cur.t))) : 0, nextPhrase,
+  };
+}
+
+/** The next moment after t (optionally of the given kinds), or null. */
+export function nextMoment(score: Score, t: number, kinds?: Moment['kind'][]): Moment | null {
+  for (const m of score.moments ?? []) if (m.t > t && (!kinds || kinds.includes(m.kind))) return m;
+  return null;
 }
 
 export function sectionAt(score: Score, t: number): { section: Section | null; index: number } {

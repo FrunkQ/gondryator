@@ -892,12 +892,27 @@ export class Visualiser implements ShowDriver {
   }
 
   /**
-   * Lifts, found ahead of time: sections that start louder than the one before, and moments where
-   * the next four seconds are clearly louder than the last four (a drop, the band coming back in,
-   * the end of a build-up). The show winds up over the bars before each one and lets go on it.
+   * Lifts, found ahead of time. First the parser's moments (score.moments): drops and lifts, on
+   * their beat, and the peak of a build that no drop follows. Then, to fill the gaps (and for
+   * older scores without moments), sections that start louder than the one before, and places
+   * where the next four seconds are clearly louder than the last four. The show winds up over the
+   * bars before each one and lets go on it.
    */
   private findLifts(end: number) {
     const sc = this.score;
+    const sure: { t: number; size: number }[] = [];
+    for (const m of sc.moments ?? []) {
+      if (m.t >= end) break;
+      if (m.kind === 'drop') sure.push({ t: m.t, size: Math.max(0.6, m.size) });
+      else if (m.kind === 'lift') sure.push({ t: m.t, size: 0.3 + 0.5 * m.size });
+      else if (m.kind === 'build' && m.dur) {
+        const peak = m.t + m.dur;
+        if (peak < end && !sc.moments!.some(x => (x.kind === 'drop' || x.kind === 'lift') && Math.abs(x.t - peak) < 1)) sure.push({ t: peak, size: 0.4 + 0.4 * m.size });
+      }
+    }
+    // Where the music breaks or stops, the guesses below would only find it coming back late.
+    const quiet = (sc.moments ?? []).filter(m => m.kind === 'break' || m.kind === 'stop');
+    const near = (t: number) => sure.some(l => Math.abs(l.t - t) < 6) || quiet.some(m => t > m.t && t - m.t < 6);
     const out: { t: number; size: number }[] = [];
     for (let i = 1; i < sc.sections.length; i++) {
       const a = sc.sections[i - 1], b = sc.sections[i];
@@ -926,11 +941,12 @@ export class Visualiser implements ShowDriver {
     out.sort((a, b) => a.t - b.t);
     const merged: { t: number; size: number }[] = [];
     for (const l of out) {
+      if (near(l.t)) continue;
       const last = merged[merged.length - 1];
       if (last && l.t - last.t < 6) { if (l.size > last.size) { last.t = snap(l.t); last.size = l.size; } }
       else merged.push({ t: snap(l.t), size: l.size });
     }
-    return merged;
+    return [...sure, ...merged].sort((a, b) => a.t - b.t).filter((l, i, a) => i === 0 || l.t - a[i - 1].t >= 2);
   }
 
   /**
@@ -1036,7 +1052,13 @@ export class Visualiser implements ShowDriver {
       if (next) { const ahead = next.t - s; if (ahead < 8) tension = next.size * (1 - ahead / 8) ** 1.5; }
       tension = Math.max(tension, Math.min(1, sampleEnvelope(this.score.envelopes.rise, s) * 0.8));
     }
-    const k = 1 - Math.exp(-dt / 1.2);
+    // A stop (score.moments): the lights go down with the music, fast, and snap back with it.
+    let snappy = false;
+    for (const m of this.score.moments ?? []) {
+      if (m.t > s) break;
+      if (m.kind === 'stop' && s < m.t + (m.dur ?? 0) + 0.3) { snappy = true; if (s < m.t + (m.dur ?? 0)) arc *= 0.2; }
+    }
+    const k = 1 - Math.exp(-dt / (snappy ? 0.08 : 1.2));
     this.arcLvl += (arc - this.arcLvl) * k;
     this.tensionLvl += (tension - this.tensionLvl) * (1 - Math.exp(-dt / 0.5));
     this.lastTension = this.tensionLvl;

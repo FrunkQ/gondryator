@@ -37,13 +37,13 @@ Audio file → **analysis** (in a Web Worker) → a **score**: plain JSON of bea
 
 ```
 src/
-  analysis/   analyzer.ts  progressive onset, pitch, beat and section detection (no ML, much faster than real time)
+  analysis/   analyzer.ts  progressive onset, pitch, beat, section and moment (drop, break, stop, build) detection (no ML, much faster than real time)
               tuning.ts    every parser knob, shown on the Tuning screen (T)
               autotune.ts  finds the knobs that suit one song by scoring parses for self-consistency
               deep.ts      "deep listen": Basic Pitch (a neural note transcriber) upgrades melody and bass in the background
               worker.ts    runs the analyser off the main thread
   score/      types.ts     THE data format between analysis and rendering (read this first)
-              midi.ts      MIDI in (sharper sync) and out; cache.ts stores parsed scores
+              midi.ts      MIDI in (sharper sync) and out (with a structure track); cache.ts stores parsed scores
   packs/      a "pack" is a vehicle or show, written entirely as data:
               star-guitar.ts  the train (homage to the video)
               starship.ts     an open cockpit in space, a psychedelic vortex out of the other side
@@ -116,10 +116,12 @@ Not everything has to be a ride. `src/render/visualiser.ts` is a whole show with
 | Melody pitch, continuous | `envelopes.leadPitch` (50 Hz, MIDI with fractions, 0 = silent; `bassPitch` too) | slides and glides | a wave round the horizon: future ahead, past behind |
 | Loudness | `envelopes.mix`, per stem `drums` / `bass` / `other` | how full it is | glow |
 | Brightness | `envelopes.bright` | filters opening | glow, colour speed |
-| Build-ups and lifts | `envelopes.rise`, and lifts found ahead (`findLifts`: louder sections, loudness steps) | tension, then release | the clock rushes, rings converge on your gaze, the light strobes on the beat; a shockwave on the lift |
+| Build-ups and lifts | `envelopes.rise`, and lifts found ahead (`findLifts`: drops and lifts from `moments`, then louder sections and loudness steps) | tension, then release | the clock rushes, rings converge on your gaze, the light strobes on the beat; a shockwave on the lift |
 | Beats and bars | `beats` (with `bar`, `beat`), `phrases` (4-bar blocks) | the grid | timing of anything that should feel "on the one" |
 | Sections | `sections` with `label` (intro, verse, chorus, breakdown, drop, outro), `energy`, and `group` (sections that sound alike share one) | the story | a scene change; a returning group brings its picture back with a new palette, a different-sounding part gets a different one |
 | The whole song | everything above, read ahead (the analysis runs far ahead of the music) | the journey | the arc: dark and muted at the start, full colour only at the climax, holding its breath (greyer, darker, trails pulling in) before a drop and bursting on it |
+| Sudden changes | `moments` (optional): `{ t, kind: 'drop' \| 'lift' \| 'break' \| 'stop' \| 'build', size, bar, beat, dur? }`, on the beat they land on (a build's `t` is where the climb starts, `t + dur` its peak); `nextMoment(score, t, kinds)` | a slam, the floor dropping out, a held breath | lifts (`findLifts`) wind up before each drop and let go on it; a stop turns the lights down with the music |
+| The grid ahead | `gridAt(score, t)`: bar, beat, how far through the beat, bar and phrase, and when the next beat, downbeat and phrase start | where "the one" is | anything that should wind up and land on the next downbeat or phrase |
 | Big changes | sections compared by instrumentation (`findEras` in `visualiser.ts`) | a new chapter: a solo, a long intro, the drums dropping out | a whole new vibe, with its own journey (colour rise, complexity bloom or thaw) |
 
 Rules of thumb:
