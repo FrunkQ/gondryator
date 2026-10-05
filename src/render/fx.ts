@@ -13,7 +13,7 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { U, palette, PALETTES, DEFAULT_PALETTES } from './shaders';
-import { feedback } from './feedback';
+import { clean, feedback } from './feedback';
 import { sampleEnvelope, type Score } from '../score/types';
 
 export type FxLook = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel' | 'crt' | 'film' | 'glitch';
@@ -181,7 +181,7 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
   const warpedTex = convertToTexture(warped);
   const glow = bloom(emissiveTex, 1.0, 0.5, 0.0);
   const bloomed = warpedTex.add(glow.mul(mix(float(LOOKS.clean.bloom), W.bloom, farSide()).mul(float(0.6).add(U.kick.mul(1.4)))));
-  const trails = feedback(afterImage(bloomed, W.echo.mul(0.8).mul(farSide())), { amount: W.fbAmount.mul(farSide()), zoom: W.fbZoom, turn: W.fbTurn, hue: W.fbHue, aspect: W.aspect });
+  const trails = feedback(afterImage(vec4(clean(bloomed.rgb), 1), W.echo.mul(0.8).mul(farSide())), { amount: W.fbAmount.mul(farSide()), zoom: W.fbZoom, turn: W.fbTurn, hue: W.fbHue, aspect: W.aspect });
 
   const graded = Fn(() => {
     let c = trails.rgb;

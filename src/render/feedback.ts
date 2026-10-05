@@ -5,9 +5,17 @@
 // Built like three's AfterImageNode (two render targets, swapped each frame), plus a transform.
 
 import { RenderTarget, Vector2, QuadMesh, NodeMaterial, RendererUtils, TempNode, NodeUpdateType } from 'three/webgpu';
-import { Fn, vec2, vec4, uv, texture, passTexture, max, cos, sin, mix, nodeObject, abs, fract, convertToTexture } from 'three/tsl';
+import { Fn, vec2, vec3, vec4, select, clamp, uv, texture, passTexture, max, cos, sin, mix, nodeObject, abs, fract, convertToTexture } from 'three/tsl';
 
 const _size = new Vector2();
+
+/**
+ * Keeps a pixel finite. One bad pixel (an overflow to infinity, then infinity times zero) is NaN,
+ * and on WebGPU a NaN in a feedback buffer survives every frame after: it sat in the middle of the
+ * screen as a magenta blob, zoomed and turned into a star by the feedback itself.
+ */
+export const clean = (c) => select(c.x.add(c.y).add(c.z).lessThan(3.0e4), clamp(c, 0.0, 1.0e4), vec3(0.0));
+
 const _quad = new QuadMesh();
 let _state;
 
@@ -74,12 +82,13 @@ class FeedbackNode extends TempNode {
       const r = vec2(c.x.mul(ca).sub(c.y.mul(sa)), c.x.mul(sa).add(c.y.mul(ca)));
       // Mirror at the edges so the trails never pull in black.
       const uo = abs(fract(r.div(vec2(p.aspect, 1)).add(0.5).mul(0.5)).mul(2.0).sub(1.0)).oneMinus();
-      const prev = old.sample(uo).rgb;
+      const prev = clean(old.sample(uo).rgb);
       // A little is taken off every frame as well as the fraction, so dim trails die out to black
       // instead of piling up into a pastel wash.
       const kept = max(mix(prev, prev.gbr, p.hue).mul(p.amount).sub(0.012), 0.0);
-      const now = src.sample(u0).rgb;
-      return vec4(max(now, kept), 1.0);
+      const now = clean(src.sample(u0).rgb);
+      // Off means off: the old frame is not read at all, so the buffer flushes clean.
+      return vec4(select(p.amount.greaterThan(0.001), max(now, kept), now), 1.0);
     })();
     builder.getNodeProperties(this).textureNode = src;
     return this._textureNode;
