@@ -25,6 +25,7 @@ import type { Pack } from './packs/types';
 import AnalysisWorker from './analysis/worker?worker&inline';
 import { Analyzer } from './analysis/analyzer';
 import { DeepListen, deepPrecheck } from './analysis/deep';
+import { SoundPass, soundsPrecheck } from './analysis/sounds';
 import { DEFAULT_TUNING, isDefaultTuning, type Tuning } from './analysis/tuning';
 import type { AutoTuneResult } from './analysis/autotune';
 import { TuningScreen } from './ui/tuning';
@@ -100,6 +101,7 @@ class App {
   private trackHash = '';
   private tuneWorker: Worker | null = null;
   private deep: DeepListen | null = null;
+  private sounds: SoundPass | null = null;
   private audioBuf: AudioBuffer | null = null;
   private lastFile: { buf: ArrayBuffer; name: string } | null = null;
   /** Shuffle play over a folder: the next ride starts when this one reaches its terminus. */
@@ -328,12 +330,15 @@ class App {
       this.analysedSec = cached.track.durationSec;
       this.attachScore();
       this.toast('Score loaded from cache');
+      this.startSounds();
       this.startDeepListen();
       return;
     }
     this.score = emptyScore(track, audioBuf.duration);
     if (this.midi) this.score.analysis.mode = 'midi';
     this.attachScore();
+    // The sound pass starts at once, alongside the fast parser: intros are full of samples and effects.
+    this.startSounds();
     this.startAnalysis(audioBuf);
   }
 
@@ -533,6 +538,28 @@ class App {
   }
 
   /**
+   * The sound pass: YAMNet recognises speech, singing, crowds, sirens, explosions and the rest
+   * (score.sounds, envelopes.voice). Skipped in the single-file build (no model file), with
+   * ?nosounds, on tiny devices, and when the cached score already has it.
+   */
+  private startSounds() {
+    const sc = this.score, audio = this.audioBuf;
+    this.sounds?.stop();
+    this.sounds = null;
+    if (import.meta.env.MODE === 'single' || params.has('nosounds') || !sc || !audio) return;
+    if (sc.sounds && (sc.soundsFrontier ?? 0) >= sc.track.durationSec) return;
+    if (soundsPrecheck()) return;
+    const hash = this.trackHash;
+    const pass = new SoundPass(audio, sc, () => {}, () => {
+      if (hash !== this.trackHash) return;
+      perf.mark(`sound pass done (${sc.sounds?.length ?? 0} cues, ${pass.speed.toFixed(0)}× real time, model ${Math.round(pass.loadMs)} ms)`);
+      if (sc.final && isDefaultTuning(this.trackTuning)) void saveScore(sc);
+    });
+    this.sounds = pass;
+    void pass.start().catch(() => { pass.state = 'skipped'; });
+  }
+
+  /**
    * Deep listen: Basic Pitch transcribes the melody and bass in the background and upgrades the
    * score ahead of the playhead; the fully upgraded score is cached for next time. Skipped with
    * MIDI (already exact), in the single-file build (no model file to load), with ?nodeep, and
@@ -605,6 +632,8 @@ class App {
     $('#deep').classList.add('hidden');
     this.deep?.stop();
     this.deep = null;
+    this.sounds?.stop();
+    this.sounds = null;
     this.worker?.terminate();
     this.worker = null;
     this.tuneWorker?.terminate();
@@ -650,7 +679,10 @@ class App {
       const warm = this.world.warmPending === 0 || this.p > this.titleCross + 15;
       const need = Math.min(this.leadNeeded(), score.track.durationSec);
       // (?quick, for headless checks: no station stop, no shader warm-up; go as soon as the line is read.)
-      const ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm));
+      // The sound pass gets a few seconds' grace to read the intro too (it loads a model first).
+      const snd = this.sounds;
+      const heard = !snd || snd.state === 'skipped' || snd.state === 'done' || (score.soundsFrontier ?? 0) >= need || this.p > this.titleCross + 5;
+      const ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm && heard));
       const dep = ready ? 'Departing' : this.departureText(ahead, need, warm);
       this.world.setDeparture(dep);
       if (this.driver instanceof Visualiser) this.driver.setWaiting(dep);
@@ -1104,11 +1136,12 @@ class App {
         sc ? `${sc.analysis.mode} · bpm ${sc.tempo[sc.tempo.length - 1]?.bpm ?? '?'}` : '',
         this.driver instanceof Visualiser ? this.driver.status : '',
         this.deep ? this.deep.status : '',
+        this.sounds ? this.sounds.status : '',
         `build ${__BUILD__}`,
       ].filter(Boolean);
     }
     this.debug.draw(sc, s, this.deep ? { spans: this.deep.spans, state: this.deep.state } : undefined);
-    (window as any).__gondry = { phase: this.phase, s, yaw: Math.round(this.look.yaw * 57.3), fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, viz: this.driver instanceof Visualiser ? this.driver.status : undefined, deep: this.deep?.status, sections: sc?.sections, signalStop: this.signalStop };
+    (window as any).__gondry = { phase: this.phase, s, yaw: Math.round(this.look.yaw * 57.3), fps: this.fps, metric: this.driver?.metric, frontier: sc?.frontierSec, final: sc?.final, objects: this.driver?.activeCount, backend: this.world.backend, events: sc?.events.length, viz: this.driver instanceof Visualiser ? this.driver.status : undefined, deep: this.deep?.status, sounds: this.sounds?.status, cues: sc?.sounds?.map(c => `${c.kind}@${c.t.toFixed(1)}+${c.dur.toFixed(1)}`).join(' '), sections: sc?.sections, signalStop: this.signalStop };
   }
 }
 

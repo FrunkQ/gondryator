@@ -1,6 +1,6 @@
 // Debug overlay: event timeline per stem/kind, beats, sections, phrases, the look-ahead
 // frontier, and live numbers (fps, backend, analysis speed, refocus metric).
-import type { Score } from '../score/types';
+import { sampleEnvelope, type Score } from '../score/types';
 
 const ROWS: { label: string; test: (e: Score['events'][number]) => boolean; color: string }[] = [
   { label: 'kick', test: e => e.kind === 'kick', color: '#ff8a5b' },
@@ -10,6 +10,10 @@ const ROWS: { label: string; test: (e: Score['events'][number]) => boolean; colo
   { label: 'lead', test: e => (e.stem === 'other' || e.stem === 'vocals') && e.dur < 1.2, color: '#c89bff' },
   { label: 'pads', test: e => e.stem === 'other' && e.dur >= 1.2, color: '#9ae6d8' },
 ];
+/** Recognised sounds: speech white, singing pink, crowds gold, sirens red, impacts orange, nature blue, animals green, the rest grey. */
+const CUE_COLORS: Record<string, string> = { speech: '#fff', shout: '#fff', laugh: '#ffe9a8', sing: '#ff8ad8', crowd: '#ffd24a', siren: '#ff4a4a', impact: '#ff9a3a', nature: '#5ab0ff', animal: '#9be37a', whoosh: '#b9f3ff' };
+/** Sudden changes: drops red, lifts orange, breaks blue, stops grey, builds yellow. */
+const MOMENT_COLORS: Record<string, string> = { drop: '#ff5a5a', lift: '#ffa94a', break: '#5aa8ff', stop: '#c0c0c0', build: '#ffe14a' };
 const SECTION_COLORS: Record<string, string> = { intro: '#5c6b7a', verse: '#4f7a5c', chorus: '#9a6b2f', breakdown: '#3f5f8f', drop: '#a24a4a', outro: '#5c6b7a' };
 
 export class DebugOverlay {
@@ -92,6 +96,49 @@ export class DebugOverlay {
         g.fillRect(x0, yy, x1 - x0, hgt);
         g.globalAlpha = 1;
       }
+      // The voice curve (sound pass: someone singing or talking, 0..1), pink along the bottom.
+      const voice = score.envelopes.voice;
+      if (voice?.values.length) {
+        const base = H - bottom - 4, amp = rowH * 1.6;
+        g.strokeStyle = '#ff8ad8'; g.lineWidth = 1.5; g.beginPath();
+        for (let x = left; x < W - 8; x += 3) {
+          const t = s + span0 + ((x - left) / (W - left - 8)) * (span1 - span0);
+          if (t > (score.soundsFrontier ?? 0)) break;
+          const v = sampleEnvelope(voice, t), y = base - v * amp;
+          if (x === left) g.moveTo(x, y); else g.lineTo(x, y);
+        }
+        g.stroke();
+        g.fillStyle = '#ff8ad8';
+        g.fillText('voice', 6, base - amp / 2);
+      }
+      // Recognised sounds: a labelled bar each, under the phrase marks.
+      for (const c of score.sounds ?? []) {
+        if (c.t + c.dur < s + span0 || c.t > s + span1) continue;
+        const x0 = Math.max(left, xOf(c.t)), x1 = Math.min(W - 8, xOf(c.t + c.dur));
+        g.fillStyle = CUE_COLORS[c.kind] ?? '#aaa';
+        g.globalAlpha = 0.4 + 0.6 * c.score;
+        g.fillRect(x0, top + 11, Math.max(2, x1 - x0), 9);
+        g.globalAlpha = 1;
+        g.fillStyle = '#111';
+        if (x1 - x0 > 30) g.fillText(`${c.kind}: ${c.label}`.slice(0, Math.floor((x1 - x0) / 6.5)), x0 + 2, top + 16);
+      }
+      // Moments (sudden changes): a marker and its name; a build is a ramp up to its peak.
+      for (const m of score.moments ?? []) {
+        const end = m.t + (m.dur ?? 0);
+        if (end < s + span0 || m.t > s + span1) continue;
+        const x = xOf(m.t);
+        g.fillStyle = MOMENT_COLORS[m.kind];
+        if (m.kind === 'build' && m.dur) {
+          const x1 = xOf(end);
+          g.globalAlpha = 0.35;
+          g.beginPath(); g.moveTo(x, H - bottom); g.lineTo(x1, top + 24); g.lineTo(x1, H - bottom); g.closePath(); g.fill();
+          g.globalAlpha = 1;
+        } else {
+          g.fillRect(x - 1, top + 22, 3, H - top - bottom - 22);
+          if (m.kind === 'stop' && m.dur) { g.globalAlpha = 0.25; g.fillRect(x, top + 22, xOf(end) - x, H - top - bottom - 22); g.globalAlpha = 1; }
+        }
+        g.fillText(`${m.kind} ${m.size.toFixed(2)}`, x + 4, top + 28);
+      }
       // Frontier.
       const fx = xOf(score.frontierSec);
       if (fx < W) {
@@ -157,6 +204,16 @@ export class DebugOverlay {
       g.fillStyle = deep.state === 'skipped' ? 'rgba(160,160,160,0.5)' : '#c89bff';
       if (deep.state === 'skipped') g.fillRect(left, y + h + 2, W - left - 8, 2);
       else for (const [a, b] of deep.spans) g.fillRect(x(a), y + h + 2, Math.max(1, x(b) - x(a)), 3);
+    }
+    // The sound pass: each recognised sound as a coloured tick above the strip (speech white,
+    // singing pink, crowds gold, sirens red, impacts orange, nature blue, the rest grey).
+    for (const c of score.sounds ?? []) {
+      g.fillStyle = CUE_COLORS[c.kind] ?? '#aaa';
+      g.fillRect(x(c.t), y - 7, Math.max(2, x(c.t + c.dur) - x(c.t)), 3);
+    }
+    for (const m of score.moments ?? []) {
+      g.fillStyle = MOMENT_COLORS[m.kind];
+      g.fillRect(x(m.t) - 1, y + h + 6, 2, 5);
     }
     // The stretch the timeline above shows, and the playhead.
     g.strokeStyle = 'rgba(76,255,176,0.8)';

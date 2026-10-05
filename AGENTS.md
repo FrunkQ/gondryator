@@ -41,6 +41,7 @@ src/
               tuning.ts    every parser knob, shown on the Tuning screen (T)
               autotune.ts  finds the knobs that suit one song by scoring parses for self-consistency
               deep.ts      "deep listen": Basic Pitch (a neural note transcriber) upgrades melody and bass in the background
+              sounds.ts    the sound pass: YAMNet recognises speech, singing, crowds, sirens, impacts... (score.sounds)
               worker.ts    runs the analyser off the main thread
   score/      types.ts     THE data format between analysis and rendering (read this first)
               midi.ts      MIDI in (sharper sync) and out (with a structure track); cache.ts stores parsed scores
@@ -66,12 +67,13 @@ src/
 
 ## The listening passes (what you can react to)
 
-Three analysers build the score in layers, all in the browser, and each swaps its improvements in ahead of the playhead (from the first bar beyond anything already on screen), never under the viewer's feet:
+Four analysers build the score in layers, all in the browser, and each swaps its improvements in ahead of the playhead (from the first bar beyond anything already on screen), never under the viewer's feet:
 
 | Pass | When | What it gives you |
 |---|---|---|
 | **Fast parser** (`analysis/analyzer.ts`) | always, from the first second, far faster than real time | `events` (kick, snare, hat, bass and melody notes, pads), `beats` / `phrases` (the 4/4 grid), `sections` with `group`, `moments` (drop, lift, break, stop, build) and the `envelopes` (loudness, brightness, build-ups, continuous pitch) |
 | **Auto-tune** (`analysis/autotune.ts`) | first play of a song, after the fast parse | better parser settings for this song, re-parsed and swapped in for the rest of the ride, and saved for next time |
+| **Sound pass** (`analysis/sounds.ts`) | from the first second, alongside the fast parser | `sounds`: cues for what isn't the music (speech, shout, laugh, sing, crowd, animal, nature, siren, engine, impact, whoosh, tick, beep), each with `t`, `dur`, the classifier's `label` and `score`; and `envelopes.voice` (someone singing or talking, 0..1) |
 | **Deep listen** (`analysis/deep.ts`) | after the fast parse, on machines that can take it | sharper melody, bass and pad notes from a neural transcriber |
 
 A MIDI file of the same song, dropped alongside it, beats all three for the parts it covers. The friendly tour with diagrams is [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md); the non-Gondry view's own guide is [docs/VISUALISER.md](docs/VISUALISER.md). The full field-by-field table is in [Build a visualiser](#build-a-visualiser-reading-the-score) below.
@@ -134,6 +136,8 @@ Not everything has to be a ride. `src/render/visualiser.ts` is a whole show with
 | The whole song | everything above, read ahead (the analysis runs far ahead of the music) | the journey | the arc: dark and muted at the start, full colour only at the climax, holding its breath (greyer, darker, trails pulling in) before a drop and bursting on it |
 | Sudden changes | `moments` (optional): `{ t, kind: 'drop' \| 'lift' \| 'break' \| 'stop' \| 'build', size, bar, beat, dur? }`, on the beat they land on (a build's `t` is where the climb starts, `t + dur` its peak); `nextMoment(score, t, kinds)` | a slam, the floor dropping out, a held breath | lifts (`findLifts`) wind up before each drop and let go on it; a stop turns the lights down with the music |
 | The grid ahead | `gridAt(score, t)`: bar, beat, how far through the beat, bar and phrase, and when the next beat, downbeat and phrase start | where "the one" is | anything that should wind up and land on the next downbeat or phrase |
+| Recognised sounds | `sounds` (optional): `{ t, dur, kind, label, score }`, `kind` one of 13 families; final up to `soundsFrontier`; `soundsAt(score, t)` | a sample, a voice, a siren, a crowd going wild | each family pops in with its own effect while it lasts: captions under your gaze for speech, red and blue for a siren, confetti for a crowd, a burst and a flash for an impact |
+| Voice | `envelopes.voice` (about 1 Hz, 0..1) | someone singing or talking | the caption dots grow with it |
 | Big changes | sections compared by instrumentation (`findEras` in `visualiser.ts`) | a new chapter: a solo, a long intro, the drums dropping out | a whole new vibe, with its own journey (colour rise, complexity bloom or thaw) |
 
 Rules of thumb:

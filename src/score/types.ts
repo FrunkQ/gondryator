@@ -86,7 +86,29 @@ export interface Moment {
  * `bright` (how bright the sound is), `rise` (build-ups: loudness and brightness climbing),
  * `leadPitch` / `bassPitch` (the exact pitch as MIDI with fractions, so slides glide; 0 = silent).
  */
-export type EnvelopeKey = Stem | 'mix' | 'contour' | 'bright' | 'rise' | 'leadPitch' | 'bassPitch';
+export type EnvelopeKey = Stem | 'mix' | 'contour' | 'bright' | 'rise' | 'leadPitch' | 'bassPitch' | 'voice';
+
+/**
+ * What the sound pass (analysis/sounds.ts: YAMNet, a sound classifier) can recognise besides the
+ * music itself, grouped into a few families that each get their own kind of reaction:
+ * - `speech`: someone talking (dialogue samples, spoken word); `shout`: shouting, screaming;
+ * - `laugh`; `sing`: singing, rapping, a choir, humming;
+ * - `crowd`: cheering, applause, clapping, a crowd;
+ * - `animal`: birds, dogs, whales and the rest; `nature`: wind, rain, thunder, water, fire;
+ * - `siren`: sirens, alarms, phones, horns, whistles; `engine`: cars, trains, planes, engines;
+ * - `impact`: explosions, bangs, slams, smashes, gunshots, fireworks; `whoosh`: whooshes, whips;
+ * - `tick`: a clock ticking; `beep`: beeps, pings, dings, jingles.
+ */
+export type SoundKind = 'speech' | 'shout' | 'laugh' | 'sing' | 'crowd' | 'animal' | 'nature' | 'siren' | 'engine' | 'impact' | 'whoosh' | 'tick' | 'beep';
+
+/** A recognised sound: from `t` for `dur` seconds, its family, the classifier's own label and how sure it was (0..1). */
+export interface SoundCue {
+  t: number;
+  dur: number;
+  kind: SoundKind;
+  label: string;
+  score: number;
+}
 
 export interface Envelope {
   /** Samples per second. */
@@ -124,6 +146,13 @@ export interface Score {
   moments?: Moment[];
   events: ScoreEvent[];
   envelopes: Partial<Record<EnvelopeKey, Envelope>>;
+  /**
+   * Recognised sounds (speech, crowds, sirens, explosions...), in time order, from the sound pass,
+   * which runs alongside the fast parser and has a frontier of its own: cues before
+   * `soundsFrontier` are final. Missing when the pass has not run (or cannot, on this device).
+   */
+  sounds?: SoundCue[];
+  soundsFrontier?: number;
   /** Everything with t < frontierSec is final and will never change. */
   frontierSec: number;
   final: boolean;

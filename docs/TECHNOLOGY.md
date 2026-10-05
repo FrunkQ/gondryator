@@ -25,6 +25,7 @@ sequenceDiagram
     participant You
     participant App as App (main.ts)
     participant Fast as Fast parser (worker)
+    participant Snd as Sound pass (worker)
     participant Tune as Auto-tune (worker)
     participant Deep as Deep listen (worker)
     participant Ride as Renderer
@@ -33,8 +34,10 @@ sequenceDiagram
     App->>App: read tags (title, artist, year, cover)
     App->>App: check the score cache
     App->>Fast: decode and start parsing
+    App->>Snd: at the same time: what else can be heard?
     Note over App,Ride: the train rolls up to a station board with the song's name
     Fast-->>App: score so far (every second or so)
+    Snd-->>App: speech, crowds, sirens, impacts... (every few seconds)
     App->>Ride: depart once enough of the line ahead is read
     Fast-->>App: ...keeps reading ahead, much faster than real time
     Fast-->>App: final score
@@ -47,7 +50,7 @@ sequenceDiagram
 
 The station stop at the start is not decoration. It hides the wait while the first stretch of the song is read and the shaders are built. How long the stop lasts is learned per machine (see [Lead time](#lead-time-how-far-ahead-it-reads)).
 
-## The three listening passes
+## The four listening passes
 
 The score is built in layers. Each pass can only make it better, and each one swaps its improvements in *ahead* of the music, never under your feet.
 
@@ -65,18 +68,23 @@ flowchart TB
     subgraph P2 [2 · Auto-tune: first play]
         b1[re-parse a loud stretch<br/>a couple of dozen times] --> b2[keep the settings with the<br/>most self-consistent parse]
     end
+    subgraph P4 [4 · Sound pass: from the first second]
+        d1[YAMNet sound classifier<br/>521 kinds of sound] --> d2[cues: speech · singing · crowd<br/>siren · impact · whoosh · nature...<br/>and a voice curve]
+    end
     subgraph P3 [3 · Deep listen: if the machine can take it]
         c1[Basic Pitch neural<br/>note transcriber] --> c2[sharper melody,<br/>bass and pads]
     end
     P1 --> S[(score)]
     P2 --> S
     P3 --> S
+    P4 --> S
 ```
 
 | Pass | Where | Speed | What it adds |
 |---|---|---|---|
 | **Fast parser** (`src/analysis/analyzer.ts`) | a Web Worker | many times faster than real time | Drums from band-split onsets; bass and lead notes from pitch tracking; pads from chroma; a beat tracker with bars and four-bar phrases; sections, each with a `group` so parts that sound alike share a letter; **moments**, the sudden changes (a drop, a lift, a break, a stop, a build), each on the beat it lands on; envelopes for loudness, brightness, build-ups and continuous pitch. No neural network, so it starts at once on any machine. |
 | **Auto-tune** (`src/analysis/autotune.ts`) | its own worker, after the first full parse | in the background | No answer key: it scores parses on what good parses of real music look like (a steady beat, drums on the grid, a plausible number of hits per bar, a melody that moves in steps) and keeps the best settings. They are saved for that song and applied to the rest of the same ride. |
+| **Sound pass** (`src/analysis/sounds.ts`) | its own worker, started together with the fast parser | about 50 times faster than real time, after loading a 4 MB model | Google's YAMNet classifier (run by MediaPipe in WebAssembly) says, about once a second, which of 521 kinds of sound it hears. Everything that isn't the music itself is grouped into 13 families (speech, shouting, laughter, singing, crowds, animals, nature, sirens, engines, impacts, whooshes, ticking clocks, beeps) as **sound cues**, plus a **voice** curve (how sure it is that someone is singing or talking). It starts first because intros are full of samples and effects; the departure waits a few seconds for it if it needs to. |
 | **Deep listen** (`src/analysis/deep.ts`) | its own worker, after the first full parse | depends on the machine; skipped on phones | Spotify's Basic Pitch model transcribes the notes far more precisely than the fast parser. It runs in windows; each window is spliced in only when it is comfortably ahead of the playhead. |
 
 A **MIDI file** of the same song (drop it with the audio) beats all three for the parts it covers. Its notes replace the parsed ones.
@@ -123,6 +131,32 @@ classDiagram
 Two helpers make the grid easy to use: `gridAt(score, t)` says which bar and beat you are in and when the next downbeat and phrase start, and `nextMoment(score, t)` finds the next drop (or any kind of moment), so an effect can wind up and land exactly on it.
 
 One rule makes the whole thing safe: **everything before `frontierSec` is final.** The parser only ever appends, so a renderer can schedule anything up to the frontier knowing it will never change. Later passes respect a margin ahead of the playhead for the same reason.
+
+## Seeing what it heard: the debug overlay
+
+Press **D** (or add `?debug`) and the bottom of the screen shows everything the listeners have found, scrolling past the playhead:
+
+```mermaid
+flowchart TB
+    subgraph TL [the next few seconds, scrolling]
+        direction TB
+        L1[sections · their letter · energy]
+        L2[phrase marks · repeats]
+        L3[recognised sounds: labelled bars<br/>speech · siren · crowd · impact...]
+        L4[moments: drop · lift · break · stop markers,<br/>builds as a rising ramp]
+        L5[beats, downbeats brighter]
+        L6[lanes: kick · snare · hats · bass · melody · pads]
+        L7[the voice curve, pink]
+        L8[frontier: read up to here]
+    end
+    subgraph SS [the whole song, one strip]
+        S1[sections lettered by part: intro A A B C1 C2...]
+        S2[sound ticks above · deep-listen progress and moment marks below]
+    end
+    TL --> SS
+```
+
+The text lines above it report each pass: the fast parser's speed, the sound pass (`sounds 56× · 12 cues`), deep listen, and, in the non-Gondry view, which elements are on screen, which sounds it is reacting to (`hearing siren, crowd`) and whether the outro has begun.
 
 ## Lead time: how far ahead it reads
 

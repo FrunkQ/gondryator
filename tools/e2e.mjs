@@ -41,7 +41,8 @@ const page = await browser.newPage({ viewport: { width: Number(arg('w', 1280)), 
 page.setDefaultTimeout(180000);
 const logs = [];
 const errors = [];
-page.on('console', m => { const l = `[${m.type()}] ${m.text()}`; logs.push(l); if (m.type() === 'error' && !l.includes('404')) { errors.push(l); console.error(l.slice(0, 400)); } });
+// (MediaPipe's WebAssembly prints its info lines to stderr, which reaches the console as errors.)
+page.on('console', m => { const l = `[${m.type()}] ${m.text()}`; logs.push(l); if (m.type() === 'error' && !l.includes('404') && !/\] (INFO|W\d{4}|I\d{4})[: ]/.test(l)) { errors.push(l); console.error(l.slice(0, 400)); } });
 page.on('pageerror', e => { logs.push(`[pageerror] ${e.message}`); errors.push(`[pageerror] ${e.message}`); console.error('[pageerror]', e.message.slice(0, 400)); });
 // --progress: a line every 10 s saying where the ride has got to. --timeout 300: give up after that
 // many seconds, say where it was stuck, and exit 3 (inconclusive: slow software rendering is not a bug).
@@ -87,7 +88,7 @@ for (const at of shots) {
   const st = await page.evaluate(() => window.__gondry);
   const name = `${out}/${String(++i).padStart(2, '0')}-${at}s.png`;
   await page.screenshot({ path: name });
-  console.log(name, JSON.stringify({ phase: st?.phase, s: st?.s?.toFixed(2), fps: st?.fps?.toFixed(0), frontier: st?.frontier, final: st?.final, objects: st?.objects, backend: st?.backend, metric: st?.metric ? `${st.metric.hits}/${st.metric.total} ${JSON.stringify(st.metric.byLayer)}` : null, signalStop: st?.signalStop, viz: st?.viz, yaw: st?.yaw, sections: (st?.sections || []).map(x => x.label + '@' + x.t.toFixed(1)).join(' ') }));
+  console.log(name, JSON.stringify({ phase: st?.phase, s: st?.s?.toFixed(2), fps: st?.fps?.toFixed(0), frontier: st?.frontier, final: st?.final, objects: st?.objects, backend: st?.backend, metric: st?.metric ? `${st.metric.hits}/${st.metric.total} ${JSON.stringify(st.metric.byLayer)}` : null, signalStop: st?.signalStop, viz: st?.viz, sounds: st?.sounds, cues: st?.cues, yaw: st?.yaw, sections: (st?.sections || []).map(x => x.label + '@' + x.t.toFixed(1)).join(' ') }));
 }
 const final = await page.evaluate(() => window.__gondry).catch(() => null);
 console.log('--- console ---');

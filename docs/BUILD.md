@@ -93,6 +93,12 @@ underneath, and a green bracket for the stretch the timeline shows. `describeStr
 `score/types.ts` gives the same shape as text; the tuning screen shows the group letter next to
 each section.
 
+## The sound pass
+
+`src/analysis/sounds.ts` and `sounds.worker.ts` run Google's YAMNet sound classifier (4 MB model, Apache 2.0) through MediaPipe's audio tasks (6.6 MB of WebAssembly, Apache 2.0), both shipped in `public/models/`. It starts together with the fast parser, the moment the song is decoded, and classifies about one window a second, front to back (about 50 times faster than real time in headless software rendering here). The 521 AudioSet classes it knows are grouped into 13 families (`SoundKind` in `score/types.ts`); a family counts once its best class passes `SOUND_THRESHOLD`, and consecutive windows join into one cue whose `dur` grows live. Speech, shouting and singing also make `envelopes.voice`. The departure waits up to about five seconds after the station stop for the sound pass to read as far ahead as the parser. Skipped with `?nosounds`, in the single-file build and on devices reporting under 2 GB of memory; cached with the score once complete. MediaPipe prints its info lines to stderr, which the console shows as errors; `tools/e2e.mjs` ignores those.
+
+The thresholds are first guesses from synthetic tests (pure tones can pass for sirens); real songs will tell us where to set them. The D overlay shows every cue with its label and score, so it is easy to see what fired.
+
 ## Deep listen
 
 The fast parser (`analyzer.ts`) is hand-made DSP: it gets the drums, beats and sections right and is far faster than real time, but its melody tracker only hears one note at a time. After it finishes, "deep listen" runs Spotify's Basic Pitch, a small neural network (about 900 KB of model, Apache 2.0) that transcribes polyphonic music into notes, in its own worker on TensorFlow.js (WebGL when the worker can get it, plain JavaScript otherwise).

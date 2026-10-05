@@ -10,9 +10,11 @@ The Gondryator's own code is public domain under [The Unlicense](LICENSE). It is
 | [MaterialX](https://github.com/AcademySoftwareFoundation/MaterialX) noise functions, © Contributors to the MaterialX Project (Academy Software Foundation), as ported to TSL inside three.js | Perlin and Worley noise behind the procedural textures (`mx_noise_float`, `mx_worley_noise_float`) | Apache 2.0, [full text](licenses/MaterialX-Apache-2.0.txt) |
 | [Basic Pitch](https://github.com/spotify/basic-pitch-ts) © 2022 Spotify AB, code and trained model | "Deep listen": transcribes the melody and bass into notes in a background worker (`src/analysis/deep.worker.ts`; the model is in `public/models/basic-pitch/`) | Apache 2.0, [full text](licenses/Apache-2.0.txt) |
 | [TensorFlow.js](https://www.tensorflow.org/js) © Google LLC | Runs the Basic Pitch model in the browser (WebGL or plain JavaScript) | Apache 2.0, [full text](licenses/Apache-2.0.txt) |
+| [YAMNet](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) © Google LLC, trained model (via MediaPipe's model repository) | The sound pass: recognises speech, singing, crowds, sirens, explosions and other sounds in a background worker (`src/analysis/sounds.worker.ts`; the model is in `public/models/yamnet/`) | Apache 2.0, [full text](licenses/Apache-2.0.txt) |
+| [MediaPipe Tasks Audio](https://github.com/google-ai-edge/mediapipe) © Google LLC | Runs YAMNet in WebAssembly (`@mediapipe/tasks-audio`; its WebAssembly files are in `public/models/mediapipe/`) | Apache 2.0, [full text](licenses/Apache-2.0.txt) |
 | [@tonejs/midi](https://github.com/Tonejs/Midi) and [midi-file](https://github.com/carter-thaxton/midi-file) | Pulled in by Basic Pitch (its MIDI export); unused by the app | MIT |
 
-Deep listen's code only loads when it runs, as a separate file next to the page. The standalone build leaves it out.
+Deep listen's and the sound pass's code only load when they run, as separate files next to the page. The standalone build leaves both out.
 
 The standalone build (one HTML file) carries both licence texts in a comment at the end of the file.
 

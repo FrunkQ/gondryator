@@ -89,6 +89,29 @@ mindmap
 
 Over all of that sits a **post-effects look** per scene (clean, echo, liquid, kaleido, fold, tunnel, prism, hyper, trip, thermal, CRT, film, glitch), plus folding mirrors, fractal depth and feedback trails.
 
+## Sounds that aren't the music
+
+A fourth listener, the sound pass, recognises what else is in the track: a sampled voice, a crowd, a siren, an explosion, birds, rain. Each family pops in over whatever scene is showing, shaped like the sound, for as long as it lasts. Intros are full of these, which is why the sound pass starts first.
+
+```mermaid
+flowchart LR
+    SP[🗣️ speech] --> SP1[caption dots running<br/>under your gaze]
+    SH[📢 shout] --> SH1[white bursts, a jolt of light]
+    LA[😂 laughter] --> LA1[warm bubbles rising]
+    SI[🎤 singing] --> SI1[a halo of petals drifting down]
+    CR[👏 crowd] --> CR1[confetti all round the room]
+    AN[🐦 animals] --> AN1[a little flock flying across]
+    NA[🌧️ nature] --> NA1[blue rain streaks]
+    SR[🚨 siren] --> SR1[red and blue, side to side]
+    EN[🚂 engine] --> EN1[streaks along the horizon]
+    IM[💥 impact] --> IM1[a big burst, a flash, a shockwave]
+    WH[💨 whoosh] --> WH1[fast comets]
+    TI[⏰ ticking] --> TI1[a clock face of marks round your gaze]
+    BE[📟 beeps] --> BE1[small green pings]
+```
+
+The debug overlay (D) shows each recognised sound as a labelled bar in the timeline and a coloured tick above the song strip, the voice curve in pink along the bottom, and the moments (drops, lifts, breaks, stops, builds) as markers. Its status line says which sounds the show is reacting to right now (`hearing siren, crowd`). See [TECHNOLOGY.md](TECHNOLOGY.md#seeing-what-it-heard-the-debug-overlay) for the full layout.
+
 ## Scenes: who is on stage
 
 A *scene* is a handful of numbers: a palette, two or three elements, a look, kaleidoscope folds, trails. They are drawn from a random generator seeded by the song, so **a song always looks like itself**, and R rerolls it.
@@ -165,6 +188,7 @@ flowchart LR
 | `envelopes.rise` and lifts ahead | tension, release | wind up before, burst on the beat |
 | `beats`, `phrases`, `gridAt(score, t)` | the grid | timing anything that should land "on the one"; knowing how far through the bar or phrase you are |
 | `moments`: drop, lift, break, stop, build (`nextMoment`) | a slam, the floor falling away, a held breath | wind up before a drop and burst on it; dim with a stop and snap back on the slam |
+| `sounds` (speech, crowd, siren, impact...) and `envelopes.voice` | samples and effects | one effect per family, popping in for as long as the sound lasts |
 | `sections` with `group` | the story | scene changes; repeated groups come back as themselves |
 
 The data table in [AGENTS.md](../AGENTS.md#build-a-visualiser-reading-the-score) has the full field names and rules of thumb.

@@ -41,7 +41,7 @@ import { makeGlitterMaterial, makeSpriteMaterial, makeVisualiserMaterial } from 
 import type { CardInfo, ShowDriver } from './driver';
 import type { GazeSource } from './spawner';
 import type { FxLookName, Pack } from '../packs/types';
-import { sampleEnvelope, sectionAt, type Score } from '../score/types';
+import { sampleEnvelope, sectionAt, type Score, type SoundCue, type SoundKind } from '../score/types';
 
 type Vec3 = [number, number, number];
 /** Cosine palettes (Inigo Quilez): colour = a + b * cos(2pi * (c * t + d)). */
@@ -131,6 +131,11 @@ const OUTROS: { elements: number[]; look: FxLookName }[] = [
   { elements: [49], look: 'clean' },      // the dot globe, turning slower as the lights go
   { elements: [], look: 'clean' },        // the scene as it was, simply fading to black
 ];
+/** How often each kind of recognised sound repeats its effect while it lasts (seconds; impacts only hit once). */
+const SOUND_PERIOD: Record<SoundKind, number> = {
+  speech: 0.25, shout: 0.5, laugh: 0.3, sing: 0.7, crowd: 0.25, animal: 1.1, nature: 0.2,
+  siren: 0.35, engine: 0.6, impact: 1e9, whoosh: 0.6, tick: 0.5, beep: 0.4,
+};
 /** The last stretch of a song given to its outro, and the fade to black at its very end. */
 const OUTRO_LEN = 12, OUTRO_FADE = 6;
 /** The elements drawn as sprites (flowers, bubbles, starbursts, confetti, snowflakes). */
@@ -514,6 +519,10 @@ export class Visualiser implements ShowDriver {
     this.lastChange = Math.min(this.lastChange, s);
     this.liftPtr = 0;
     while (this.liftPtr < this.lifts.length && this.lifts[this.liftPtr].t <= s) this.liftPtr++;
+    const cues = this.score.sounds ?? [];
+    this.soundPtr = 0;
+    while (this.soundPtr < cues.length && cues[this.soundPtr].t <= s) this.soundPtr++;
+    this.cuesOn.length = 0;
   }
 
   // ------------------------------------------------------------------ scenes
@@ -702,7 +711,7 @@ export class Visualiser implements ShowDriver {
   /** One line for the debug overlay and tests: era, journey, arc, tension, elements. */
   get status() {
     const e = this.eras[this.eraIdx];
-    return `era ${this.eraIdx + 1}/${this.eras.length} ${e?.kind ?? '-'} · ${JOURNEYS[this.journey]} · arc ${this.arcLvl.toFixed(2)} tension ${this.tensionLvl.toFixed(2)} · ${this.showing.join(', ')}`;
+    return `era ${this.eraIdx + 1}/${this.eras.length} ${e?.kind ?? '-'} · ${JOURNEYS[this.journey]} · arc ${this.arcLvl.toFixed(2)} tension ${this.tensionLvl.toFixed(2)} · ${this.showing.join(', ')}${this.cuesOn.length ? ` · hearing ${this.cuesOn.map(o => o.c.kind).join(', ')}` : ''}${this.outroOn ? ' · outro' : ''}`;
   }
 
   /** Of these elements, one of the two shown least recently (so everything gets its turn). */
@@ -816,6 +825,7 @@ export class Visualiser implements ShowDriver {
         }
       }
     }
+    if (running && fade === 0) this.hearSounds(s, gazeAz);
     this.V.boltT.value += dt;
     this.V.kickT.value = s - this.lastKick;
     // Pads: how many long notes are sounding.
@@ -1103,6 +1113,112 @@ export class Visualiser implements ShowDriver {
     this.applyScene(sc);
     this.crash();
     this.lastSceneAt = s;
+  }
+
+  // ------------------------------------------------------------------ recognised sounds
+  // The sound pass (analysis/sounds.ts) recognises things that are not the music: someone talking,
+  // a crowd, a siren, an explosion, birds, rain. Each family pops in with its own little effect,
+  // shaped like the sound: a hit is one burst, a siren swings red and blue for as long as it wails,
+  // speech runs along under your gaze like captions. They come and go with the sound itself, over
+  // whatever scene is showing (so an intro full of samples comes alive before the beat arrives).
+
+  private soundPtr = 0;
+  private cuesOn: { c: SoundCue; next: number; n: number }[] = [];
+
+  private hearSounds(s: number, gazeAz: number) {
+    const cues = this.score.sounds;
+    if (!cues) return;
+    while (this.soundPtr < cues.length && cues[this.soundPtr].t <= s) {
+      const c = cues[this.soundPtr++];
+      if (s - c.t > 1) continue; // (long gone: a seek)
+      this.cuesOn.push({ c, next: c.t, n: 0 });
+    }
+    for (let i = this.cuesOn.length - 1; i >= 0; i--) {
+      const on = this.cuesOn[i];
+      if (s >= on.c.t + on.c.dur) { this.cuesOn.splice(i, 1); continue; }
+      if (s < on.next) continue;
+      this.soundFx(on.c.kind, s, on.c.score, gazeAz, on.n++);
+      on.next = s + SOUND_PERIOD[on.c.kind];
+    }
+  }
+
+  /** One beat of a sound's effect: `n` counts them (0 is its arrival). */
+  private soundFx(kind: SoundKind, t: number, score: number, gazeAz: number, n: number) {
+    const r = this.rand, v = Math.min(1, 0.3 + score);
+    const base = { t0: t, pop: 0.08, grow: 0, wobble: 0, spin: 0, vel: v };
+    switch (kind) {
+      case 'speech': {
+        // Captions: a row of soft dots running along under your gaze, a word at a time.
+        const voice = sampleEnvelope(this.score.envelopes.voice, t);
+        const w = 2 + Math.floor(r() * 4);
+        for (let i = 0; i < w; i++) this.fireflies.add({ ...base, life: 2.2, fadeOut: 0.8, az: gazeAz + 0.3 + i * 0.06, vAz: -0.14,
+          el: -0.34, vEl: 0, size: 0.35 + voice * 0.35, hue: 0.55, sat: 0.12 });
+        break;
+      }
+      case 'shout':
+        this.bursts.add({ ...base, life: 0.8, fadeOut: 0.6, grow: 1.8, az: gazeAz + (r() - 0.5) * 0.6, vAz: 0, el: (r() - 0.3) * 0.4, vEl: 0, size: 9 + v * 6, spin: 4, hue: 0.02, sat: 0.2 });
+        if (n === 0) this.V.release.value = Math.max(this.V.release.value, 0.35);
+        break;
+      case 'laugh':
+        for (let i = 0; i < 3; i++) this.bubbles.add({ ...base, t0: t + i * 0.06, life: 2.6, fadeOut: 0.9, grow: 0.2, wobble: 0.08, az: gazeAz + (r() - 0.5) * 1.2, vAz: 0,
+          el: -0.4, vEl: 0.3 + r() * 0.2, size: 1 + r() * 1.5, hue: 0.08 + r() * 0.07, sat: 0.8 });
+        break;
+      case 'sing':
+        // A halo of petals drifting down round the top of your view while someone sings.
+        this.petals.add({ ...base, life: 5, pop: 0.4, fadeOut: 2, wobble: 0.1, az: gazeAz + (r() - 0.5) * 2.2, vAz: (r() - 0.5) * 0.05, el: 0.75 + r() * 0.2, vEl: -0.08,
+          size: 0.9 + r() * 0.6, spin: (r() - 0.5) * 2, hue: 0.9 + r() * 0.15, sat: 0.35, vel: 0.35 + score * 0.3 });
+        break;
+      case 'crowd':
+        // Confetti all round the room.
+        for (let i = 0; i < 6; i++) this.confetti.add({ ...base, life: 2.6, fadeOut: 0.8, wobble: 0.05, az: r() * Math.PI * 2, vAz: (r() - 0.5) * 0.1, el: 0.5 + r() * 0.5, vEl: -0.3 - r() * 0.2,
+          size: 0.7 + r() * 0.5, spin: (r() - 0.5) * 12, hue: r(), sat: 0.9 });
+        break;
+      case 'animal': {
+        // A little flock flies across.
+        const dir = r() < 0.5 ? -1 : 1, el = 0.2 + r() * 0.4;
+        for (let i = 0; i < 4; i++) this.comets.add({ ...base, t0: t + i * 0.12, life: 2.4, fadeOut: 0.6, wobble: 0.06, az: gazeAz - dir * (0.9 + i * 0.07), vAz: dir * 0.6,
+          el: el + (i % 2) * 0.05, vEl: 0.02, size: 1.2, hue: 0.12, sat: 0.3 });
+        break;
+      }
+      case 'nature':
+        // Rain, wind, water: blue streaks falling.
+        for (let i = 0; i < 4; i++) this.confetti.add({ ...base, life: 1.4, fadeOut: 0.4, az: gazeAz + (r() - 0.5) * 2.6, vAz: -0.05, el: 0.6 + r() * 0.3, vEl: -0.9 - r() * 0.3,
+          size: 0.4, hue: 0.56 + r() * 0.05, sat: 0.6 });
+        break;
+      case 'siren': {
+        // Red and blue swinging side to side for as long as it wails.
+        const side = n % 2 ? 1 : -1;
+        this.bursts.add({ ...base, life: 0.5, fadeOut: 0.4, grow: 0.6, az: gazeAz + side * 0.55, vAz: 0, el: 0.25, vEl: 0, size: 7 + v * 4, spin: 6, hue: side > 0 ? 0.62 : 0.0, sat: 1, vel: 0.9 });
+        break;
+      }
+      case 'engine': {
+        const dir = r() < 0.5 ? -1 : 1;
+        this.comets.add({ ...base, life: 1.6, fadeOut: 0.5, az: gazeAz - dir * 1.0, vAz: dir * 1.3, el: -0.2 + r() * 0.1, vEl: 0, size: 3 + v * 2, hue: 0.07, sat: 0.8 });
+        break;
+      }
+      case 'impact':
+        // One big hit: a starburst, a flash and a shockwave.
+        if (n === 0) {
+          this.bursts.add({ ...base, life: 1.2, fadeOut: 1, grow: 2.4, az: gazeAz, vAz: 0, el: 0.05, vEl: 0, size: 14 + v * 8, spin: 2, hue: 0.08, sat: 0.5, vel: 1.4 });
+          this.V.crash.value = Math.max(this.V.crash.value, 0.6 * v);
+          this.V.release.value = Math.max(this.V.release.value, 0.7);
+          this.releaseT = 0;
+        }
+        break;
+      case 'whoosh':
+        for (let i = 0; i < 3; i++) {
+          const dir = r() < 0.5 ? -1 : 1;
+          this.comets.add({ ...base, t0: t + i * 0.05, life: 0.9, fadeOut: 0.4, az: gazeAz - dir * 1.2, vAz: dir * 2.6, el: (r() - 0.3) * 0.6, vEl: 0, size: 4, hue: 0.55, sat: 0.2, vel: 0.9 });
+        }
+        break;
+      case 'tick':
+        // A clock: one mark a tick, going round your gaze.
+        this.confetti.add({ ...base, life: 1.2, fadeOut: 0.6, az: gazeAz + Math.sin(n * 0.5236) * 0.4, vAz: 0, el: 0.05 + Math.cos(n * 0.5236) * 0.4, vEl: 0, size: 0.8, hue: 0.12, sat: 0.15, vel: 0.8 });
+        break;
+      case 'beep':
+        this.bubbles.add({ ...base, life: 0.9, fadeOut: 0.5, grow: 0.8, az: gazeAz + (r() - 0.5) * 0.8, vAz: 0, el: (r() - 0.4) * 0.5, vEl: 0, size: 1.6, hue: 0.33, sat: 0.9 });
+        break;
+    }
   }
 
   // ------------------------------------------------------------------ spawners
