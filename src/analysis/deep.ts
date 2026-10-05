@@ -35,6 +35,8 @@ export function deepPrecheck(): string | null {
 }
 
 export class DeepListen {
+  /** Called after notes from `a` on were spliced into the live score (so the rides re-read them). */
+  onSplice?: (a: number) => void;
   backend = '';
   /** 'checking' while the timed system check runs, then 'running', 'done', or 'skipped'. */
   state: 'checking' | 'running' | 'done' | 'skipped' = 'checking';
@@ -117,7 +119,7 @@ export class DeepListen {
       this.progress = this.windows.size / this.total;
       this.onChange();
       // Live upgrade, only where nothing has been scheduled yet.
-      if (m.a >= this.now() + MARGIN) splice(this.score, m.a, m.b, evs);
+      if (m.a >= this.now() + MARGIN) { splice(this.score, m.a, m.b, evs); this.onSplice?.(m.a); }
     } else if (m.type === 'done') {
       this.done = true;
       this.state = 'done';

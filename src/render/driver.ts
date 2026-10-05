@@ -14,6 +14,10 @@ export interface ShowDriver {
   update(s: number, dt: number, gaze: GazeSource, frontier: number, running: boolean): void;
   reset(s: number): void;
   refreshLeads(): void;
+  /** How far ahead of the playhead this driver has already scheduled things (seconds). */
+  horizon?(): number;
+  /** The score's events from `from` on were replaced: drop what was queued from there and re-read them. */
+  resync?(from: number): void;
   themeAt(t: number): string;
   /** Show a title/landing/end card in the set. Return false to let the world build a station board. */
   card?(kind: 'landing' | 'title' | 'end', info: CardInfo): boolean;

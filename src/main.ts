@@ -50,7 +50,6 @@ const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as
 type Phase = 'landing' | 'title' | 'run' | 'ended';
 
 const MIN_LOOKAHEAD = 10; // seconds the score must be ahead of the playhead before the music starts (at most)
-const REPARSE_MARGIN = 20; // re-tuned events are swapped in only this far ahead of the playhead
 const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
@@ -495,8 +494,9 @@ class App {
 
   /**
    * Parse the song again with new settings (throttled, so the visuals keep the machine) and swap
-   * the new events into the live score from REPARSE_MARGIN seconds ahead of the playhead, beyond
-   * anything already scheduled. Deep-listened melody and bass are kept. Resolves whether it did.
+   * the new events into the live score from the first bar beyond anything already scheduled.
+   * Deep-listened melody and bass are kept; without deep listen, the notes are re-parsed too.
+   * Resolves whether it did.
    */
   private reparseAhead(pcm: Float32Array, sampleRate: number, tuning: Tuning, hash: string): Promise<boolean> {
     const live = this.score;
@@ -513,7 +513,7 @@ class App {
         w.terminate();
         if (this.tuneWorker === w) this.tuneWorker = null;
         if (hash !== this.trackHash || this.score !== live) { resolve(false); return; }
-        const a = this.player.time + REPARSE_MARGIN;
+        const a = this.safeFrom();
         if (a >= live.track.durationSec - 5) { resolve(false); return; }
         const deep = !!this.deep && this.deep.state !== 'skipped';
         const isDeepNote = (e: { kind: string; stem: string }) => deep && e.kind === 'note' && (e.stem === 'bass' || e.stem === 'other');
@@ -523,7 +523,8 @@ class App {
         const kept = ev2.slice(lo).filter(isDeepNote);
         const add = fresh.events.filter(e => e.t >= a && !isDeepNote(e)).map((e, i) => ({ ...e, id: `rt${i}-${e.id}` }));
         ev2.splice(lo, ev2.length - lo, ...kept.concat(add).sort((x, y) => x.t - y.t));
-        perf.mark(`re-tuned score from ${a.toFixed(0)} s (+${add.length} events)`);
+        this.resyncFrom(a);
+        perf.mark(`re-tuned score from ${a.toFixed(1)} s (+${add.length} events)`);
         resolve(true);
       };
       w.onerror = () => { w.terminate(); resolve(false); };
@@ -567,6 +568,7 @@ class App {
       this.toast(`Deep listen finished: ${deep.notes} notes transcribed. Next ride on this song uses them all.`, 5000);
     });
     this.deep = deep;
+    deep.onSplice = a => { if (hash === this.trackHash) this.resyncFrom(a); };
     deep.force = tryAnyway;
     deep.onChange = () => {
       if (this.deep !== deep) return;
@@ -749,6 +751,20 @@ class App {
    * wait can be predicted (from how fast the analysis and the shader warm-up are going), and
    * "waiting for a clear line" while it cannot.
    */
+  /** The first downbeat beyond everything the rides have already scheduled: where new events can safely start. */
+  private safeFrom() {
+    const h = Math.max(this.driver?.horizon?.() ?? 0, this.other?.spawner.horizon() ?? 0);
+    const t0 = this.player.time + Math.max(2, h + 1);
+    const bar = this.score?.beats.find(b => b.downbeat && b.t >= t0);
+    return bar ? bar.t : t0;
+  }
+
+  /** Events from `from` on changed in the live score: let the rides re-read them. */
+  private resyncFrom(from: number) {
+    this.driver?.resync?.(from);
+    this.other?.spawner.resync(from);
+  }
+
   /**
    * How far the score must be read before departing, learned from this machine: the parser's
    * speed (measured now, or remembered from earlier rides) sets it between 6 and 15 seconds, and

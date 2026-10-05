@@ -101,6 +101,26 @@ export class Spawner {
     for (const ls of this.layers.values()) ls.lead = this.rig.leadTime(ls.layer.depth + (ls.layer.depthJitter ?? 0));
   }
 
+  horizon() { let h = 0; for (const ls of this.layers.values()) h = Math.max(h, ls.lead); return h + 0.5; }
+
+  /**
+   * Events from `from` on were replaced in the score (auto-tune, deep listen): forget what was
+   * queued from there and queue the new ones. Only safe beyond the horizon, where nothing has
+   * been placed yet.
+   */
+  resync(from: number) {
+    for (const ls of this.layers.values()) {
+      let k = ls.events.length;
+      while (k > ls.ptr && ls.events[k - 1].e.t >= from) k--;
+      ls.events.length = k;
+    }
+    const ev = this.score.events;
+    let i = 0;
+    while (i < ev.length && ev[i].t < from) i++;
+    this.consumed = i;
+    this.ingest();
+  }
+
   /** Pull newly committed score events into layer queues. */
   private ingest() {
     const ev = this.score.events;
