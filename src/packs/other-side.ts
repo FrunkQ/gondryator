@@ -2,7 +2,7 @@ import type { Pack } from './types';
 
 // The other window of the Star Guitar carriage. The main window stays faithful to the original
 // video; this side is where the train goes somewhere it never could: lavender country under a
-// Provençal sky, then out between the planets. Same score, same mapping, same beat-sync, just
+// Provençal sky, then out between the planets (and on breaks and drops, the disco takes over: render/otherside.ts). Same score, same mapping, same beat-sync, just
 // other worlds. It alternates world at every section of the track.
 export const OTHER_SIDE: Pack = {
   id: 'other-side',

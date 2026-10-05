@@ -49,13 +49,13 @@ src/
               star-guitar.ts  the train (homage to the video)
               starship.ts     an open cockpit in space, a psychedelic vortex out of the other side
               non-gondry.ts   "the non-Gondry view :(": no vehicle, a 360° visualiser around you
-              other-side.ts   the train's other window: Provence and Cosmos
+              other-side.ts   the train's other window: Provence and Cosmos (the disco takes over on breaks and drops)
               types.ts        what a pack can say: layers, mapping rules, themes, light, fx, window
               around-the-world.ts  hidden until it gets its twist (?pack=around-the-world)
   render/     world.ts     sky, ground, carriage, stations, render loop, shader warm-up
               spawner.ts   the scheduler: score events → models placed to enter your view on the beat
               visualiser.ts  the non-Gondry view: a seeded sphere of plasma, flowers, waves and lightning
-              otherside.ts the mirrored second window
+              otherside.ts the mirrored second window (and the far-side disco takeover; `?side=disco` holds it on)
               models.ts    every model, built from boxes, cylinders and lathes; `T(SURF.x, ...)` picks the surface
               shaders.ts   TSL node materials: one procedural material paints brick, glass, rust, foliage...
               fx.ts        post-processing looks (prism, trip, kaleido, liquid, thermal, echo, fold, hyper, tunnel, crt, film, glitch) and warp jumps

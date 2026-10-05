@@ -331,7 +331,10 @@ class SpritePool {
 
   get live() { let n = 0; for (const it of this.items) if (it) n++; return n; }
 
-  add(sp: Sprite) { this.items[this.next] = sp; this.next = (this.next + 1) % this.count; }
+  /** Off: the far-side backdrop has no sprites (they would hang still while the world travels). */
+  off = false;
+
+  add(sp: Sprite) { if (this.off) return; this.items[this.next] = sp; this.next = (this.next + 1) % this.count; }
 
   clear() {
     this.items.fill(null);
@@ -341,6 +344,7 @@ class SpritePool {
 
   /** `light` scales every sprite's brightness (the song's arc). */
   update(s: number, light = 1) {
+    if (this.off) return;
     const mesh = this.mesh;
     for (let i = 0; i < this.count; i++) {
       const f = this.items[i];
@@ -463,7 +467,13 @@ export class Visualiser implements ShowDriver {
   private dir = new THREE.Vector3();
   private pos = new THREE.Vector3();
 
-  constructor(private pack: Pack, private score: Score, private camera: THREE.PerspectiveCamera) {
+  /**
+   * `far`: this show runs on the far side of a train or starship (the other window), not all round
+   * you: only the half of the sky on the +z side faded in by
+   * `far.reveal`, with no sprites and its gaze kept on that side, so none of it can leak into the
+   * main window.
+   */
+  constructor(private pack: Pack, private score: Score, private camera: THREE.PerspectiveCamera, private far?: { reveal: { value: number } }) {
     this.V.wave = new THREE.DataTexture(this.waveData, 256, 1, THREE.RGBAFormat);
     this.V.wave.magFilter = THREE.LinearFilter;
     this.V.wave.minFilter = THREE.LinearFilter;
@@ -472,17 +482,26 @@ export class Visualiser implements ShowDriver {
     this.V.notes = new THREE.DataTexture(this.noteData, 16, 1, THREE.RGBAFormat);
     this.V.notes.needsUpdate = true;
     this.V.scroll = scrollerTexture(score);
-    this.dome = new THREE.Mesh(new THREE.SphereGeometry(400, 128, 64), makeVisualiserMaterial(this.V));
+    this.dome = far
+      ? new THREE.Mesh(new THREE.SphereGeometry(400, 96, 48, 0, Math.PI), makeVisualiserMaterial(this.V, far)) // phi 0..π: the +z half
+      : new THREE.Mesh(new THREE.SphereGeometry(400, 128, 64), makeVisualiserMaterial(this.V));
     this.dome.frustumCulled = false;
-    this.dome.renderOrder = -10;
+    this.dome.renderOrder = far ? -6 : -10;
     this.group.add(this.dome);
-    for (const p of this.pools) this.group.add(p.mesh);
+    // On the far side only the backdrop plays: sprites would hang still while the train travels
+    // past, so the passing scenery brings the show's objects instead.
+    if (far) for (const p of this.pools) p.off = true;
+    else for (const p of this.pools) this.group.add(p.mesh);
     this.seed = hashStr(score.track.hash || score.track.title || 'gondryator');
     this.rand = rng(this.seed);
     this.applyScene(this.makeScene());
   }
 
   get activeCount() { return this.pools.reduce((n, p) => n + p.live, 0); }
+  /** Everything with a shader of its own (for warm-up). */
+  /** For the far side: a material for a floor plane, wearing the same show by direction. */
+  farFloorMaterial() { return makeVisualiserMaterial(this.V, { reveal: this.far!.reveal, floor: true }); }
+  get meshes(): THREE.Object3D[] { return this.far ? [this.dome] : [this.dome, ...this.pools.map(p => p.mesh)]; }
   themeAt() { return 'void'; }
   refreshLeads() { /* nothing is scheduled ahead */ }
 
@@ -718,6 +737,7 @@ export class Visualiser implements ShowDriver {
   private freshest(opts: { i: number }[]) {
     // The meter-like elements (ribbons, kick tunnel, bass rings, spectrum, hex pulse) are easy to
     // overdo: skip them more often than not when anything else will do.
+    if (this.far) { const bg = opts.filter(o => !SPRITE_ELEMENTS.includes(o.i)); if (bg.length) opts = bg; }
     const keep = opts.filter(o => !RARE.has(o.i) || this.rand() < 0.35);
     if (keep.length) opts = keep;
     const byAge = opts.slice().sort((a, b) => this.lastUsed[a.i] - this.lastUsed[b.i] || a.i - b.i);
@@ -769,6 +789,8 @@ export class Visualiser implements ShowDriver {
     this.camera.getWorldPosition(this.pos);
     this.group.position.copy(this.pos);
     this.camera.getWorldDirection(this.dir);
+    // On the far side, the gaze is always somewhere out of the other window.
+    if (this.far) this.dir.set(this.dir.x * 0.5, this.dir.y, Math.max(this.dir.z, 0.75)).normalize();
     this.V.gaze.value.copy(this.dir);
     const gazeAz = Math.atan2(this.dir.x, -this.dir.z);
     this.V.gazeAz.value = gazeAz;
@@ -840,7 +862,7 @@ export class Visualiser implements ShowDriver {
     const kw = 1 - Math.exp(-dt / 0.6);
     for (let i = 0; i < NE; i++) this.weights[i] += (this.target[i] * (1 - fade) - this.weights[i]) * kw;
     // Sprites are added light, so on a bright backdrop they vanish: dim it while any are on.
-    this.V.dim.value = 0.55 * Math.max(...SPRITE_ELEMENTS.map(i => this.weights[i]));
+    this.V.dim.value = this.far ? 0 : 0.55 * Math.max(...SPRITE_ELEMENTS.map(i => this.weights[i]));
     const w = this.weights;
     this.V.E0.value.set(w[0], w[1], w[2], w[3]); this.V.E1.value.set(w[4], w[5], w[6], w[7]);
     this.V.E2.value.set(w[8], w[9], w[10], w[11]); this.V.E3.value.set(w[12], w[13], w[14], w[15]);
@@ -861,7 +883,7 @@ export class Visualiser implements ShowDriver {
     this.updateGlitterball(s, dt, running);
     this.updateWave(s, frontier, running);
     // The spawners are the notes themselves, so they stay bright even early in the arc.
-    const light = (0.8 + this.arcLvl * 0.5 + this.V.release.value * 0.5) * (1 - fade);
+    const light = (0.8 + this.arcLvl * 0.5 + this.V.release.value * 0.5) * (1 - fade) * (this.far ? this.far.reveal.value : 1);
     for (const p of this.pools) p.update(s, light);
     this.updateCard(s, running);
   }
@@ -1137,6 +1159,12 @@ export class Visualiser implements ShowDriver {
       const on = this.cuesOn[i];
       if (s >= on.c.t + on.c.dur) { this.cuesOn.splice(i, 1); continue; }
       if (s < on.next) continue;
+      // The far-side backdrop has no sprites: a hit flashes the whole sky instead.
+      if (this.far) {
+        if (on.c.kind === 'impact' || on.c.kind === 'shout' || on.c.kind === 'whoosh') this.V.crash.value = Math.max(this.V.crash.value, on.c.kind === 'whoosh' ? 0.4 : 0.8);
+        on.n++; on.next = s + SOUND_PERIOD[on.c.kind];
+        continue;
+      }
       this.soundFx(on.c.kind, s, on.c.score, gazeAz, on.n++);
       on.next = s + SOUND_PERIOD[on.c.kind];
     }
@@ -1170,7 +1198,7 @@ export class Visualiser implements ShowDriver {
         break;
       case 'crowd':
         // Confetti all round the room.
-        for (let i = 0; i < 6; i++) this.confetti.add({ ...base, life: 2.6, fadeOut: 0.8, wobble: 0.05, az: r() * Math.PI * 2, vAz: (r() - 0.5) * 0.1, el: 0.5 + r() * 0.5, vEl: -0.3 - r() * 0.2,
+        for (let i = 0; i < 6; i++) this.confetti.add({ ...base, life: 2.6, fadeOut: 0.8, wobble: 0.05, az: this.far ? gazeAz + (r() - 0.5) * 2.4 : r() * Math.PI * 2, vAz: (r() - 0.5) * 0.1, el: 0.5 + r() * 0.5, vEl: -0.3 - r() * 0.2,
           size: 0.7 + r() * 0.5, spin: (r() - 0.5) * 12, hue: r(), sat: 0.9 });
         break;
       case 'animal': {

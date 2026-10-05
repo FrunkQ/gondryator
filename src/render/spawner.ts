@@ -45,6 +45,9 @@ const tmpV = new THREE.Vector3();
 const tmpC = new THREE.Color();
 const tmpQ = new THREE.Quaternion();
 
+/** ?rare: every event a rare find, for looking at them. */
+const ALL_RARE = new URLSearchParams(location.search).has('rare');
+
 export function hash32(...xs: number[]): number {
   let h = 2166136261;
   for (const x of xs) {
@@ -83,7 +86,7 @@ export class Spawner {
     this.pools = pools ?? new Pools(200, material);
     for (const l of pack.layers) this.layers.set(l.id, { layer: l, events: [], ptr: 0, lead: rig.leadTime(l.depth + (l.depthJitter ?? 0)) });
     const models = new Set<string>();
-    for (const l of pack.layers) for (const ms of Object.values(l.models)) ms.forEach(m => models.add(m));
+    for (const l of pack.layers) for (const ms of [...Object.values(l.models), ...Object.values(l.rare?.models ?? {})]) ms!.forEach(m => models.add(m));
     for (const a of pack.ambient) for (const ms of Object.values(a.models)) ms.forEach(m => models.add(m));
     if (pack.sectionEvents?.onNewSection) models.add(pack.sectionEvents.onNewSection);
     if (pack.sectionEvents?.onBreakdown) models.add(pack.sectionEvents.onBreakdown);
@@ -349,7 +352,13 @@ export class Spawner {
     const models = L.models[theme] ?? Object.values(L.models)[0];
     // Same musical content -> same object: hash pitch, kind and position in the bar.
     const h = hash32(e.kind.length, e.pitch ?? 0, e.step ?? 0, Math.round(e.vel * 4));
-    const model = models[h % models.length];
+    let model = models[h % models.length];
+    const rare = L.rare?.models[theme];
+    if (rare?.length) {
+      // A rare find: keyed by when the note falls, so the same song turns up the same surprises.
+      const r = hash32(Math.round(e.t * 8), h, 31);
+      if ((r % 10000) / 10000 < (ALL_RARE ? 1 : L.rare!.chance)) model = rare[(r >>> 14) % rare.length];
+    }
     const o = this.pools.acquire(model);
     if (!o) return;
     const jitter = L.depthJitter ? ((hash32(h, 7) % 1000) / 1000 - 0.5) * 2 * L.depthJitter : 0;

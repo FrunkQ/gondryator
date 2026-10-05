@@ -512,6 +512,103 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     T1(SURF.metal, box(3, 1.6, 0.2, -8, 6.1, 0, 0x9da2a8)),
   ]),
 
+  // --- rare finds: the odd surprise in the main window (Layer.rare) -------------------------
+  // A tower mill: a tapering stone body, a boat-shaped cap and four lattice sails facing the line.
+  'windmill': () => {
+    const parts: Part[] = [
+      T1(SURF.stone, lathe([[3.4, 0], [3.2, 4], [2.6, 12], [2.3, 14]], 0xe2d8c4, 14)),
+      T1(SURF.wood, sphere(2.7, 0, 14.4, 0, 0x5a4636, 1, 0.75, 1.25, 10)),
+      T1(SURF.wood, box(1.2, 2.2, 0.08, 0, 1.1, 3.25, 0x4a3a2c)),
+      T1(SURF.glass, box(0.8, 1.1, 0.1, 0, 6, 3.05, 0x3a3f44)), T1(SURF.glass, box(0.7, 1, 0.1, 0, 10, 2.7, 0x3a3f44)),
+      T1(SURF.metal, colorize(new THREE.CylinderGeometry(0.35, 0.35, 1.6, 8).rotateX(Math.PI / 2).translate(0, 14.6, 2.8), 0x3c3c3c)),
+    ];
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + i * Math.PI / 2, c = Math.cos(a), sn = Math.sin(a);
+      const sail = new THREE.BoxGeometry(1.7, 11, 0.12).translate(0.5, 6.2, 0).rotateZ(a - Math.PI / 2).translate(0, 14.6, 3.5);
+      parts.push(T1(SURF.wood, colorize(sail, 0xf0ebe0, 0.95)));
+      parts.push(T1(SURF.wood, box(0.25, 0.25, 0.25, c * 0.4, 14.6 + sn * 0.4, 3.5, 0x3c2f24)));
+    }
+    return merge(parts);
+  },
+  // A round dovecote with a pointed cap and rows of little doors.
+  'dovecote': () => merge([
+    T1(SURF.stone, cyl(1.9, 2.1, 5, 0, 2.5, 0, 0xd9cdb5, 14)), cone(2.5, 2.6, 0, 6.3, 0, 0x9a5a3e, 14),
+    ...[0.6, 1.3, 2].map(dy => box(0.4, 0.4, 0.1, 0, 3 + dy, 2.02, 0x2e2a26)),
+    T1(SURF.metal, cyl(0.04, 0.04, 1.2, 0, 8.2, 0, 0x3a3a3a, 4)),
+  ]),
+  // A Victorian glasshouse: a white frame, glass sides and a glass ridge roof.
+  'greenhouse': () => {
+    const parts: Part[] = [
+      T1(SURF.glass, box(9, 2.4, 4, 0, 1.4, 0, 0xa8c4c8)),
+      T1(SURF.glass, roof(9, 4, 1.6, 0, 2.6, 0, 0xb4cfd2)),
+      T1(SURF.brick, box(9.2, 0.6, 4.2, 0, 0.3, 0, 0x9b5a44)),
+    ];
+    for (let i = 0; i <= 6; i++) parts.push(T1(SURF.paint, box(0.1, 2.5, 4.1, -4.5 + i * 1.5, 1.45, 0, 0xf4f2ec)));
+    parts.push(T1(SURF.paint, box(9.1, 0.1, 0.1, 0, 4.2, 0, 0xf4f2ec)));
+    parts.push(...T(SURF.foliage, sphere(0.6, -3, 1.2, 1.2, 0x5f8a3e), sphere(0.7, 1.5, 1.3, 1, 0x6e9440), sphere(0.5, 3.4, 1.1, -1, 0x557a36)));
+    return merge(parts);
+  },
+  // Ruined abbey arches: a broken stone wall with tall pointed windows open to the sky.
+  'folly': () => {
+    const parts: Part[] = [];
+    const tops = [9, 11, 10.5, 7, 4];
+    for (let i = 0; i < 5; i++) {
+      const x = -10 + i * 5;
+      parts.push(T1(SURF.stone, box(1.6, tops[i], 1.4, x, tops[i] / 2, 0, 0xc9bda5)));
+      if (i < 4 && tops[i + 1] > 6) {
+        // An arch between two piers: two leaning stones meeting in a point.
+        parts.push(T1(SURF.stone, box(0.9, 3, 1.2, x + 1.6, 7.6, 0, 0xbfb39a, [0, 0, -0.55])));
+        parts.push(T1(SURF.stone, box(0.9, 3, 1.2, x + 3.4, 7.6, 0, 0xbfb39a, [0, 0, 0.55])));
+      }
+    }
+    parts.push(T1(SURF.stone, box(24, 1.2, 1.6, -0.5, 0.6, 0, 0xb5a98f)));
+    parts.push(...canopy(8, 2.6, 1.6, 1.8, 0x5d7a3a, 41), ...canopy(-12, 1.6, -1.2, 1.4, 0x67843f, 43));
+    return merge(parts);
+  },
+  // A fairground big wheel, cabins round the rim, on an A-frame.
+  'big-wheel': () => {
+    const R = 14, cy = R + 3;
+    const parts: Part[] = [
+      T1(SURF.paint, colorize(new THREE.TorusGeometry(R, 0.3, 6, 48).translate(0, cy, 0.8), 0xf2efe8)),
+      T1(SURF.paint, colorize(new THREE.TorusGeometry(R, 0.3, 6, 48).translate(0, cy, -0.8), 0xf2efe8)),
+      T1(SURF.metal, colorize(new THREE.CylinderGeometry(0.6, 0.6, 2.4, 10).rotateX(Math.PI / 2).translate(0, cy, 0), 0x8e9193)),
+    ];
+    for (const sz of [-1.6, 1.6]) for (const sx of [-1, 1]) {
+      const leg = new THREE.BoxGeometry(0.6, cy / Math.cos(0.32), 0.6).translate(0, cy / Math.cos(0.32) / 2, 0).rotateZ(sx * 0.32).translate(-sx * Math.tan(0.32) * cy, 0, sz);
+      parts.push(T1(SURF.metal, colorize(leg, 0xd8d6d0)));
+    }
+    const cabins = [0xd9534f, 0x3f7fbf, 0xf0c040, 0x5aa05a];
+    for (let i = 0; i < 16; i++) {
+      const a = i * Math.PI / 8;
+      const x = Math.cos(a) * R, y = cy + Math.sin(a) * R;
+      parts.push(T1(SURF.paint, colorize(new THREE.BoxGeometry(0.15, R, 0.15).translate(0, R / 2, 0).rotateZ(a - Math.PI / 2).translate(0, cy, 0.8), 0xe4e1da)));
+      parts.push(T1(SURF.paint, box(1.4, 1.5, 1.4, x, y - 1.2, 0, cabins[i % 4])));
+    }
+    return merge(parts);
+  },
+  // A tall guyed radio mast with red and white bands.
+  'radio-mast': () => {
+    const parts: Part[] = [];
+    for (let i = 0; i < 7; i++) parts.push(T1(SURF.paint, cyl(0.55 - i * 0.04, 0.6 - i * 0.04, 8, 0, 4 + i * 8, 0, i % 2 ? 0xf2efe8 : 0xc23b2e, 6)));
+    for (let k = 0; k < 3; k++) {
+      const a = k * Math.PI * 2 / 3;
+      const len = Math.hypot(40, 24);
+      const g = new THREE.CylinderGeometry(0.05, 0.05, len, 3, 1).translate(0, len / 2, 0)
+        .rotateZ(Math.atan2(24, 40)).translate(24, 0, 0).rotateY(a);
+      parts.push(T1(SURF.metal, colorize(g, 0x6e7275)));
+    }
+    parts.push(T1(SURF.concrete, box(4, 2.6, 3, 4, 1.3, -3, 0xbab5aa)));
+    return merge(parts);
+  },
+  // A hilltop observatory: a white drum and a dome with its slit open.
+  'observatory': () => merge([
+    T1(SURF.plaster, cyl(6, 6.2, 7, 0, 3.5, 0, 0xeeebe4, 20)),
+    T1(SURF.metal, colorize(new THREE.SphereGeometry(6.1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 7, 0), 0xd4d7da, 0.75)),
+    T1(SURF.metal, box(1.6, 6.4, 0.2, 0, 10, 5.3, 0x24282c, [0.75, 0, 0])),
+    T1(SURF.plaster, box(10, 4, 6, 9, 2, -2, 0xe6e1d6)), roof(10.4, 6.4, 1.4, 9, 4, -2, 0x8a4a35),
+    ...windowsOnFace(10, 4, 1.05, 1, 3, 1.2, 0x3f4a54).map(g => g.translate(9, 0, 0)),
+  ]),
+
   // --- events that pass over / along the train ------------------------------------------
   // A French château d'eau: a concrete bowl on a column, seen over the fields.
   'water-tower': () => merge([

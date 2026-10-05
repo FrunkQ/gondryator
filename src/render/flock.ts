@@ -1,7 +1,9 @@
 // Life in the sky, driven by the score:
 // - a starling murmuration that follows the lead line (height = pitch, a ripple on each note);
 // - fireworks (outdoors) or confetti (on the stage) that burst at every section change and on
-//   the strongest kicks of high-energy sections.
+//   the strongest kicks of high-energy sections;
+// - what the sound pass and the moments hear, kept photographic: animals in the track startle the
+//   flock, an impact or a cheering crowd sends up a shell, a drop or lift a volley.
 // Both are single instanced meshes updated on the CPU; cheap enough for any GPU.
 
 import * as THREE from 'three/webgpu';
@@ -34,6 +36,10 @@ export class SkyLife {
   private secIdx = -1;
   private lastNote: ScoreEvent | null = null;
   private ripple = 0;
+  private startle = 0;
+  private soundPtr = 0;
+  private momentPtr = 0;
+  private lastShell = -Infinity;
   private colors: THREE.Color[];
 
   /** No starlings in space. */
@@ -91,6 +97,8 @@ export class SkyLife {
       while (lo < hi) { const m = (lo + hi) >> 1; if (score.events[m].t <= s) lo = m + 1; else hi = m; }
       this.ptr = lo;
       this.life.fill(0);
+      this.soundPtr = (score.sounds ?? []).findIndex(c => c.t > s); if (this.soundPtr < 0) this.soundPtr = score.sounds?.length ?? 0;
+      this.momentPtr = (score.moments ?? []).findIndex(m => m.t > s); if (this.momentPtr < 0) this.momentPtr = score.moments?.length ?? 0;
     }
     this.lastS = s;
     if (score && running) {
@@ -98,8 +106,23 @@ export class SkyLife {
       let idx = 0;
       for (let i = 0; i < score.sections.length; i++) if (score.sections[i].t <= s) idx = i;
       if (idx !== this.secIdx) {
-        if (this.secIdx >= 0) this.celebrate(viewer, 3);
+        if (this.secIdx >= 0) { this.celebrate(viewer, 3); this.lastShell = s; }
         this.secIdx = idx;
+      }
+      // Recognised sounds (score.sounds), as they arrive.
+      const cues = score.sounds ?? [];
+      while (this.soundPtr < cues.length && cues[this.soundPtr].t <= s) {
+        const c = cues[this.soundPtr++];
+        if (s - c.t > 0.5) continue;
+        if (c.kind === 'animal') this.startle = 1;
+        else if ((c.kind === 'impact' || c.kind === 'crowd') && s - this.lastShell > 2) { this.celebrate(viewer, c.kind === 'crowd' ? 2 : 1); this.lastShell = s; }
+      }
+      // Drops and lifts: a volley, unless a section change just sent one.
+      const ms = score.moments ?? [];
+      while (this.momentPtr < ms.length && ms[this.momentPtr].t <= s) {
+        const m = ms[this.momentPtr++];
+        if (s - m.t > 0.5 || (m.kind !== 'drop' && m.kind !== 'lift')) continue;
+        if (s - this.lastShell > 1) { this.celebrate(viewer, m.kind === 'drop' ? 3 : 2); this.lastShell = s; }
       }
       while (this.ptr < score.events.length && score.events[this.ptr].t <= s) {
         const e = score.events[this.ptr++];
@@ -109,6 +132,7 @@ export class SkyLife {
       }
     }
     this.ripple *= Math.exp(-dt / 0.4);
+    this.startle *= Math.exp(-dt / 1.2);
     if (!this.stage) this.updateBirds(s, dt, viewer);
     this.updateSparks(dt);
   }
@@ -137,6 +161,8 @@ export class SkyLife {
       let ax = -pz * swirl - px * 0.15, ay = -py * 0.4, az = px * swirl - pz * 0.15;
       // Each melody note sends a ripple through the flock.
       ay += Math.sin(px * 0.3 + s * 6) * this.ripple * 8;
+      // Startled: everyone flies outwards and up, then the swirl gathers them back.
+      ax += px * this.startle * 2.5; ay += (4 + py) * this.startle * 2; az += pz * this.startle * 2.5;
       ax += Math.sin(i * 12.9898 + s * 0.7) * 2; az += Math.cos(i * 78.233 + s * 0.9) * 2;
       this.bv[o] = (this.bv[o] + ax * dt) * 0.985; this.bv[o + 1] = (this.bv[o + 1] + ay * dt) * 0.985; this.bv[o + 2] = (this.bv[o + 2] + az * dt) * 0.985;
       this.bp[o] += this.bv[o] * dt; this.bp[o + 1] += this.bv[o + 1] * dt; this.bp[o + 2] += this.bv[o + 2] * dt;

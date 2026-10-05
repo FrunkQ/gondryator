@@ -15,6 +15,11 @@ export interface PackLayer {
   depthJitter?: number;
   /** Model names per theme; one is picked per event, deterministically from the music. */
   models: Record<ThemeName, string[]>;
+  /**
+   * Rare finds: now and then (chance per event, 0..1) one of these replaces the usual pick, so a
+   * long ride turns up the odd surprise. Seeded by the song, so a song keeps its own.
+   */
+  rare?: { chance: number; models: Partial<Record<ThemeName, string[]>> };
   /** Base scale; velocity adds up to +scaleByVel. */
   scale?: number;
   scaleByVel?: number;

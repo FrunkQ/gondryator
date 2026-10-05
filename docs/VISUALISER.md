@@ -193,6 +193,10 @@ flowchart LR
 
 The data table in [AGENTS.md](../AGENTS.md#build-a-visualiser-reading-the-score) has the full field names and rules of thumb.
 
+## On the rides, out of the other window
+
+The far window of the train and the starship stays recognisably the ride. On a breakdown or a drop (a section, or a break or drop the parser marked), the show's backdrops take over that whole side, sky and ground, while the scenery keeps passing in trippy paint. They never take over in the intro or the last fifteen seconds, so the ride starts and ends as itself. Only the backdrops come along: sprites such as flowers and confetti would hang still while the vehicle travels. Impacts and whooshes flash the whole sky. The main window never sees any of it. Open `?side=disco&demo` and turn round to see it held on.
+
 ## Handy switches for trying things
 
 | URL parameter | Does |
@@ -203,4 +207,6 @@ The data table in [AGENTS.md](../AGENTS.md#build-a-visualiser-reading-the-score)
 | `&decade=1980` | pin a decade's closer |
 | `&bass=3` | pin a bass style |
 | `&fb=0` | turn the feedback trails off |
+| `?side=disco` | on the train or starship, hold the far-side takeover on (`?side=provence` or `cosmos` pins a world) |
+| `?rare` | on the train, make every building a rare find, to look at them |
 | keys **R** · **X** · **D** | new seed · force an effects look · debug overlay with the song's lettered structure |

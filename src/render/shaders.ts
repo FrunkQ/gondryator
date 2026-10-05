@@ -405,9 +405,15 @@ export function makeConsoleMaterial(): THREE.MeshStandardNodeMaterial {
  *   crash                0..1 flash when the scene is torn down for a fresh one
  *   rise, bright         build-ups and brightness
  */
-export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
-  const m = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, fog: false, depthWrite: false });
-  const d = positionLocal.normalize();
+/**
+ * `far`: the disco on the far side of a train or starship: drawn by direction from the camera (so
+ * a floor plane can wear it too), faded in by `far.reveal`.
+ */
+export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: boolean }): THREE.MeshBasicNodeMaterial {
+  // (The floor writes depth, so the ground under it stays hidden.)
+  const m = new THREE.MeshBasicNodeMaterial({ side: far?.floor ? THREE.DoubleSide : THREE.BackSide, fog: false, depthWrite: !!far?.floor });
+  const d = far ? positionWorld.sub(cameraPosition).normalize() : positionLocal.normalize();
+  if (far) { m.transparent = true; m.opacityNode = far.reveal; }
   const az = atan(d.x, d.z.negate());             // 0 ahead (-z), +/- pi behind
   // Patterns use the azimuth mirrored about the front-back line: the raw angle jumps from +pi to
   // -pi right behind you, which showed as a seam; |az| meets itself there, so nothing can tear.

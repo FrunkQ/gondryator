@@ -194,9 +194,13 @@ flowchart TB
     S[(score)] --> T[🚆 Star Guitar train<br/>main window: the homage<br/>other window: invented worlds]
     S --> SH[🚀 Starship<br/>open cockpit, space on one side,<br/>a psychedelic vortex on the other]
     S --> V[✨ The non-Gondry view<br/>no vehicle: a sphere of light<br/>all round you]
+    V -. breaks and drops, far side only .-> T
+    V -. breaks and drops, far side only .-> SH
 ```
 
 The train and the starship are scheduled scenery. The non-Gondry view is a different kind of show, a director picking effects for each part of the song. It has its own guide: [VISUALISER.md](VISUALISER.md).
+
+The two shows feed each other. The far window stays the ride (Provence and Cosmos on the train), but on breakdowns and drops **the disco** takes over that whole side: the non-Gondry show's backdrops on the sky and the ground, with the scenery still passing in trippy paint. It never does in the intro or the last stretch (`?side=disco` holds it on). The starship's psychedelic side does the same. The main window stays the homage, but now and then it turns up a **rare find**: a windmill, a fairground big wheel, a ruined abbey, an observatory, a glasshouse, a dovecote or a radio mast. These are seeded by the song, so a song always shows its own (`?rare` makes every building one, to look at them). The main window hears the sound pass and the moments too, in ways that stay photographic: animals in the track startle the starlings, an impact or a cheering crowd sends up a firework, and a drop sends up a volley.
 
 ## Around the edges
 
