@@ -1,5 +1,7 @@
 # Gondryator
 
+For a friendlier tour with diagrams, start with [TECHNOLOGY.md](TECHNOLOGY.md) (the architecture) and [VISUALISER.md](VISUALISER.md) (the non-Gondry view).
+
 A browser music visualiser after Michel Gondry's *Star Guitar*: drop in a track and ride a train past scenery where every beat and note becomes an object that comes into view exactly when it sounds.
 
 This is the current technical reference. For a first session with an AI co-pilot, start at [AGENTS.md](../AGENTS.md) and [START.md](START.md). The build log (what was built when, against the original spec, and the measurements) is in [HISTORY.md](HISTORY.md).
