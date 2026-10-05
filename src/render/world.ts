@@ -453,15 +453,14 @@ export class World {
   // ------------------------------------------------------------------ fairground cart
   /**
    * A little open car for two, like a ghost-train or a wild-mouse car: low sides you can see over,
-   * a padded lap bar, a bench, and a carved nose with a skull. No roof
+   * a padded lap bar, a bench, and a low nose you can see the track over. No roof
    * and no glass: the night is right there. Colours from pack.window (frame = trim, wall = body).
    */
   private buildCart() {
     const W = this.pack.window;
     const lit = (c: THREE.ColorRepresentation, e = 0.25) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.2, emissive: new THREE.Color(c).multiplyScalar(e) });
-    const body = lit(W.wall), trim = lit(W.frame, 0.4), dark = lit(0x221a20, 0.15), bone = lit(0xd8cfb8, 0.3);
+    const body = lit(W.wall), trim = lit(W.frame, 0.4), dark = lit(0x221a20, 0.15);
     const glow = new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false });
-    const red = new THREE.MeshBasicMaterial({ color: 0xff2a10, toneMapped: false });
     const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
     const add = (g: THREE.BufferGeometry, m: THREE.Material) => { if (!parts.has(m)) parts.set(m, []); parts.get(m)!.push(g); };
     const L = 2.3, Z = 0.78, floorY = 0.28, sideTop = 0.86;
@@ -474,14 +473,9 @@ export class World {
       add(new THREE.BoxGeometry(L, sideTop - floorY, 0.07).translate(0, (sideTop + floorY) / 2, sz * Z), body);
       add(new THREE.CylinderGeometry(0.06, 0.06, L, 8).rotateZ(Math.PI / 2).translate(0, sideTop + 0.03, sz * Z), trim);
     }
-    // The nose (ahead, +x) curls up; the tail is a low back.
-    add(new THREE.BoxGeometry(0.1, 0.95, 2 * Z).translate(L / 2, floorY + 0.47, 0), body);
-    add(new THREE.CylinderGeometry(0.35, 0.35, 2 * Z, 12, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(-Math.PI / 2).translate(L / 2, floorY + 0.95, 0), trim);
-    add(new THREE.BoxGeometry(0.1, 0.7, 2 * Z).translate(-L / 2, floorY + 0.35, 0), body);
-    // A skull on the nose, with glowing eyes.
-    add(new THREE.SphereGeometry(0.2, 12, 8).scale(1, 0.95, 1.05).translate(L / 2 + 0.12, floorY + 1.3, 0), bone);
-    add(new THREE.BoxGeometry(0.14, 0.1, 0.22).translate(L / 2 + 0.16, floorY + 1.12, 0), bone);
-    for (const ez of [-0.07, 0.07]) add(new THREE.SphereGeometry(0.045, 8, 6).translate(L / 2 + 0.2, floorY + 1.33, ez), red);
+    // Low ends, like the sides: facing forward you look straight over the nose at the track.
+    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.1, sideTop - floorY, 2 * Z).translate(sx * L / 2, (sideTop + floorY) / 2, 0), body);
+    add(new THREE.CylinderGeometry(0.06, 0.06, 2 * Z, 8).rotateX(Math.PI / 2).translate(L / 2, sideTop + 0.03, 0), trim);
     // The bench, low enough to see over when you turn round to the other window.
     add(new THREE.BoxGeometry(1.5, 0.12, 0.5).translate(0, 0.62, 0.22), trim);
     add(new THREE.BoxGeometry(1.5, 0.4, 0.08).translate(0, 0.86, 0.5).rotateX(0), trim);
@@ -638,6 +632,15 @@ export class World {
     // The name board is fixed flat to a wall: the shed's, or the station building's (on the
     // starship's launch, the face of a floating screen).
     this.boardOnWall(grp, info, gate ? { ...opts, trackside: !opts.end } : opts, screen ? new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.35, metalness: 0.8 }) : canopyMat, screen ? World.LAUNCH_Z + 0.1 : gate || opts.trackside ? -8.3 : -11.5);
+    // Riding facing forward (VIEW.ahead), the card is seen at a steep angle: turn it to face the
+    // rider, about the middle of its wall.
+    const yaw = THREE.MathUtils.degToRad(this.pack.rig.startYaw ?? 0);
+    if (Math.abs(yaw) > 0.5 && !screen) {
+      const zc = gate || opts.trackside ? -8.3 : -11.5;
+      grp.rotation.y = -yaw;
+      grp.position.x += zc * Math.sin(yaw);
+      grp.position.z = zc - zc * Math.cos(yaw);
+    }
     this.stations.add(grp);
     return grp;
   }

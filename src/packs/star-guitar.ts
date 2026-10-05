@@ -1,4 +1,5 @@
 import type { Pack } from './types';
+import { VIEW } from './views';
 
 // Pack 1: a homage to Michel Gondry's video for The Chemical Brothers' "Star Guitar" (2002).
 // All models are original and procedural. Kick -> catenary poles, snare -> sheds and walls,
@@ -12,7 +13,7 @@ export const STAR_GUITAR: Pack = {
   vehicle: 'train',
   otherSide: 'other-side',
   viewpoint: 'fixed-window',
-  rig: { type: 'lateral-rail', speed: 24, speedByEnergy: 0.25, eyeHeight: 2.7, maxYaw: 70, lookYaw: 180, startYaw: -16, startPitch: 2, maxPitch: 28, fov: 52 },
+  rig: { ...VIEW.window, type: 'lateral-rail', speed: 24, speedByEnergy: 0.25, eyeHeight: 2.7, maxYaw: 70, lookYaw: 180, maxPitch: 28, fov: 52 },
   spawnMode: 'pass-by',
   layers: [
     { id: 'fence', depth: 4.6, depthJitter: 0.1, scale: 0.9, scaleByVel: 0.3,

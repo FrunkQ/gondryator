@@ -1,4 +1,5 @@
 import type { Pack } from './types';
+import { VIEW } from './views';
 
 // The starship: the same idea as the train, flown through space. An open canopy shows far more
 // of the sky; out of the main side, stars, nebulae and traffic keep time with the music; out of
@@ -18,7 +19,7 @@ export const STARSHIP: Pack = {
   vehicle: 'ship',
   otherSide: 'trippy',
   viewpoint: 'cockpit',
-  rig: { type: 'lateral-rail', speed: 34, speedByEnergy: 0.4, eyeHeight: 4, maxYaw: 75, lookYaw: 180, startYaw: -16, startPitch: 2, maxPitch: 35, fov: 62 },
+  rig: { ...VIEW.window, type: 'lateral-rail', speed: 34, speedByEnergy: 0.4, eyeHeight: 4, maxYaw: 75, lookYaw: 180, maxPitch: 35, fov: 62 },
   spawnMode: 'pass-by',
   layers: [
     { id: 'fence', depth: 6, depthJitter: 0.2, scale: 1, scaleByVel: 0.4, models: ALL(['nav-light']) },

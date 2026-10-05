@@ -1,4 +1,5 @@
 import type { Pack } from './types';
+import { VIEW } from './views';
 
 // The ghost train: a Halloween fairground ride. You sit in a little open cart on a track that rises
 // and falls with the song (rig.coaster): each section has its own height, the track swoops on every
@@ -23,7 +24,7 @@ export const HALLOWEEN: Pack = {
   vehicle: 'cart',
   otherSide: 'halloween-other',
   viewpoint: 'fixed-window',
-  rig: { type: 'lateral-rail', speed: 17, speedByEnergy: 0.45, eyeHeight: 1.3, maxYaw: 70, lookYaw: 180, startYaw: -16, startPitch: 2, maxPitch: 45, fov: 58,
+  rig: { ...VIEW.ahead, type: 'lateral-rail', speed: 17, speedByEnergy: 0.45, eyeHeight: 1.3, maxYaw: 80, lookYaw: 180, maxPitch: 45, fov: 58,
     coaster: { low: 1.6, high: 15, bump: 0.7 } },
   spawnMode: 'pass-by',
   layers: [

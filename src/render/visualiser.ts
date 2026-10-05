@@ -42,7 +42,7 @@ import { fireworkCues } from './cues';
 import type { CardInfo, ShowDriver } from './driver';
 import type { GazeSource } from './spawner';
 import type { FxLookName, Pack } from '../packs/types';
-import { sampleEnvelope, sectionAt, type Score, type SoundCue, type SoundKind } from '../score/types';
+import { gridAt, sampleEnvelope, sectionAt, type Score, type SoundCue, type SoundKind } from '../score/types';
 
 type Vec3 = [number, number, number];
 // The palettes are shared with the rides (shaders.ts PALETTES); the show uses them all.
@@ -385,8 +385,14 @@ export class Visualiser implements ShowDriver {
     layers: uniform(new THREE.Vector4()), poly: uniform(new THREE.Vector4(5, 2, 0.4, 0)), bands: uniform(new THREE.Vector3()),
     E0: uniform(new THREE.Vector4(1, 0, 0, 0)), E1: uniform(new THREE.Vector4()), E2: uniform(new THREE.Vector4()), E3: uniform(new THREE.Vector4()), E4: uniform(new THREE.Vector4()),
     E5: uniform(new THREE.Vector4()), E6: uniform(new THREE.Vector4()), E7: uniform(new THREE.Vector4()), E8: uniform(new THREE.Vector4()), E9: uniform(new THREE.Vector4()), E10: uniform(new THREE.Vector4()), E11: uniform(new THREE.Vector4()), E12: uniform(new THREE.Vector4()),
-    /** Melody and bass pitch now (MIDI, 0 = silent): the Julia set and the Lissajous figure follow them. */
+    /** Melody and bass pitch, held through the gaps and eased (MIDI): the Julia set bends with them. */
     pitches: uniform(new THREE.Vector2()),
+    /** The Lissajous figure's two frequencies: picked from the held notes on each downbeat, then
+     * eased there, so the figure changes shape with the bar instead of flicking on every wobble. */
+    figure: uniform(new THREE.Vector2(3, 2)),
+    /** Slow copies for shapes: bass loudness and other loudness eased over a third of a second, and
+     * a turn that steps on each beat but never swings back (the rotozoomer). */
+    soft: uniform(new THREE.Vector3()),
     /** The glitterball: spin speed (radians/s), flash, and its tint. */
     glitter: uniform(new THREE.Vector2(0.6, 0)), glitterTint: uniform(new THREE.Vector3(0.35, 0.3, 0.5)),
     fold: uniform(new THREE.Vector4(0, 0.6, 1.3, 0.5)), frac: uniform(new THREE.Vector4(6, 1.2, 0.7, 0.5)),
@@ -870,7 +876,7 @@ export class Visualiser implements ShowDriver {
     if (running) this.V.bands.value.set(sampleEnvelope(sc.envelopes.drums, s), sampleEnvelope(sc.envelopes.bass, s), sampleEnvelope(sc.envelopes.other, s));
     else this.V.bands.value.set(0, 0, 0);
     this.updateArc(s, dt, running);
-    this.V.pitches.value.set(running ? sampleEnvelope(sc.envelopes.leadPitch, s) : 0, running && sc.envelopes.bassPitch ? sampleEnvelope(sc.envelopes.bassPitch, s) : 0);
+    this.updatePitches(sc, s, dt, running);
     this.updateGlitterball(s, dt, running);
     this.updateWave(s, frontier, running);
     // The spawners are the notes themselves, so they stay bright even early in the arc.
@@ -1479,6 +1485,34 @@ export class Visualiser implements ShowDriver {
   private outroOn = false;
   /** 0 until the last OUTRO_FADE seconds of the song, then rising to 1: the lights going down. */
   private fade = 0;
+  // The raw pitch curves drop to 0 in every gap and wobble across semitones, which made the
+  // figures that read them snap between two shapes. Hold the last note, ease towards it, and only
+  // re-pick the Lissajous frequencies on a downbeat.
+  private heldPitch = [0, 0];
+  private figureBar = -1;
+  private figureTarget = [3, 2];
+  private spinBeat = 0;
+  private spinTarget = 0;
+  private updatePitches(sc: Score, s: number, dt: number, running: boolean) {
+    const raw = running ? [sampleEnvelope(sc.envelopes.leadPitch, s), sc.envelopes.bassPitch ? sampleEnvelope(sc.envelopes.bassPitch, s) : 0] : [0, 0];
+    for (let i = 0; i < 2; i++) if (raw[i] > 0) this.heldPitch[i] = raw[i];
+    const P = this.V.pitches.value, k = 1 - Math.exp(-dt / 0.35);
+    if (P.x === 0) P.x = this.heldPitch[0];
+    if (P.y === 0) P.y = this.heldPitch[1];
+    P.x += (this.heldPitch[0] - P.x) * k; P.y += (this.heldPitch[1] - P.y) * k;
+    const g = running ? gridAt(sc, s) : null;
+    if (g && g.bar !== this.figureBar && g.beat === 1) {
+      this.figureBar = g.bar;
+      this.figureTarget = [(Math.round(this.heldPitch[0]) % 5) + 1, (Math.round(this.heldPitch[1]) % 4) + 1];
+    }
+    const S = this.V.soft.value, ks = 1 - Math.exp(-dt / 0.35), B = this.V.bands.value;
+    S.x += (B.y - S.x) * ks; S.y += (B.z - S.y) * ks;
+    if (g && g.beat !== this.spinBeat) { this.spinBeat = g.beat; this.spinTarget += 0.15; }
+    S.z += (this.spinTarget - S.z) * (1 - Math.exp(-dt / 0.12));
+    const F = this.V.figure.value, kf = 1 - Math.exp(-dt / 0.25);
+    F.x += (this.figureTarget[0] - F.x) * kf; F.y += (this.figureTarget[1] - F.y) * kf;
+  }
+
   private updateGlitterball(s: number, dt: number, running: boolean) {
     const ball = this.ball, w = this.weights[41];
     if (!ball || !running || s < 6) return;

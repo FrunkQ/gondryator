@@ -896,7 +896,7 @@ function moreElementsBody(V: any, g: any) {
   });
   // 29 Lissajous: the oscilloscope classic, its frequencies picked by the melody and bass notes.
   on(29, () => {
-    const fa = mod(floor(V.pitches.x), 5.0).add(1.0), fb = mod(floor(V.pitches.y), 4.0).add(1.0);
+    const fa = V.figure.x, fb = V.figure.y;
     const dmin = float(9.0).toVar();
     Loop(120, ({ i }) => {
       const sP = float(i).div(120.0).mul(6.28318);
@@ -973,7 +973,7 @@ function moreElementsBody(V: any, g: any) {
   });
   // 36 Rotozoomer: a plaid that spins and zooms in front of you, kicked round on the beat.
   on(36, () => {
-    const an = T.mul(0.3).add(U.beatPhase.mul(0.15));
+    const an = T.mul(0.3).add(V.soft.z);
     const zm = float(1.6).add(sin(T.mul(0.4)).mul(0.8)).add(U.kick.mul(0.3));
     const p = vec2(q.x.mul(cos(an)).sub(q.y.mul(sin(an))), q.x.mul(sin(an)).add(q.y.mul(cos(an)))).mul(zm).mul(4.0);
     const pat = sin(p.x).mul(sin(p.y)).add(sin(p.x.mul(0.5).add(p.y.mul(0.5))).mul(0.5));
@@ -1109,7 +1109,7 @@ function moreElementsBody(V: any, g: any) {
   on(47, () => {
     const acc = vec3(0.0).toVar();
     const y = q.y;
-    const a = T.mul(1.2).add(y.mul(float(1.5).add(sin(T.mul(0.4)).mul(2.0)).add(V.bands.y.mul(2.5))));
+    const a = T.mul(1.2).add(y.mul(float(1.5).add(sin(T.mul(0.4)).mul(2.0)).add(V.soft.x.mul(2.5))));
     const x = q.x.sub(sin(y.mul(2.0).add(T)).mul(0.22));
     const w = float(0.34).mul(float(1.0).add(U.kick.mul(0.15)));
     for (let k = 0; k < 4; k++) {
@@ -1134,7 +1134,7 @@ function moreElementsBody(V: any, g: any) {
       If(found.lessThan(0.5), () => {
         const rr = r0.sub(float(i).mul(0.02));
         If(rr.greaterThanEqual(0.0), () => {
-          const X = sin(rr.mul(5.0).add(T.mul(1.7))).mul(0.42).add(sin(rr.mul(11.0).sub(T.mul(1.1))).mul(float(0.12).add(V.bands.z.mul(0.2))));
+          const X = sin(rr.mul(5.0).add(T.mul(1.7))).mul(0.42).add(sin(rr.mul(11.0).sub(T.mul(1.1))).mul(0.2));
           const dx = abs(qk.x.sub(X));
           If(dx.lessThan(0.05), () => {
             const g2 = float(1.0).sub(dx.div(0.05));
@@ -1180,7 +1180,7 @@ function moreElementsBody(V: any, g: any) {
   on(50, () => {
     const col = vec3(0.0).toVar();
     const found = float(0.0).toVar();
-    const fa = float(1.3).add(mod(floor(V.pitches.x), 3.0).mul(0.1));
+    const fa = float(1.3);
     const L = normalize(vec3(-0.5, 0.5, 0.7));
     Loop(48, ({ i }) => {
       If(found.lessThan(0.5), () => {

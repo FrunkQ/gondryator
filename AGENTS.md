@@ -52,6 +52,7 @@ src/
               non-gondry.ts   "the non-Gondry view :(": no vehicle, a 360° visualiser around you
               other-side.ts   the train's other window: Provence and Cosmos (the disco takes over on breaks and drops)
               types.ts        what a pack can say: layers, mapping rules, themes, light, fx, window
+              views.ts        viewing profiles: out of a side window, or facing forward
               around-the-world.ts  hidden until it gets its twist (?pack=around-the-world)
   render/     world.ts     sky, ground, carriage, stations, render loop, shader warm-up
               spawner.ts   the scheduler: score events → models placed to enter your view on the beat
@@ -123,7 +124,7 @@ The smallest change that teaches the whole edit, preview, ride loop: a recoloure
 A ride is a story with a beginning, a middle and an end. When someone asks for a new one ("a Halloween ride!"), work down this list so nothing is left on the defaults by accident. Every line is a field in the pack (see `src/packs/types.ts`); copy the train or the starship and change each one.
 
 **Beginning (while the song is read)**
-- [ ] `rig.startYaw` / `startPitch`: the view the ride turns to as it pulls up. Angle it so the card sits off-centre, clear of window pillars.
+- [ ] The viewing profile: spread `VIEW.window` (a side window: objects come into sight at the leading edge as they sound) or `VIEW.ahead` (facing forward in an open car: objects land in the middle of the view as they sound) from `packs/views.ts` into `rig`. It sets `startYaw` / `startPitch` (the view the ride turns to as it pulls up; angle it so the card sits clear of window pillars) and `hitAt`.
 - [ ] `title.template`: the card waiting in that view. 'station-board' (lineside shed, departures strip, platform clock), 'launch-screen' (floating screen, T-minus strip, countdown dial) or 'ghost-gate' (a fairground sign with chaser bulbs, a skull and two jack-o'-lanterns, "DOORS CLOSE IN 12"). A new one is a branch in `World.stationBoard`, e.g. a gravestone with the song carved on it.
 
 **Middle (the song)**

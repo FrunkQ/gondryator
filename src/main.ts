@@ -856,7 +856,9 @@ class App {
   private buildEndStation() {
     this.endBuilt = true;
     const D = this.score!.track.durationSec;
-    const stopX = this.rig.travel(D + 9);
+    // (Riding facing forward, the end card stands where the view rests, like the title card.)
+    const yaw = THREE.MathUtils.degToRad(this.pack.rig.startYaw ?? 0);
+    const stopX = this.rig.travel(D + 9) + (Math.abs(yaw) > 0.5 ? 8.3 * Math.tan(yaw) : 0);
     this.showCard('end', stopX, {
       name: this.world.mode === 'train' ? 'Terminus' : 'Curtain',
       line2: [this.trackInfo.title, this.trackInfo.artist].filter(Boolean).join(' — '),
