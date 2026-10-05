@@ -44,7 +44,7 @@ src/
               otherside.ts the mirrored second window
               models.ts    every model, built from boxes, cylinders and lathes; `T(SURF.x, ...)` picks the surface
               shaders.ts   TSL node materials: one procedural material paints brick, glass, rust, foliage...
-              fx.ts        post-processing looks (prism, trip, kaleido, liquid, thermal, echo, fold, hyper, tunnel) and warp jumps
+              fx.ts        post-processing looks (prism, trip, kaleido, liquid, thermal, echo, fold, hyper, tunnel, crt, film, glitch) and warp jumps
               pool.ts      instanced-mesh pools, so nothing allocates per frame
               flock.ts     starlings and fireworks
   ui/         look.ts (drag/keys/gyro), tuning.ts (piano roll), frames.ts (frame analyser, P), vr.ts
@@ -93,7 +93,7 @@ Rules of thumb:
 - **Seed everything.** Draw scene parameters from a seeded random generator keyed by the song (`score.track.hash`), so a song always looks like itself, and let R reroll.
 - **Change scenes on the music's terms**, at sections and new phrases, never on a timer, and make the change an event (a crash, a flash, a warp).
 - Events up to `score.frontierSec` are final; never read beyond it while the analysis is still running.
-- Uniforms shared by every shader (`U.kick`, `U.hue`, `U.energy`, `U.showTime`...) are written by `FxDirector` in `render/fx.ts`. The post-effects looks (trip, kaleido, liquid, prism, echo, thermal, fold, hyper, tunnel) can be picked per scene through `fx.override`.
+- Uniforms shared by every shader (`U.kick`, `U.hue`, `U.energy`, `U.showTime`...) are written by `FxDirector` in `render/fx.ts`. The post-effects looks (trip, kaleido, liquid, prism, echo, thermal, fold, hyper, tunnel, crt, film, glitch) can be picked per scene through `fx.override`.
 
 ## Practicalities
 

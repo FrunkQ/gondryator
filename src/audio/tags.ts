@@ -1,11 +1,11 @@
 // Minimal tag readers: ID3v2 (MP3), FLAC Vorbis comments + picture, MP4/M4A ilst, Ogg Vorbis comments.
 // Returns whatever it finds; the file name is the fallback title.
 
-export interface Tags { title: string; artist: string; album: string; art: Blob | null }
+export interface Tags { title: string; artist: string; album: string; art: Blob | null; /** Release year, 0 if unknown. */ year: number }
 
 export function readTags(buf: ArrayBuffer, fileName: string): Tags {
   const fallback = fileName.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ');
-  const out: Tags = { title: '', artist: '', album: '', art: null };
+  const out: Tags = { title: '', artist: '', album: '', art: null, year: 0 };
   const u8 = new Uint8Array(buf);
   try {
     if (u8[0] === 0x49 && u8[1] === 0x44 && u8[2] === 0x33) id3(u8, out);
@@ -20,8 +20,17 @@ export function readTags(buf: ArrayBuffer, fileName: string): Tags {
     const m = fallback.match(/^(.+?)\s+-\s+(.+)$/);
     if (m && !out.artist) { out.artist = m[1]; out.title = m[2]; } else out.title = fallback;
   }
+  // No year tag: a year in the title, album or file name will do ("Song (1983 remaster)", "Hits of 1999").
+  if (!out.year) out.year = yearIn(`${out.title} ${out.album} ${fallback}`);
   return out;
 }
+
+/** A plausible release year in a string, or 0. Original-release tags win over reissue dates. */
+function yearIn(s: string): number {
+  const m = s.match(/(?:^|\D)(19[2-9]\d|20[0-4]\d)(?!\d)/);
+  return m ? Number(m[1]) : 0;
+}
+const setYear = (out: Tags, v: string, original = false) => { const y = yearIn(v); if (y && (original || !out.year)) out.year = y; };
 
 function str(u8: Uint8Array, o: number, n: number) {
   let s = '';
@@ -51,6 +60,8 @@ function id3(u8: Uint8Array, out: Tags) {
     if (id === 'TIT2') out.title = decodeText(body[0], body.subarray(1));
     else if (id === 'TPE1') out.artist = decodeText(body[0], body.subarray(1));
     else if (id === 'TALB') out.album = decodeText(body[0], body.subarray(1));
+    else if (id === 'TYER' || id === 'TDRC') setYear(out, decodeText(body[0], body.subarray(1)));
+    else if (id === 'TORY' || id === 'TDOR') setYear(out, decodeText(body[0], body.subarray(1)), true);
     else if (id === 'APIC' && !out.art) {
       const enc = body[0];
       let p = 1;
@@ -78,6 +89,8 @@ function vorbisComments(u8: Uint8Array, o: number, out: Tags) {
     if (k === 'TITLE') out.title = v;
     else if (k === 'ARTIST') out.artist = v;
     else if (k === 'ALBUM') out.album = v;
+    else if (k === 'DATE' || k === 'YEAR') setYear(out, v);
+    else if (k === 'ORIGINALDATE' || k === 'ORIGINALYEAR') setYear(out, v, true);
   }
 }
 
@@ -130,6 +143,7 @@ function mp4(u8: Uint8Array, out: Tags) {
         if (type === '©nam') out.title = text();
         else if (type === '©ART') out.artist = text();
         else if (type === '©alb') out.album = text();
+        else if (type === '©day') setYear(out, text());
         else if (type === 'covr') out.art = new Blob([payload.slice()], { type: dataType === 14 ? 'image/png' : 'image/jpeg' });
       }
       o += size;

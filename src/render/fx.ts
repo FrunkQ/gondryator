@@ -16,10 +16,10 @@ import { U, palette } from './shaders';
 import { feedback } from './feedback';
 import { sampleEnvelope, type Score } from '../score/types';
 
-export type FxLook = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel' | 'crt';
-export const FX_LOOKS: FxLook[] = ['clean', 'prism', 'trip', 'kaleido', 'liquid', 'thermal', 'echo', 'fold', 'hyper', 'tunnel', 'crt'];
+export type FxLook = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel' | 'crt' | 'film' | 'glitch';
+export const FX_LOOKS: FxLook[] = ['clean', 'prism', 'trip', 'kaleido', 'liquid', 'thermal', 'echo', 'fold', 'hyper', 'tunnel', 'crt', 'film', 'glitch'];
 
-interface Weights { crt?: number; fold?: number; rain?: number; hyper?: number; tunnel?: number; kal: number; liquid: number; rgb: number; thermal: number; trip: number; echo: number; bloom: number; punch: number }
+interface Weights { crt?: number; film?: number; dmosh?: number; fold?: number; rain?: number; hyper?: number; tunnel?: number; kal: number; liquid: number; rgb: number; thermal: number; trip: number; echo: number; bloom: number; punch: number }
 const LOOKS: Record<FxLook, Weights> = {
   clean:   { kal: 0, liquid: 0,   rgb: 0.12, thermal: 0, trip: 0,    echo: 0,    bloom: 0.25, punch: 0.25 },
   prism:   { kal: 0, liquid: 0,   rgb: 1,    thermal: 0, trip: 0.3,  echo: 0.15, bloom: 0.8,  punch: 0.7 },
@@ -36,10 +36,14 @@ const LOOKS: Record<FxLook, Weights> = {
   tunnel:  { tunnel: 1, kal: 0, liquid: 0.1, rgb: 0.5, thermal: 0, trip: 0.6, echo: 0.3, bloom: 0.9, punch: 0.6 },
   // An old cathode-ray tube: scanlines, a shadow mask, rounded glass corners, fat bloom.
   crt:     { crt: 1, kal: 0, liquid: 0, rgb: 0.6, thermal: 0, trip: 0, echo: 0.35, bloom: 1, punch: 0.6 },
+  // Old film: black and white or sepia, grain, flicker, scratches and dust, the frame weaving in the gate.
+  film:    { film: 1, kal: 0, liquid: 0, rgb: 0, thermal: 0, trip: 0, echo: 0.25, bloom: 0.7, punch: 0.3 },
+  // Datamosh: blocks of the picture tear sideways and smear on the snare, colours crushed to bits.
+  glitch:  { dmosh: 1, kal: 0, liquid: 0, rgb: 0.9, thermal: 0, trip: 0, echo: 0.2, bloom: 0.8, punch: 0.8 },
 };
 
 const W = {
-  crt: uniform(0), crtOn: uniform(1), crtPitch: uniform(3), crtRoll: uniform(0), crtMode: uniform(0), fold: uniform(0), hyper: uniform(0), tunnel: uniform(0), warp: uniform(0), kal: uniform(0), liquid: uniform(0), rgb: uniform(0), thermal: uniform(0), echo: uniform(0), bloom: uniform(0.25), punch: uniform(0),
+  film: uniform(0), dmosh: uniform(0), crt: uniform(0), crtOn: uniform(1), crtPitch: uniform(3), crtRoll: uniform(0), crtMode: uniform(0), fold: uniform(0), hyper: uniform(0), tunnel: uniform(0), warp: uniform(0), kal: uniform(0), liquid: uniform(0), rgb: uniform(0), thermal: uniform(0), echo: uniform(0), bloom: uniform(0.25), punch: uniform(0),
   glitch: uniform(0), aspect: uniform(16 / 9), kalRot: uniform(0), segments: uniform(6),
   /** Motion blur: screen-space smear per metre of depth (uv * m), from travel speed and shutter. */
   blurK: uniform(0), blurDir: uniform(new THREE.Vector2(1, 0)),
@@ -115,6 +119,21 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     const slice = floor(uv0.y.mul(24.0));
     const jump = hash(slice.add(floor(time.mul(30.0)))).sub(0.5).mul(W.glitch).mul(0.08);
     u = vec2(u.x.add(jump), u.y);
+    // Datamosh: a few blocks tear sideways, more on the snare; some freeze, smearing one row down
+    // the block; whole bands slip on the kick.
+    const dm = W.dmosh.mul(S);
+    const blk = floor(uv0.mul(vec2(14.0, 22.0)));
+    const tick = floor(time.mul(8.0));
+    const bh = hash(blk.dot(vec2(1.0, 37.0)).add(tick.mul(7.0)));
+    const tear = step(float(0.86).sub(U.snare.mul(0.25)), bh);
+    u = vec2(u.x.add(hash(blk.y.add(tick)).sub(0.5).mul(0.2).mul(tear).mul(dm)), u.y);
+    const freeze = step(0.94, hash(blk.dot(vec2(13.0, 5.0)).add(tick))).mul(dm);
+    u = vec2(u.x, mix(u.y, blk.y.add(0.98).div(22.0), freeze));
+    const band = floor(uv0.y.mul(6.0));
+    u = vec2(u.x.add(step(0.7, hash(band.add(tick))).mul(U.kick).mul(0.05).mul(dm)), u.y);
+    // Film: the frame weaves in the gate.
+    const fw = W.film.mul(S);
+    u = u.add(vec2(hash(floor(time.mul(24.0))).sub(0.5).mul(0.002), hash(floor(time.mul(24.0)).add(3.0)).sub(0.5).mul(0.005)).mul(fw));
     // Mirror at the edges so warps never sample outside the frame.
     u = abs(fract(u.mul(0.5)).mul(2.0).sub(1.0)).oneMinus();
     // RGB split, radial, kicked by snares.
@@ -123,7 +142,7 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     const viewZ = scenePass.getViewZNode();
     // (the carriage itself, within a few metres, travels with the camera and stays sharp)
     const smear = clamp(W.blurK.div(max(viewZ.negate(), 0.5)), 0, 0.05).mul(smoothstep(2.5, 3.5, viewZ.negate()));
-    const step = W.blurDir.mul(smear).div(5.0);
+    const blurStep = W.blurDir.mul(smear).div(5.0);
     // Warp: a zoom smear towards the centre (a section jump, or the hyperspace look on the kick).
     const zb = W.warp.mul(0.22).add(W.hyper.mul(float(0.02).add(U.kick.mul(0.06))));
     // The clean view (the main window of a two-window ride): only the motion blur, and the warp
@@ -133,9 +152,9 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     const clean = vec3(0).toVar();
     const acc = vec3(0).toVar();
     for (let i = 0; i < 6; i++) {
-      const o = step.mul(i - 2.5).sub(u.sub(0.5).mul(zb.mul(i / 5)));
+      const o = blurStep.mul(i - 2.5).sub(u.sub(0.5).mul(zb.mul(i / 5)));
       acc.addAssign(vec3(src.sample(u.add(off).add(o)).r, src.sample(u.add(o)).g, src.sample(u.sub(off).add(o)).b));
-      clean.addAssign(src.sample(uv0.add(step.mul(i - 2.5)).sub(uv0.sub(0.5).mul(zc.mul(i / 5)))).rgb);
+      clean.addAssign(src.sample(uv0.add(blurStep.mul(i - 2.5)).sub(uv0.sub(0.5).mul(zc.mul(i / 5)))).rgb);
     }
     // Trip looks repaint the sky: a rolling sunburst in the palette, spinning with the kicks.
     const skyMask = smoothstep(1500.0, 2500.0, viewZ.negate()).mul(W.trip);
@@ -193,6 +212,27 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     const mono = lum.mul(1.4).mul(smear).add(0.02);
     const tint = select(W.crtMode.lessThan(0.5), vhs, select(W.crtMode.lessThan(1.5), vec3(0.3, 1.0, 0.4).mul(mono), vec3(1.0, 0.6, 0.12).mul(mono)));
     c = mix(c, tint.mul(scan).mul(mask).mul(roll).mul(1.35).mul(flicker).mul(corner), crt);
+    // Datamosh colour: torn blocks crushed to a few levels per channel.
+    const dmc = W.dmosh.mul(farSide());
+    const crush = floor(c.mul(4.0)).div(4.0);
+    const blk = floor(screenUV.mul(vec2(14.0, 22.0)));
+    const crushed = step(0.9, hash(blk.dot(vec2(3.0, 41.0)).add(floor(time.mul(8.0)))));
+    c = mix(c, crush.mul(1.2), crushed.mul(dmc));
+    // Old film: monochrome (silver or sepia, swapping now and then), flickering exposure, a fine
+    // scratch running down, dust specks, heavy grain and a dark iris round the edge.
+    const fm = W.film.mul(farSide());
+    const fl = luminance(c);
+    const reel = step(0.5, hash(floor(time.mul(0.1))));
+    const tone = mix(vec3(1.0, 0.97, 0.9), vec3(1.15, 0.9, 0.6), reel);
+    const exposure = float(0.92).add(hash(floor(time.mul(24.0))).mul(0.16)).add(U.kick.mul(0.1));
+    const sx = hash(floor(time.mul(2.0))).mul(0.9).add(0.05).add(sin(time.mul(7.0)).mul(0.004));
+    const scratch = smoothstep(0.0015, 0.0, abs(screenUV.x.sub(sx))).mul(step(0.4, hash(floor(time.mul(2.0)).add(9.0)))).mul(0.5);
+    const speck = step(0.9993, hash(floor(screenCoordinate.xy.div(3.0)).add(floor(time.mul(24.0)).mul(17.0))));
+    const grain = interleavedGradientNoise(screenCoordinate.xy.add(fract(time.mul(24.0)).mul(311.0))).sub(0.5).mul(0.14);
+    const fd = screenUV.sub(0.5).mul(vec2(W.aspect, 1.0));
+    const iris = smoothstep(1.0, 0.45, length(fd));
+    const film = tone.mul(pow(fl.mul(1.15), 1.2).mul(exposure).add(grain).add(scratch)).sub(speck.mul(0.6)).mul(iris);
+    c = mix(c, film, fm);
     // Vignette and film grain: the photographic finish.
     const d = screenUV.sub(0.5);
     c = c.mul(float(1).sub(dot(d, d).mul(0.9)));
@@ -221,7 +261,7 @@ export class FxDirector {
    */
   split = false;
   view = { yaw: 0, tanH: 1 };
-  private cur: Weights = { crt: 0, fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS.clean };
+  private cur: Weights = { film: 0, dmosh: 0, crt: 0, fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS.clean };
   private ptr = 0;
   private lastS = -Infinity;
   private kick = 0; private snare = 0; private hat = 0;
@@ -301,7 +341,7 @@ export class FxDirector {
       }
     } else this.look = 'clean';
     if (this.override && running) this.look = this.override;
-    const target = { crt: 0, fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS[this.locked ?? this.look] };
+    const target = { film: 0, dmosh: 0, crt: 0, fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS[this.locked ?? this.look] };
     if (label === 'breakdown') target.rain = 1;
     const k = 1 - Math.exp(-dt / 0.8);
     for (const key of Object.keys(target) as (keyof Weights)[]) this.cur[key] += (target[key] - this.cur[key]) * k;
@@ -331,7 +371,7 @@ export class FxDirector {
     U.trip.value = split ? 0 : this.cur.trip; U.tripFar.value = split ? this.cur.trip : 0;
     U.hue.value = this.hue; U.beatPhase.value = phase; U.showTime.value = s;
     // Rain on the glass: a breakdown's weather shows on every window, the liquid look's only far side.
-    W.crt.value = this.cur.crt ?? 0;
+    W.crt.value = this.cur.crt ?? 0; W.film.value = this.cur.film ?? 0; W.dmosh.value = this.cur.dmosh ?? 0;
     // The tube eases on and off rather than cutting, and its rolling band runs faster on the kick.
     W.crtOn.value += (this.crtOn - W.crtOn.value) * (1 - Math.exp(-dt / 0.08));
     W.crtRoll.value = (W.crtRoll.value + dt * (0.15 + this.kick * 0.9)) % 1;

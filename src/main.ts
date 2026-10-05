@@ -241,7 +241,7 @@ class App {
       if (!isDefaultTuning(songTuning(hash) ?? this.tuning) || (await loadScore(hash))?.final) return;
       const tags = readTags(buf, f.name);
       const audio = await this.player.ctx.decodeAudioData(buf.slice(0));
-      const score = emptyScore({ title: tags.title, artist: tags.artist, album: tags.album, durationSec: audio.duration, art: null, hash }, audio.duration);
+      const score = emptyScore({ title: tags.title, artist: tags.artist, album: tags.album, year: tags.year, durationSec: audio.duration, art: null, hash }, audio.duration);
       const w = new AnalysisWorker();
       w.onmessage = (ev: MessageEvent) => {
         if (ev.data.type !== 'delta') return;
@@ -317,10 +317,11 @@ class App {
     this.tuner?.setTuning(this.trackTuning);
     const audioBuf = await this.player.decode(buf.slice(0));
     this.audioBuf = audioBuf;
-    const track = { title: tags.title, artist: tags.artist, album: tags.album, durationSec: audioBuf.duration, art: null, hash };
+    const track = { title: tags.title, artist: tags.artist, album: tags.album, year: tags.year, durationSec: audioBuf.duration, art: null, hash };
     const cached = this.midi || !isDefaultTuning(this.trackTuning) ? null : await loadScore(hash);
     if (cached && cached.final) {
       this.score = cached;
+      cached.track.year = tags.year;
       this.analysedSec = cached.track.durationSec;
       this.attachScore();
       this.toast('Score loaded from cache');

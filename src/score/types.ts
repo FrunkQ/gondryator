@@ -77,6 +77,8 @@ export interface Score {
     title: string;
     artist: string;
     album: string;
+    /** Release year from the tags (or a year in the title), if known: picks the climax's decade. */
+    year?: number;
     durationSec: number;
     art: string | null;
     hash: string;

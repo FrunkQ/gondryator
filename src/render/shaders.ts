@@ -700,7 +700,7 @@ export function makeSpriteMaterial(style: 'petal' | 'flat' | 'spike' = 'petal'):
 }
 
 /**
- * The second set of twenty sky elements (slots 21..41; visualiser.ts ELEMENTS has the list).
+ * The second set of sky elements (slots 21..50; visualiser.ts ELEMENTS has the list).
  * Each one is only worked out while its weight is above zero (one branch per element), so a big
  * library costs nothing while it waits its turn. Inspirations: classic music visualisers (the bar
  * spectrum, Milkdrop's caustics), the demoscene (checker tunnels, copper bars, rotozoomers,
@@ -712,10 +712,13 @@ function moreElements(V: any, g: any) {
 }
 
 function moreElementsBody(V: any, g: any) {
-  const { d, azP, el, q, qa, qr, paletteAt, front } = g;
-  const az = g.az;
+  // Shared inputs are worked out up front: a node first used inside one element's branch would
+  // only be computed there, and every later branch would read it as zero.
+  const { paletteAt } = g;
+  const d = g.d.toVar(), azP = g.azP.toVar(), el = g.el.toVar(), q = g.q.toVar(), qa = g.qa.toVar(), qr = g.qr.toVar(), front = g.front.toVar();
+  const az = g.az.toVar();
   const out = vec3(0.0).toVar();
-  const E = [V.E0, V.E1, V.E2, V.E3, V.E4, V.E5, V.E6, V.E7, V.E8, V.E9, V.E10];
+  const E = [V.E0, V.E1, V.E2, V.E3, V.E4, V.E5, V.E6, V.E7, V.E8, V.E9, V.E10, V.E11, V.E12];
   const w = (i: number) => E[i >> 2][['x', 'y', 'z', 'w'][i & 3]];
   const on = (i: number, build: () => any) => {
     If(w(i).greaterThan(0.001), () => { out.addAssign(build().mul(w(i))); });
@@ -909,6 +912,189 @@ function moreElementsBody(V: any, g: any) {
     const trail = step(0.0, tail).mul(exp(tail.mul(-5.0))).mul(smoothstep(0.5, 0.25, abs(fract(cx).sub(0.5))));
     const glyph = step(0.35, hash(ci.add(floor(el.mul(40.0))).add(floor(T.mul(3.0)))));
     return mix(vec3(0.3, 1.0, 0.5), paletteAt(ci.mul(0.01).add(U.hue)), 0.5).mul(trail.mul(glyph.mul(0.6).add(0.4))).mul(V.bands.z.mul(1.2).add(0.2));
+  });
+  // 43 Atom: the atomic age's favourite picture. Three orbits round a nucleus that throbs with the
+  // bass; the electrons speed up with the energy and flare on the hats.
+  on(43, () => {
+    const acc = vec3(0.0).toVar();
+    const nucR = float(0.06).mul(float(1.0).add(V.bands.y.mul(0.8)).add(U.kick.mul(0.3)));
+    for (let k = 0; k < 3; k++) {
+      const ang = T.mul(0.05).add(k * 1.0472);
+      const ca = cos(ang), sa = sin(ang);
+      const p = vec2(q.x.mul(ca).add(q.y.mul(sa)), q.y.mul(ca).sub(q.x.mul(sa)));
+      const e = length(p.div(vec2(0.55, 0.16)));
+      const ring = smoothstep(0.07, 0.0, abs(e.sub(1.0)));
+      const th = T.mul(float(1.4 + k * 0.35).mul(float(1.0).add(U.energy))).add(k * 2.0);
+      const dd = length(p.sub(vec2(cos(th).mul(0.55), sin(th).mul(0.16))));
+      const electron = smoothstep(0.028, 0.0, dd).mul(1.6).add(exp(dd.mul(-28.0)).mul(float(0.3).add(U.hat.mul(0.6))));
+      acc.addAssign(paletteAt(float(k / 3).add(U.hue)).mul(ring.mul(0.45).add(electron)));
+    }
+    const nucleus = smoothstep(nucR, nucR.mul(0.5), qr).mul(1.5).add(exp(qr.mul(-9.0)).mul(0.35));
+    return acc.add(paletteAt(U.hue.add(0.5)).mul(nucleus)).mul(front);
+  });
+  // 44 Oil wheel: the 60s liquid light show, coloured oils squeezed between glass on a projector,
+  // all the way round you. The bass presses the glass; the blobs swim, merge and split.
+  on(44, () => {
+    const sw = T.mul(0.12);
+    const p = d.mul(float(1.6).add(V.bands.y.mul(0.3)));
+    const w1 = vec3(mx_noise_float(p.add(vec3(0.0, sw, 0.0))), mx_noise_float(p.add(vec3(5.2, 1.3, sw))), mx_noise_float(p.add(vec3(sw, 9.1, 2.7))));
+    const n = mx_noise_float(p.add(w1.mul(float(1.2).add(V.bands.y.mul(0.9)))).add(vec3(0.0, 0.0, sw)));
+    const cells = n.mul(2.4).add(U.hue);
+    const f = fract(cells);
+    const rim = smoothstep(0.0, 0.07, f).mul(smoothstep(1.0, 0.93, f));
+    const lens = float(0.7).add(smoothstep(-0.3, 0.4, n).mul(0.3));
+    return pow(paletteAt(floor(cells).mul(0.27).add(U.hue)), vec3(1.8)).mul(1.4).mul(rim).mul(lens).mul(float(0.65).add(V.pad.mul(0.5)).add(U.kick.mul(0.15)));
+  });
+  // 45 Fireworks: shells going up all round the sky and bursting: rings of stars, peonies with
+  // trails, golden willows drooping. Every one different, all of them at once.
+  on(45, () => {
+    const acc = vec3(0.0).toVar();
+    const ce = cos(el);
+    for (let i = 0; i < 20; i++) {
+      const P = 1.4 + ((i * 0.618) % 1) * 1.6;
+      const ph = T.div(P).add((i * 0.377) % 1);
+      const n = floor(ph), f = fract(ph);
+      const sAz = hash(n.mul(13.1).add(i * 7.3)).mul(6.28318).sub(3.14159);
+      const sEl = hash(n.mul(5.7).add(i * 3.1)).mul(0.35).add(0.22);
+      const kind = hash(n.mul(2.9).add(i * 1.7));
+      const willow = step(0.72, kind), ringK = step(kind, 0.3);
+      const col = mix(paletteAt(hash(n.mul(9.3).add(i))), vec3(1.0, 0.75, 0.35), willow.mul(0.8));
+      const dA = atan(sin(az.sub(sAz)), cos(az.sub(sAz))).mul(ce);
+      // The rocket going up.
+      const lt = clamp(f.div(0.2), 0.0, 1.0);
+      const rEl = sEl.mul(float(1.0).sub(float(1.0).sub(lt).mul(float(1.0).sub(lt))));
+      const rocket = exp(length(vec2(dA, el.sub(rEl))).mul(-260.0)).mul(step(f, 0.2)).mul(1.5);
+      // The burst.
+      const tau = max(f.sub(0.2), 0.0).mul(P);
+      const bt = clamp(f.sub(0.2).div(0.8), 0.0, 1.0);
+      const R = float(0.15).add(hash(n.add(i * 0.31)).mul(0.17)).mul(float(1.0).sub(exp(tau.mul(-3.5))));
+      const droop = tau.mul(tau).mul(float(0.02).add(willow.mul(0.05)));
+      const v = vec2(dA, el.sub(sEl).add(droop));
+      const r = length(v), a = atan(v.y, v.x);
+      const N = floor(hash(n.add(i * 0.7)).mul(14.0)).add(18.0);
+      const dAng = abs(fract(a.div(6.28318).mul(N).add(0.5)).sub(0.5)).mul(6.28318).div(N).mul(r);
+      const tail = R.mul(mix(mix(float(0.55), float(0.15), willow), float(0.9), ringK));
+      const streak = smoothstep(tail, R, r).mul(step(r, R.add(0.004))).mul(smoothstep(0.005, 0.0, dAng));
+      const hr = r.sub(R);
+      const head = exp(hr.mul(hr).add(dAng.mul(dAng)).mul(-30000.0));
+      const crackle = mix(float(1.0), step(0.45, hash(floor(T.mul(25.0)).add(i * 3.0).add(floor(a.mul(N).div(6.28318))))), smoothstep(0.55, 0.85, bt));
+      const fade = pow(float(1.0).sub(bt), 1.6).mul(step(0.2, f));
+      const flash = exp(tau.mul(-9.0)).mul(exp(r.mul(-7.0))).mul(0.7).mul(step(0.2, f));
+      acc.addAssign(col.mul(streak.mul(0.9).add(head.mul(1.8)).mul(crackle).mul(fade).add(flash)).add(vec3(1.0, 0.85, 0.6).mul(rocket)));
+    }
+    return acc.mul(float(0.8).add(U.kick.mul(0.6))).mul(smoothstep(-0.05, 0.02, el));
+  });
+  // 46 LED wall: a festival screen round the horizon, a coarse grid of LEDs with a new pattern
+  // every couple of seconds: chevrons racing, a VU wall, a sweep on the beat, a strobing checker.
+  on(46, () => {
+    const gx = az.div(6.28318).add(0.5).mul(200.0), gy = el.add(0.02).div(0.5).mul(16.0);
+    const inWall = step(0.0, gy).mul(step(gy, 16.0));
+    const cx = floor(gx), cy = floor(gy);
+    const led = smoothstep(0.45, 0.25, length(fract(vec2(gx, gy)).sub(0.5)));
+    const u = cx.div(200.0), v = cy.div(16.0);
+    const prog = mod(floor(T.mul(0.5)), 4.0);
+    const chev = step(0.5, fract(abs(fract(u.mul(16.0)).sub(0.5)).mul(2.0).add(v.mul(1.5)).sub(T.mul(2.0))));
+    const k3 = mod(cx, 3.0);
+    const lv = select(k3.lessThan(0.5), V.bands.x, select(k3.lessThan(1.5), V.bands.y, V.bands.z)).mul(float(0.6).add(hash(cx.add(floor(T.mul(8.0)))).mul(0.4)));
+    const vu = step(v, lv.mul(1.3));
+    const sweep = step(abs(v.sub(U.beatPhase)), 0.12).add(U.kick.mul(0.4));
+    const chk = abs(step(0.5, fract(u.mul(20.0))).sub(step(0.5, fract(v.mul(3.0).add(floor(T.mul(2.0)).mul(0.5))))));
+    const pat = select(prog.lessThan(0.5), chev, select(prog.lessThan(1.5), vu, select(prog.lessThan(2.5), sweep, chk)));
+    const col = paletteAt(u.mul(3.0).add(v.mul(0.3)).add(U.hue));
+    return col.mul(pat.mul(float(0.6).add(U.kick.mul(0.8))).add(0.05)).mul(led).mul(inWall).mul(1.3);
+  });
+  // 47 Twister: the Amiga classic, a square bar twisting like rubber in front of you. The bass
+  // wrings it harder; each face takes its own colour, shaded by how square-on it turns.
+  on(47, () => {
+    const acc = vec3(0.0).toVar();
+    const y = q.y;
+    const a = T.mul(1.2).add(y.mul(float(1.5).add(sin(T.mul(0.4)).mul(2.0)).add(V.bands.y.mul(2.5))));
+    const x = q.x.sub(sin(y.mul(2.0).add(T)).mul(0.15));
+    const w = float(0.22).mul(float(1.0).add(U.kick.mul(0.15)));
+    for (let k = 0; k < 4; k++) {
+      const a1 = a.add(k * 1.5708);
+      const x1 = sin(a1).mul(w), x2 = sin(a1.add(1.5708)).mul(w);
+      const inside = step(x1, x).mul(step(x, x2));
+      const shade = x2.sub(x1).div(w.mul(1.414));
+      const tt = x.sub(x1).div(max(x2.sub(x1), 0.0001));
+      acc.addAssign(paletteAt(float(k * 0.25).add(U.hue)).mul(k % 2 ? 0.55 : 1.0).mul(inside).mul(float(0.2).add(shade.mul(0.9))).mul(float(0.8).add(sin(tt.mul(3.14159)).mul(0.3))));
+    }
+    return acc.mul(smoothstep(1.3, 1.1, abs(y))).mul(front).mul(1.2);
+  });
+  // 48 Kefrens bars: one shaded bar drawn on every line without clearing the screen, each line a
+  // little further along a sine, so the bars stack into a snaking ribbon. The melody bends it.
+  on(48, () => {
+    const col = vec3(0.0).toVar();
+    const found = float(0.0).toVar();
+    const top = float(0.55);
+    const r0 = top.sub(q.y);
+    Loop(40, ({ i }) => {
+      If(found.lessThan(0.5), () => {
+        const rr = r0.sub(float(i).mul(0.02));
+        If(rr.greaterThanEqual(0.0), () => {
+          const X = sin(rr.mul(5.0).add(T.mul(1.7))).mul(0.42).add(sin(rr.mul(11.0).sub(T.mul(1.1))).mul(float(0.12).add(V.bands.z.mul(0.2))));
+          const dx = abs(q.x.sub(X));
+          If(dx.lessThan(0.05), () => {
+            const g2 = float(1.0).sub(dx.div(0.05));
+            col.assign(paletteAt(rr.mul(0.5).add(U.hue)).mul(float(0.25).add(pow(g2, 0.7).mul(1.1))).add(vec3(pow(g2, 8.0).mul(0.5))));
+            found.assign(1.0);
+          });
+        });
+      });
+    });
+    return col.mul(step(r0, 1.7)).mul(front);
+  });
+  // 49 Dot sphere: a globe of dots in 3D, spinning and melting into a torus and back; near dots
+  // big and bright, far ones small and dim, all pumping on the kick.
+  on(49, () => {
+    const acc = vec3(0.0).toVar();
+    const m = sin(T.mul(0.3)).mul(0.5).add(0.5);
+    const ry = T.mul(0.7), rx = T.mul(0.4);
+    const cy = cos(ry), sy = sin(ry), cx = cos(rx), sx = sin(rx);
+    Loop(96, ({ i }) => {
+      const fi = float(i);
+      const t = fi.add(0.5).div(96.0);
+      const ph = fi.mul(2.39996);
+      const z = float(1.0).sub(t.mul(2.0));
+      const rs = sqrt(max(float(1.0).sub(z.mul(z)), 0.0));
+      const sph = vec3(cos(ph).mul(rs), z, sin(ph).mul(rs));
+      const ta = floor(fi.div(8.0)).mul(0.5236), tb = mod(fi, 8.0).mul(0.7854);
+      const rr = float(0.7).add(cos(tb).mul(0.3));
+      const tor = vec3(cos(ta).mul(rr), sin(tb).mul(0.3), sin(ta).mul(rr));
+      const p0 = mix(sph, tor, m);
+      const p1 = vec3(p0.x.mul(cy).sub(p0.z.mul(sy)), p0.y, p0.x.mul(sy).add(p0.z.mul(cy)));
+      const p = vec3(p1.x, p1.y.mul(cx).sub(p1.z.mul(sx)), p1.y.mul(sx).add(p1.z.mul(cx)));
+      const persp = float(1.0).div(float(2.6).sub(p.z));
+      const proj = p.xy.mul(persp).mul(2.4);
+      const size = persp.mul(0.05).mul(float(1.0).add(U.kick.mul(0.5)));
+      const dd = length(q.sub(proj));
+      const dotv = smoothstep(size, size.mul(0.3), dd).mul(float(0.35).add(p.z.add(1.0).mul(0.35)));
+      acc.assign(max(acc, paletteAt(p.y.mul(0.3).add(U.hue)).mul(dotv).mul(1.5)));
+    });
+    return acc.mul(front);
+  });
+  // 50 Unlimited bobs: a shaded ball tracing a figure whose trail never clears, the newest on
+  // top, like the old trick of drawing into screens that are never wiped.
+  on(50, () => {
+    const col = vec3(0.0).toVar();
+    const found = float(0.0).toVar();
+    const fa = float(1.3).add(mod(floor(V.pitches.x), 3.0).mul(0.1));
+    const L = normalize(vec3(-0.5, 0.5, 0.7));
+    Loop(48, ({ i }) => {
+      If(found.lessThan(0.5), () => {
+        const tt = T.sub(float(i).mul(0.035));
+        const pos = vec2(sin(tt.mul(fa)).mul(0.55).add(sin(tt.mul(0.37)).mul(0.15)), sin(tt.mul(1.7).add(0.5)).mul(0.4));
+        const dv = q.sub(pos).div(0.06);
+        const dist = length(dv);
+        If(dist.lessThan(1.0), () => {
+          const nz = sqrt(max(float(1.0).sub(dist.mul(dist)), 0.0));
+          const lit = max(dot(vec3(dv.x, dv.y, nz), L), 0.0);
+          col.assign(paletteAt(tt.mul(0.05).add(U.hue)).mul(float(0.2).add(lit.mul(0.9))).add(vec3(pow(lit, 24.0).mul(0.9))));
+          found.assign(1.0);
+        });
+      });
+    });
+    return col.mul(front);
   });
   // 41 Glitterball: spots of light swept round the room by the ball (the ball itself is a mesh).
   on(41, () => {

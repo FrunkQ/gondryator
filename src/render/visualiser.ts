@@ -108,6 +108,14 @@ export const ELEMENTS: { name: string; group: Group }[] = [
   { name: 'petal rain', group: 'pads' },     // 40 petals falling from every long note
   { name: 'glitterball', group: 'mix' },     // 41 the ball spins up in front of you and throws light round the room
   { name: 'sine scroller', group: 'melody' }, // 42 the song's name in chrome letters, bouncing round the horizon
+  { name: 'atom', group: 'mix' },            // 43 the atomic age: electrons whirling round a nucleus that throbs with the bass
+  { name: 'oil wheel', group: 'pads' },      // 44 a 60s liquid light show: coloured oil pressed between glass
+  { name: 'fireworks', group: 'drums' },     // 45 shells bursting all round the sky: peonies, rings, golden willows
+  { name: 'LED wall', group: 'drums' },      // 46 a festival screen round the horizon, a new pattern every bar
+  { name: 'twister', group: 'bass' },        // 47 the Amiga twister: a bar twisting like rubber, wrung by the bass
+  { name: 'kefrens bars', group: 'melody' }, // 48 the Kefrens bars: one shaded bar redrawn down the screen, snaking
+  { name: 'dot sphere', group: 'mix' },      // 49 a globe of dots in 3D, spinning and morphing into a torus
+  { name: 'unlimited bobs', group: 'melody' }, // 50 a shaded ball whose trail never clears, tracing figures
 ];
 const NE = ELEMENTS.length;
 /** The elements drawn as sprites (flowers, bubbles, starbursts, confetti, snowflakes). */
@@ -181,19 +189,44 @@ function randomBassMode(r: () => number): [number, number] {
 const OUTRUN = [24, 7, 8];
 /** The Amiga megademo: copper bars, a rotozoomer, a starfield and the song's name on a sine scroller. */
 const MEGADEMO = [42, 23, 36, 3];
+/** The other Amiga classics the megademo draws two of, so no two demos are the same. */
+const DEMO_PARTS = [23, 36, 3, 47, 48, 49, 50];
+/** The 50s: an atom, atomic starbursts, all on flickering old film. */
+const ATOMIC = [43, 18, 3];
+/** The 60s: an oil-wheel light show, op-art moire, blobs. */
+const LIQUID_LIGHT = [44, 28, 25];
+/** The 70s: the glitterball (and lasers, when it is loud). */
+const DISCO = [41];
+/** The 90s rave: lasers, the honeycomb pulsing, falling down the tunnel, hyperspace. */
+const RAVE = [32, 30, 22];
+/** The 00s: fireworks, an overwhelming display. */
+const FIREWORKS = [45, 18, 6];
+/** The 10s: the festival main stage. LED wall, confetti cannons, lasers. */
+const MAIN_STAGE = [46, 19, 32];
+/** The 20s: everything glitching, digital rain, tiles flipping. */
+const GLITCH = [37, 33, 25];
+/** Each decade's closers (a song's release year picks the decade; otherwise any of them can come up). */
+const DECADES: Record<number, number[][]> = {
+  1950: [ATOMIC], 1960: [LIQUID_LIGHT], 1970: [DISCO], 1980: [OUTRUN, OUTRUN, MEGADEMO], 1990: [RAVE, MEGADEMO],
+  2000: [FIREWORKS], 2010: [MAIN_STAGE], 2020: [GLITCH],
+};
 const CLIMAXES: number[][] = [
-  [41],
+  DISCO,
   OUTRUN,        // the ultimate 80s: synthwave sun, neon grid, the horizon pulsing on the bass, CRT
   [31, 38, 18],  // galaxy overhead, comets, starbursts
   [16, 5, 40],   // deep fractal kaleidoscope, lightning, petal rain
   [26, 22, 19],  // julia set, checker tunnel, confetti
   [34, 30, 12],  // fire off the horizon, hex pulse, flowers
   [35, 23, 20],  // caustics, copper bars, snowflakes
-  [41],
-  OUTRUN,
-  MEGADEMO,
-  MEGADEMO,
+  MEGADEMO, ATOMIC, LIQUID_LIGHT, RAVE, FIREWORKS, MAIN_STAGE, GLITCH,
 ];
+const DECADE_PIN = Number(new URLSearchParams(location.search).get('decade')) || 0;
+/** The closer for this song: its decade's, when the year is known (or pinned with ?decade=1980). */
+function pickClimax(r: () => number, year: number | undefined): number[] {
+  const y = DECADE_PIN || year || 0;
+  const list = y ? DECADES[Math.max(1950, Math.min(2020, Math.floor(y / 10) * 10))] : CLIMAXES;
+  return list[Math.floor(r() * list.length)];
+}
 
 /**
  * The scroller's text: the song and the artist in fat chrome capitals, the way a demo greeted the
@@ -330,7 +363,7 @@ export class Visualiser implements ShowDriver {
     crash: uniform(0), rise: uniform(0), bright: uniform(0.3),
     layers: uniform(new THREE.Vector4()), poly: uniform(new THREE.Vector4(5, 2, 0.4, 0)), bands: uniform(new THREE.Vector3()),
     E0: uniform(new THREE.Vector4(1, 0, 0, 0)), E1: uniform(new THREE.Vector4()), E2: uniform(new THREE.Vector4()), E3: uniform(new THREE.Vector4()), E4: uniform(new THREE.Vector4()),
-    E5: uniform(new THREE.Vector4()), E6: uniform(new THREE.Vector4()), E7: uniform(new THREE.Vector4()), E8: uniform(new THREE.Vector4()), E9: uniform(new THREE.Vector4()), E10: uniform(new THREE.Vector4()),
+    E5: uniform(new THREE.Vector4()), E6: uniform(new THREE.Vector4()), E7: uniform(new THREE.Vector4()), E8: uniform(new THREE.Vector4()), E9: uniform(new THREE.Vector4()), E10: uniform(new THREE.Vector4()), E11: uniform(new THREE.Vector4()), E12: uniform(new THREE.Vector4()),
     /** Melody and bass pitch now (MIDI, 0 = silent): the Julia set and the Lissajous figure follow them. */
     pitches: uniform(new THREE.Vector2()),
     /** The glitterball: spin speed (radians/s), flash, and its tint. */
@@ -544,14 +577,27 @@ export class Visualiser implements ShowDriver {
       if (sectionStart && !this.glitterDone && this.arcPeakT >= s && this.arcPeakT < next) {
         this.glitterDone = true;
         const big = (sec.section?.energy ?? 0.5) > 0.6;
-        const pick = CLIMAXES[rng(this.seed ^ 0x9e3779b9)() * CLIMAXES.length | 0];
-        sc.elements = pick[0] === 41 ? (big ? [41, 32] : [41]) : big || pick === OUTRUN || pick === MEGADEMO ? pick : pick.slice(0, 2);
+        const cr = rng(this.seed ^ 0x9e3779b9);
+        const pick = pickClimax(cr, this.score.track.year);
+        const decade = !CLIMAXES.slice(2, 7).includes(pick);
+        sc.elements = pick === DISCO ? (big ? [41, 32] : [41]) : big || decade ? [...pick] : pick.slice(0, 2);
+        const r = this.rand;
+        if (pick === MEGADEMO) {
+          // The scroller always, with two other classics drawn from the demo parts.
+          const parts = [...DEMO_PARTS].sort(() => cr() - 0.5);
+          sc.elements = [42, parts[0], parts[1]];
+        }
+        if (pick === ATOMIC) Object.assign(sc, { look: 'film', layers: [0, 0, 0, 0], feedback: { amount: 0.3, zoom: 1.0, turn: 0, hue: 0 } });
+        if (pick === LIQUID_LIGHT) Object.assign(sc, { look: 'liquid', palette: [3, 5, 7, 10][Math.floor(r() * 4)], feedback: { amount: 0.6, zoom: 1.003, turn: (r() - 0.5) * 0.006, hue: 0.03 } });
+        if (pick === RAVE) Object.assign(sc, { look: 'hyper', bassMode: [3, 1] });
+        if (pick === FIREWORKS) Object.assign(sc, { look: 'prism', layers: [0, 0, 0, 0], mixes: [0.15, 0, 0, sc.mixes[3]], feedback: { amount: 0.7, zoom: 0.998, turn: 0, hue: 0.0 } });
+        if (pick === MAIN_STAGE) Object.assign(sc, { look: 'clean', layers: [0, 0, 0, 0], mixes: [0.2, 0, 0, sc.mixes[3]] });
+        if (pick === GLITCH) Object.assign(sc, { look: 'glitch' });
         // The 80s closer: the bass rolls off the horizon in waveform lines under the sun, in pink,
         // sunset or ultraviolet, on an old tube, swirling, with trails.
         if (pick === MEGADEMO) Object.assign(sc, { look: 'prism', layers: [0, 0, 0, 0], fold: [0, sc.fold[1], sc.fold[2], sc.fold[3]] });
         if (pick === OUTRUN) {
-          const r = this.rand;
-          Object.assign(sc, {
+            Object.assign(sc, {
             bassMode: [1, 1], look: 'crt', palette: [2, 3, 10][Math.floor(r() * 3)],
             shape: [sc.shape[0], 0.6 + r() * 1.2, sc.shape[2], sc.shape[3]],
             feedback: { amount: 0.55, zoom: 1.006, turn: (r() - 0.5) * 0.01, hue: 0.04 },
@@ -739,7 +785,8 @@ export class Visualiser implements ShowDriver {
     this.V.E4.value.set(w[16], w[17], w[18], w[19]);
     this.V.E5.value.set(w[20], w[21], w[22], w[23]); this.V.E6.value.set(w[24], w[25], w[26], w[27]);
     this.V.E7.value.set(w[28], w[29], w[30], w[31]); this.V.E8.value.set(w[32], w[33], w[34], w[35]);
-    this.V.E9.value.set(w[36], w[37], w[38], w[39]); this.V.E10.value.set(w[40], w[41], w[42], 0);
+    this.V.E9.value.set(w[36], w[37], w[38], w[39]); this.V.E10.value.set(w[40], w[41], w[42], w[43]);
+    this.V.E11.value.set(w[44], w[45], w[46], w[47]); this.V.E12.value.set(w[48], w[49], w[50], 0);
     this.V.pulse0.value = s - this.bassTimes[0]; this.V.pulse1.value = s - this.bassTimes[1];
     this.V.pulse2.value = s - this.bassTimes[2]; this.V.pulse3.value = s - this.bassTimes[3];
     this.V.crash.value *= Math.exp(-dt / 0.22);
