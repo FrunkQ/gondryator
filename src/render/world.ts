@@ -1136,10 +1136,14 @@ export class World {
     for (const o of extra) jobs.push(async () => {
       if (o.userData.warm) return;
       o.userData.warm = true;
-      const was = o.visible;
+      // Shown only to the compiler: shrunk to nothing, so the frames drawn while it builds
+      // never see it (the far side's disco dome used to flash up over the start view).
+      const was = o.visible, sc = o.scale.clone();
+      o.scale.setScalar(1e-6);
       o.visible = true;
       await compile(o);
       o.visible = was;
+      o.scale.copy(sc);
     });
     this.warmJobs.push(...jobs);
   }
