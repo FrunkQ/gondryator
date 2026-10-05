@@ -71,6 +71,13 @@ export const PALETTES: Record<string, [Vec3, Vec3, Vec3, Vec3]> = {
   'cyan-magenta': two([0.1, 0.95, 1.0], [0.95, 0.1, 0.75]),
   'gold-navy': two([1.0, 0.78, 0.25], [0.05, 0.1, 0.4]),
   'lime-blue': two([0.7, 1.0, 0.2], [0.1, 0.25, 0.9]),
+  // Moody ones: a colour fading into near-black, so the scene is drenched in one hue at night.
+  graveyard: two([0.35, 0.78, 0.22], [0.02, 0.06, 0.03]),
+  bruise: two([0.5, 0.16, 0.66], [0.03, 0.0, 0.08]),
+  witchlight: two([0.1, 0.72, 0.62], [0.12, 0.02, 0.2]),
+  'ember-dusk': two([0.85, 0.32, 0.05], [0.05, 0.03, 0.18]),
+  swamp: two([0.48, 0.52, 0.14], [0.06, 0.04, 0.02]),
+  'cold-moon': two([0.36, 0.52, 0.74], [0.01, 0.02, 0.06]),
 };
 /** What a ride cycles through when its pack names none: everything but the rainbow, which is a treat. */
 export const DEFAULT_PALETTES = Object.keys(PALETTES).filter(k => !['pumpkin', 'blood', 'toxic', 'moonlight'].includes(k));

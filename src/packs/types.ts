@@ -152,7 +152,7 @@ export interface RigSpec {
   /**
    * A fairground track that rises and falls (the Halloween ride): each section of the song sets
    * its own height between `low` and `high` metres, the track swoops there across the change, rolls
-   * over a hill each phrase, plunges on a drop, and in loud parts bobs on the beat (`bump`, metres).
+   * a gentle swell each phrase, plunges on a drop, and in the loudest parts lifts on each downbeat (`bump`, metres).
    */
   coaster?: { low: number; high: number; bump?: number };
 }

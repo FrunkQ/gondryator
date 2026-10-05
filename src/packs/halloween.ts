@@ -2,7 +2,7 @@ import type { Pack } from './types';
 
 // The ghost train: a Halloween fairground ride. You sit in a little open cart on a track that rises
 // and falls with the song (rig.coaster): each section has its own height, the track swoops on every
-// change, plunges on the drop and bobs on the beat when it's loud. It waits at a bulb-lit
+// change, plunges on the drop and lifts on the downbeats when it's loudest. It waits at a bulb-lit
 // ghost-train sign while the song is read, and comes back to it at the end.
 //
 // Out of the main side, the nightmare: a rain of blood, hellish country in the spirit of the old
@@ -85,7 +85,8 @@ export const HALLOWEEN: Pack = {
     { at: 1.0, sky: '#08060e', horizon: '#20101e', sun: '#d8d0c0', sunIntensity: 0.5, sunElevation: 1, fog: 0.0045 },
   ],
   storm: { rain: '#8a0a14', lightning: 0.8, pulse: '#a01020' },
-  palettes: ['pumpkin', 'blood', 'toxic', 'moonlight', 'ultraviolet', 'embers'],
+  // Moody first: one hue drenching the night (a green churchyard, a bruised sky), then the classics.
+  palettes: ['graveyard', 'pumpkin', 'bruise', 'blood', 'witchlight', 'ember-dusk', 'toxic', 'cold-moon', 'swamp', 'moonlight'],
   title: { template: 'ghost-gate' },
   end: { template: 'ghost-gate' },
   // The main side stays as it is; the other window's looks are the darker ones.

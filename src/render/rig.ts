@@ -179,15 +179,15 @@ export class LateralRail implements CameraRig {
       // The cart tips with the slope (nose up on a climb): the horizon tilts, as on a real ride.
       const dh = this.heightAt(s + 0.1) - this.heightAt(s - 0.1);
       const dx = Math.max(1, this.travel(s + 0.1) - this.travel(s - 0.1));
-      quat.setFromAxisAngle(ZAXIS, THREE.MathUtils.clamp(Math.atan2(dh, dx) * 0.7, -0.3, 0.3));
+      quat.setFromAxisAngle(ZAXIS, THREE.MathUtils.clamp(Math.atan2(dh, dx) * 0.35, -0.15, 0.15));
     }
   }
 
   /**
    * The coaster's track height at show time s (rig.coaster; 0 for a level line). Each section has
    * its own height, picked from its energy and its place in the song; the track swoops there across
-   * the change (starting a little before it, so it lands on it), rolls over a hill each phrase,
-   * plunges on a drop and, in the loud parts, bobs on every beat. Only final sections are read, so
+   * the change (starting a little before it, so it lands on it), swells gently each phrase,
+   * plunges on a drop and, in the loudest parts, lifts a little on each downbeat. Only final sections are read, so
    * the track ahead never changes under the cart.
    */
   heightAt(s: number): number {
@@ -221,9 +221,10 @@ export class LateralRail implements CameraRig {
     const g = gridAt(sc, t);
     const e = sec?.energy ?? 0.5;
     if (g) {
-      // A hill over each phrase (smaller near the ground), and a bob on the beat when it's loud.
-      h += Math.sin(g.phraseFrac * Math.PI * 2) * Math.min(span * 0.18, (h - 0.3) * 0.5);
-      if (e > 0.62 && c.bump) h += c.bump * (e - 0.62) / 0.38 * Math.sin(g.beatFrac * Math.PI) ** 2;
+      // A gentle swell over each phrase (smaller near the ground), and, only in the loudest parts,
+      // a little lift on each downbeat. (A bob on every beat was too much rocking.)
+      h += Math.sin(g.phraseFrac * Math.PI * 2) * Math.min(span * 0.08, (h - 0.3) * 0.3);
+      if (e > 0.8 && c.bump && g.beat === 1) h += c.bump * (e - 0.8) / 0.2 * Math.sin(g.beatFrac * Math.PI) ** 2;
     }
     // The plunge: down towards the ground over the second before a drop, back up over the next four.
     for (const m of sc.moments ?? []) {

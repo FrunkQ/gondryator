@@ -453,7 +453,7 @@ export class World {
   // ------------------------------------------------------------------ fairground cart
   /**
    * A little open car for two, like a ghost-train or a wild-mouse car: low sides you can see over,
-   * a padded lap bar, a bench, a carved nose with a skull and a lantern on a crooked pole. No roof
+   * a padded lap bar, a bench, and a carved nose with a skull. No roof
    * and no glass: the night is right there. Colours from pack.window (frame = trim, wall = body).
    */
   private buildCart() {
@@ -488,9 +488,6 @@ export class World {
     // The lap bar.
     add(new THREE.CylinderGeometry(0.045, 0.045, 1.5, 10).rotateZ(Math.PI / 2).translate(0, 0.98, -0.42), trim);
     for (const sx of [-0.75, 0.75]) add(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 8).translate(sx, 0.63, -0.42), dark);
-    // A lantern on a crooked pole at the front corner.
-    add(new THREE.CylinderGeometry(0.025, 0.035, 1.3, 6).rotateZ(-0.08).translate(L / 2 - 0.15, floorY + 0.65 + 0.5, Z - 0.1), dark);
-    add(new THREE.BoxGeometry(0.16, 0.22, 0.16).translate(L / 2 - 0.06, floorY + 1.75, Z - 0.1), glow);
     // Little bulbs along both sides.
     for (const sz of [-1, 1]) for (let k = 0; k < 7; k++) add(new THREE.SphereGeometry(0.03, 6, 4).translate(-L / 2 + 0.2 + k * (L - 0.4) / 6, sideTop - 0.08, sz * (Z + 0.04)), glow);
     const cart = new THREE.Group();
