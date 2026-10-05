@@ -452,7 +452,17 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
     .add(sin(length(vec2(px, py.mul(2.0))).mul(1.5).sub(t.mul(1.3)).add(U.kick.mul(1.5))))
     .mul(0.25);
   const rings = sin(elM.mul(F).mul(4.0).sub(t.mul(2.0)).add(U.kick.mul(2.0)));
-  const tunnel = sin(acos(clamp(dot(d, V.gaze), -1.0, 1.0)).mul(F).mul(3.0).sub(t.mul(3.0)).add(azK.mul(2.0)));
+  // The outline of everything pulsing out from your gaze (pulseShape: sides, star, spin, lobes):
+  // a radius multiplier by the angle round the gaze, so rings become polygons, stars or blobs.
+  const right = normalize(vec3(V.gaze.z.negate(), 0.0, V.gaze.x));
+  const up = normalize(vec3(V.gaze.y.negate().mul(V.gaze.x), V.gaze.x.mul(V.gaze.x).add(V.gaze.z.mul(V.gaze.z)), V.gaze.y.negate().mul(V.gaze.z)));
+  const PS = V.pulseShape;
+  const th = atan(dot(d, up), dot(d, right)).add(U.showTime.mul(PS.z));
+  const pn = max(PS.x, 3.0), psec = float(6.28318).div(pn);
+  const ploc = abs(fract(th.div(psec)).sub(0.5)).mul(psec);
+  const pPoly = cos(psec.mul(0.5)).div(cos(ploc)).mul(float(1.0).sub(PS.y.mul(abs(ploc).div(psec.mul(0.5)).oneMinus()).mul(0.45)));
+  const pMul = mix(float(1.0), pPoly, step(2.5, PS.x)).mul(float(1.0).add(sin(th.mul(PS.w).add(U.showTime)).mul(0.16).mul(step(0.5, PS.w))));
+  const tunnel = sin(acos(clamp(dot(d, V.gaze), -1.0, 1.0)).div(pMul).mul(F).mul(3.0).sub(t.mul(3.0)).add(azK.mul(2.0)));
   const v = plasma.mul(V.mixes.x).add(rings.mul(V.mixes.y)).add(tunnel.mul(V.mixes.z))
     .add(V.mixes.w).add(U.hue.mul(0.5)).add(mx_noise_float(d.mul(2.0).add(t.mul(0.1))).mul(0.25));
   // Every element colours itself from the scene's palette, so a scene reads as one colour story.
@@ -466,8 +476,48 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const base = pow(pal, vec3(2.2)).mul(glow).mul(fil.mul(0.85).add(0.15)).mul(voids.mul(0.85).add(0.15));
   // Bass: rings blasting out from wherever you are looking.
   const ang = acos(clamp(dot(d, V.gaze), -1.0, 1.0));
-  const ring = (p: any) => { const x = ang.sub(p.mul(2.2)).div(0.07); return exp(x.mul(x).negate()).mul(exp(p.mul(-1.6))); };
-  const bass = ring(V.pulse0).add(ring(V.pulse1)).add(ring(V.pulse2)).add(ring(V.pulse3));
+  const ring = (p: any) => { const x = ang.sub(p.mul(2.2).mul(pMul)).div(0.07); return exp(x.mul(x).negate()).mul(exp(p.mul(-1.6))); };
+  const rings4 = ring(V.pulse0).add(ring(V.pulse1)).add(ring(V.pulse2)).add(ring(V.pulse3));
+  // Horizon (bassMode 1): each bass note sends a waveform line off the horizon, rolling down over
+  // the floor towards you and fading, a stack of them like an old Fairlight's waterfall display.
+  const wline = (p: any, k: number) => {
+    const y = float(0.04).sub(p.mul(0.5));
+    const wav = sin(az.mul(7.0 + k * 3).add(p.mul(4.0)).add(k * 1.7)).mul(0.5).add(sin(az.mul(19.0 + k * 5).sub(p.mul(6.0))).mul(0.25));
+    const x = el.sub(y.add(wav.mul(0.07).mul(exp(p.mul(-1.2))))).div(0.009);
+    return exp(x.mul(x).negate()).mul(exp(p.mul(-1.4)));
+  };
+  const horizon = wline(V.pulse0, 0).add(wline(V.pulse1, 1)).add(wline(V.pulse2, 2)).add(wline(V.pulse3, 3))
+    .add(exp(abs(el).mul(-60.0)).mul(0.15));
+  // Several circles (bassMode 2): 2, 4 or 6 centres round your gaze, each pulsing on the bass.
+  let multi = float(0);
+  for (let k = 0; k < 6; k++) {
+    const on = step(float(k + 0.5), V.bassMode.y);
+    const a = float(6.28318 * k).div(max(V.bassMode.y, 1.0)).add(U.showTime.mul(0.15));
+    const c = normalize(V.gaze.mul(0.84).add(right.mul(cos(a)).add(up.mul(sin(a))).mul(0.54)));
+    const ca = acos(clamp(dot(d, c), -1.0, 1.0));
+    const cr = (p: any) => { const x = ca.sub(p.mul(0.9).mul(pMul)).div(0.04); return exp(x.mul(x).negate()).mul(exp(p.mul(-2.2))); };
+    multi = multi.add(cr(V.pulse0).add(cr(V.pulse1)).add(cr(V.pulse2)).mul(on));
+  }
+  // Road (bassMode 3): a road on the floor running off to the horizon where you look; each bass
+  // note is a bar of light racing down it towards you, and the kerbs glow with the bass.
+  const gdir = normalize(vec2(V.gaze.x, V.gaze.z).add(vec2(0.0001, 0.0)));
+  const gp = d.xz.div(max(d.y.negate(), 0.015)).mul(2.7);
+  const along = dot(gp, gdir), across = gp.x.mul(gdir.y).sub(gp.y.mul(gdir.x));
+  const onRoad = smoothstep(-0.01, -0.06, d.y).mul(step(0.0, along));
+  const bar = (p: any) => { const x = along.sub(float(60.0).mul(exp(p.mul(-2.6)))).div(along.mul(0.04).add(0.2)); return exp(x.mul(x).negate()).mul(exp(p.mul(-1.0))); };
+  const road = bar(V.pulse0).add(bar(V.pulse1)).add(bar(V.pulse2)).add(bar(V.pulse3)).mul(smoothstep(1.6, 1.2, abs(across)))
+    .add(smoothstep(0.12, 0.0, abs(abs(across).sub(1.6))).mul(V.bands.y.mul(0.8).add(0.15)))
+    .add(smoothstep(0.08, 0.0, abs(across)).mul(step(0.5, fract(along.mul(0.15).add(U.showTime.mul(2.0))))).mul(0.3))
+    .mul(onRoad).mul(smoothstep(400.0, 20.0, along));
+  // Filter swell (bassMode 4): no shape at all, the whole sky swells and opens up on each bass
+  // note, brightest round the horizon, like a filter sweeping open.
+  const swellP = (p: any) => exp(p.mul(-3.5));
+  const swell = swellP(V.pulse0).add(swellP(V.pulse1)).add(swellP(V.pulse2)).add(swellP(V.pulse3))
+    .mul(float(0.12).add(exp(abs(el).mul(-3.0)).mul(0.35)));
+  const bm = V.bassMode.x;
+  const inMode = (lo: number, hi: number) => step(float(lo), bm).mul(step(bm, float(hi)));
+  const bass = rings4.mul(inMode(-1, 0.5)).add(horizon.mul(inMode(0.5, 1.5))).add(multi.mul(inMode(1.5, 2.5)))
+    .add(road.mul(inMode(2.5, 3.5))).add(swell.mul(inMode(3.5, 9)));
   const bassCol = V.pa.add(V.pb.mul(cos(V.pc.mul(v.add(0.5)).add(V.pd).mul(6.28318)))).mul(bass).mul(1.4);
   // Melody: a wave of light round the horizon. Ahead of your gaze is what is coming, behind it what has played.
   const rel = atan(sin(az.sub(V.gazeAz)), cos(az.sub(V.gazeAz)));
@@ -487,8 +537,6 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   const sparks = spark.mul(U.hat.mul(1.6).add(0.08));
   // Vector shapes hung in front of you (layers.x): nested spinning polygons or stars, drawn on
   // the plane facing your gaze, punching outwards on the kick. poly = (sides, nesting, spin, starriness).
-  const right = normalize(vec3(V.gaze.z.negate(), 0.0, V.gaze.x));
-  const up = normalize(vec3(V.gaze.y.negate().mul(V.gaze.x), V.gaze.x.mul(V.gaze.x).add(V.gaze.z.mul(V.gaze.z)), V.gaze.y.negate().mul(V.gaze.z)));
   const fwd = max(dot(d, V.gaze), 0.001);
   const q = vec2(dot(d, right), dot(d, up)).div(fwd);
   const qa = atan(q.y, q.x), qr = length(q);
@@ -521,8 +569,8 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
     .mul(step(0.6, hash(lane.add(3.0)))).mul(smoothstep(0.5, 0.1, abs(fract(lanes).sub(0.5)))).mul(step(0.0, dot(d, V.gaze)));
   const stars = mix(vec3(0.8, 0.9, 1.0), paletteAt(lh), 0.4).mul(streak).mul(1.6);
   // Kick tunnel (4): a polygon ring flung outwards from your gaze on every kick.
-  const kx = qr.sub(V.kickT.mul(1.8)).div(0.03);
-  const kx2 = qr.sub(V.kickT.mul(1.8)).sub(0.35).div(0.02);
+  const kx = qr.sub(V.kickT.mul(1.8).mul(pMul)).div(0.03);
+  const kx2 = qr.sub(V.kickT.mul(1.8).add(0.35).mul(pMul)).div(0.02);
   const kickRing = exp(kx.mul(kx).negate()).mul(exp(V.kickT.mul(-1.8))).add(exp(kx2.mul(kx2).negate()).mul(exp(V.kickT.mul(-2.5))).mul(0.5));
   const kickCol = paletteAt(V.kickT.add(U.hue)).mul(kickRing).mul(1.5).mul(step(0.0, dot(d, V.gaze)));
   // Drum floor (7): a grid on the ground streaming towards you; cells flash with the drums.
@@ -611,7 +659,11 @@ export function makeVisualiserMaterial(V: any): THREE.MeshBasicNodeMaterial {
   let arcCol = arcLin.div(float(1.0).add(dot(arcLin, vec3(0.3, 0.5, 0.2)).mul(0.8)));
   // Winding up for a lift (V.tension): rings converge on your gaze faster and faster, and the
   // light strobes on the beat, eighths then sixteenths, as the moment nears.
-  const angT = acos(clamp(dot(d, V.gaze), -1.0, 1.0));
+  // Not always rings: the wind-up takes the scene's bass style. Rings (shaped like the pulses) for
+  // rings and circles, lines closing in on the horizon for the horizon and the road, a spiral for the swell.
+  const angT0 = acos(clamp(dot(d, V.gaze), -1.0, 1.0));
+  const angT = select(bm.lessThan(0.5).or(bm.greaterThan(1.5).and(bm.lessThan(2.5))), angT0.div(pMul),
+    select(bm.lessThan(3.5), abs(el).mul(1.3), angT0.add(th.mul(0.16))));
   const conv = pow(fract(angT.mul(2.5).add(U.showTime.mul(float(0.6).add(V.tension.mul(3.0))))), 18.0);
   const strobeRate = select(V.tension.greaterThan(0.7), float(4.0), float(2.0));
   const strobe = step(0.5, fract(U.beatPhase.mul(strobeRate))).mul(smoothstep(0.35, 0.9, V.tension));
@@ -669,6 +721,17 @@ function moreElementsBody(V: any, g: any) {
     If(w(i).greaterThan(0.001), () => { out.addAssign(build().mul(w(i))); });
   };
   const T = U.showTime;
+  // 42 Sine scroller: the song's name round the horizon, every letter riding a sine wave that
+  // swings wider with the melody, scrolling past.
+  on(42, () => {
+    const u = az.div(6.28318).mul(2.0).add(T.mul(0.035));
+    const yc = float(0.22).add(sin(u.mul(40.0).add(T.mul(3.0))).mul(float(0.05).add(V.bands.z.mul(0.08))));
+    const v = el.sub(yc).div(0.16).add(0.5);
+    const inside = step(0.0, v).mul(step(v, 1.0));
+    const tx = texture(V.scroll, vec2(fract(u), v.oneMinus()));
+    const shine = float(0.8).add(U.kick.mul(0.5));
+    return tx.rgb.mul(tx.a).mul(inside).mul(shine).mul(1.6).add(paletteAt(u.add(T.mul(0.1))).mul(tx.a).mul(inside).mul(0.3));
+  });
   // 21 Spectrum: the classic bar analyser round the horizon, with its reflection below.
   on(21, () => {
     const sb = azP.div(3.14159).mul(48.0), sbi = floor(sb);

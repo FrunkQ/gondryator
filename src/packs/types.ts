@@ -5,7 +5,7 @@
 import type { EventKind, Stem } from '../score/types';
 
 export type ThemeName = string;
-export type FxLookName = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel';
+export type FxLookName = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel' | 'crt';
 
 export interface PackLayer {
   id: string;

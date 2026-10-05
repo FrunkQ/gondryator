@@ -107,6 +107,7 @@ export const ELEMENTS: { name: string; group: Group }[] = [
   { name: 'fireflies', group: 'drums' },     // 39 fireflies drifting up on the hats
   { name: 'petal rain', group: 'pads' },     // 40 petals falling from every long note
   { name: 'glitterball', group: 'mix' },     // 41 the ball spins up in front of you and throws light round the room
+  { name: 'sine scroller', group: 'melody' }, // 42 the song's name in chrome letters, bouncing round the horizon
 ];
 const NE = ELEMENTS.length;
 /** The elements drawn as sprites (flowers, bubbles, starbursts, confetti, snowflakes). */
@@ -134,6 +135,18 @@ interface Scene {
   layers: [number, number, number, number];
   /** Shapes: sides, how many nested, spin speed, starriness. */
   poly: [number, number, number, number];
+  /**
+   * The outline of everything that pulses out from your gaze (bass rings, kick ring, tunnel):
+   * sides (0 = a circle), starriness, spin, wobble (lobes on a circle). So not every scene is
+   * concentric circles.
+   */
+  pulse: [number, number, number, number];
+  /**
+   * How the bass pulses: 0 rings from your gaze, 1 waveform lines rolling off the horizon (like an
+   * old Fairlight's waterfall display), 2 several circles round your gaze, 3 bars racing down a road
+   * towards you, 4 a swell over the whole sky, like a filter opening; then how many circles.
+   */
+  bassMode: [number, number];
   /** Video feedback: amount, zoom per frame, turn per frame, colour drift. */
   feedback: { amount: number; zoom: number; turn: number; hue: number };
   /** Deep kaleidoscope on the base pattern: levels (0..5), turn per level, stretch, slide. */
@@ -144,20 +157,69 @@ interface Scene {
   elements: number[];
 }
 
+/** Elements that read as a VU meter or concentric rings: picked less often (see freshest). */
+const RARE = new Set([2, 4, 8, 21, 30]);
+
+/** An outline for the pulses: a circle now and then, more often a polygon, a star or a wobbly blob. */
+function randomPulse(r: () => number): [number, number, number, number] {
+  const k = r();
+  if (k < 0.25) return [0, 0, 0, 0];                                         // circle
+  if (k < 0.55) return [3 + Math.floor(r() * 5), 0, (r() - 0.5) * 0.8, 0];   // polygon, turning
+  if (k < 0.8) return [4 + Math.floor(r() * 5), 0.6 + r() * 0.4, (r() - 0.5) * 0.6, 0]; // star
+  return [0, 0, (r() - 0.5) * 0.6, 2 + Math.floor(r() * 5)];                // blob with lobes
+}
+
+function randomBassMode(r: () => number): [number, number] {
+  const k = r();
+  return k < 0.2 ? [0, 1] : k < 0.4 ? [1, 1] : k < 0.6 ? [2, [2, 4, 6][Math.floor(r() * 3)]] : k < 0.8 ? [3, 1] : [4, 1];
+}
+
 /**
  * Showpieces for the climax, one per song. The glitterball (41) is one of four, so it stays a
  * treat; the rest pair a big backdrop with something that fires on the drums or the notes.
  */
+const OUTRUN = [24, 7, 8];
+/** The Amiga megademo: copper bars, a rotozoomer, a starfield and the song's name on a sine scroller. */
+const MEGADEMO = [42, 23, 36, 3];
 const CLIMAXES: number[][] = [
   [41],
-  [24, 32, 39],  // synthwave sun, lasers, fireflies
+  OUTRUN,        // the ultimate 80s: synthwave sun, neon grid, the horizon pulsing on the bass, CRT
   [31, 38, 18],  // galaxy overhead, comets, starbursts
   [16, 5, 40],   // deep fractal kaleidoscope, lightning, petal rain
   [26, 22, 19],  // julia set, checker tunnel, confetti
   [34, 30, 12],  // fire off the horizon, hex pulse, flowers
   [35, 23, 20],  // caustics, copper bars, snowflakes
   [41],
+  OUTRUN,
+  MEGADEMO,
+  MEGADEMO,
 ];
+
+/**
+ * The scroller's text: the song and the artist in fat chrome capitals, the way a demo greeted the
+ * world, on a strip that wraps round the horizon twice.
+ */
+function scrollerTexture(score: Score): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 4096; c.height = 160;
+  const g = c.getContext('2d')!;
+  const t = score.track;
+  const words = [t.title || 'The Gondryator', t.artist].filter(Boolean).join('  ·  ').toUpperCase();
+  const text = `★  ${words}  ★  ALL HAIL THE GREAT MICHEL GONDRY  ★  ${words}  ★  REMIX ME  ★  `;
+  let size = 120;
+  g.font = `900 ${size}px system-ui, sans-serif`;
+  while (g.measureText(text).width > c.width - 20 && size > 40) { size -= 4; g.font = `900 ${size}px system-ui, sans-serif`; }
+  g.textBaseline = 'middle';
+  const grad = g.createLinearGradient(0, 20, 0, 140);
+  grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.45, '#9fd8ff'); grad.addColorStop(0.5, '#1a2a6a'); grad.addColorStop(0.75, '#ff9adf'); grad.addColorStop(1, '#ffffff');
+  g.fillStyle = grad;
+  const w = g.measureText(text).width;
+  g.fillText(text, (c.width - w) / 2, 82);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
 /** Small, fast, seedable random numbers (mulberry32). */
 function rng(seed: number) {
@@ -263,6 +325,8 @@ export class Visualiser implements ShowDriver {
     pulse0: uniform(99), pulse1: uniform(99), pulse2: uniform(99), pulse3: uniform(99),
     boltAz: uniform(0), boltT: uniform(99), boltSeed: uniform(0),
     wave: null as unknown as THREE.DataTexture,
+    /** The sine scroller's text (element 42), drawn once per song. */
+    scroll: null as unknown as THREE.CanvasTexture,
     crash: uniform(0), rise: uniform(0), bright: uniform(0.3),
     layers: uniform(new THREE.Vector4()), poly: uniform(new THREE.Vector4(5, 2, 0.4, 0)), bands: uniform(new THREE.Vector3()),
     E0: uniform(new THREE.Vector4(1, 0, 0, 0)), E1: uniform(new THREE.Vector4()), E2: uniform(new THREE.Vector4()), E3: uniform(new THREE.Vector4()), E4: uniform(new THREE.Vector4()),
@@ -272,7 +336,7 @@ export class Visualiser implements ShowDriver {
     /** The glitterball: spin speed (radians/s), flash, and its tint. */
     glitter: uniform(new THREE.Vector2(0.6, 0)), glitterTint: uniform(new THREE.Vector3(0.35, 0.3, 0.5)),
     fold: uniform(new THREE.Vector4(0, 0.6, 1.3, 0.5)), frac: uniform(new THREE.Vector4(6, 1.2, 0.7, 0.5)),
-    kickT: uniform(99), pad: uniform(0), dim: uniform(0),
+    kickT: uniform(99), pad: uniform(0), dim: uniform(0), pulseShape: uniform(new THREE.Vector4()), bassMode: uniform(new THREE.Vector2()),
     arc: uniform(0.3), tension: uniform(0), release: uniform(0), releaseT: uniform(99), phase: uniform(0), journey: uniform(new THREE.Vector3(1, 0, 0)),
     notes: null as unknown as THREE.DataTexture,
   };
@@ -343,6 +407,7 @@ export class Visualiser implements ShowDriver {
     this.V.wave.needsUpdate = true;
     this.V.notes = new THREE.DataTexture(this.noteData, 16, 1, THREE.RGBAFormat);
     this.V.notes.needsUpdate = true;
+    this.V.scroll = scrollerTexture(score);
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(400, 128, 64), makeVisualiserMaterial(this.V));
     this.dome.frustumCulled = false;
     this.dome.renderOrder = -10;
@@ -405,7 +470,8 @@ export class Visualiser implements ShowDriver {
       };
     }
     const segChoices = [0, 0, 3, 4, 5, 6, 8];
-    const w = [r(), r() * 0.8, r() * 0.8];
+    // The tunnel (rings round your gaze) is a seasoning, not the main dish: in a third of the scenes, lightly.
+    const w = [r(), r() * 0.8, r() < 0.33 ? r() * 0.35 : 0];
     const sum = w[0] + w[1] + w[2] || 1;
     return {
       palette: Math.floor(r() * PALETTES.length),
@@ -415,6 +481,8 @@ export class Visualiser implements ShowDriver {
       layers: [0, 0, 0, r() < 0.3 ? 1 : 0],
       elements: [0],
       poly: [3 + Math.floor(r() * 6), Math.floor(r() * 5), (r() - 0.5) * 1.6, r() < 0.4 ? r() : 0],
+      pulse: randomPulse(r),
+      bassMode: randomBassMode(r),
       // Deep kaleidoscope in about half the scenes, sometimes absurdly deep.
       fold: [r() < 0.5 ? 0 : 1 + Math.floor(r() * r() * 5), 0.3 + r() * 1.2, 1.1 + r() * 0.5, 0.2 + r() * 0.9],
       frac: [[4, 5, 6, 8, 10, 12][Math.floor(r() * 6)], 0.9 + r() * 0.8, 0.55 + r() * 0.35, 0.3 + r() * 0.9],
@@ -437,6 +505,11 @@ export class Visualiser implements ShowDriver {
     this.V.shape.value.set(...sc.shape);
     this.V.mixes.value.set(...sc.mixes);
     this.V.layers.value.set(...sc.layers);
+    this.V.pulseShape.value.set(...(sc.pulse ?? [0, 0, 0, 0]));
+    this.V.bassMode.value.set(...(sc.bassMode ?? [0, 1]));
+    // ?bass=3 (or 2,4 for four circles) pins the bass style, for trying one out.
+    const pinBass = new URLSearchParams(location.search).get('bass')?.split(',').map(Number);
+    if (pinBass) this.V.bassMode.value.set(pinBass[0], pinBass[1] ?? 4);
     // ?viz=16,17 pins the elements (for trying one out); ?fb=0 turns the feedback trails off.
     const q = new URLSearchParams(location.search);
     const pinned = q.get('viz')?.split(',').map(Number).filter(n => n >= 0 && n < NE);
@@ -472,7 +545,18 @@ export class Visualiser implements ShowDriver {
         this.glitterDone = true;
         const big = (sec.section?.energy ?? 0.5) > 0.6;
         const pick = CLIMAXES[rng(this.seed ^ 0x9e3779b9)() * CLIMAXES.length | 0];
-        sc.elements = pick[0] === 41 ? (big ? [41, 32] : [41]) : big ? pick : pick.slice(0, 2);
+        sc.elements = pick[0] === 41 ? (big ? [41, 32] : [41]) : big || pick === OUTRUN || pick === MEGADEMO ? pick : pick.slice(0, 2);
+        // The 80s closer: the bass rolls off the horizon in waveform lines under the sun, in pink,
+        // sunset or ultraviolet, on an old tube, swirling, with trails.
+        if (pick === MEGADEMO) Object.assign(sc, { look: 'prism', layers: [0, 0, 0, 0], fold: [0, sc.fold[1], sc.fold[2], sc.fold[3]] });
+        if (pick === OUTRUN) {
+          const r = this.rand;
+          Object.assign(sc, {
+            bassMode: [1, 1], look: 'crt', palette: [2, 3, 10][Math.floor(r() * 3)],
+            shape: [sc.shape[0], 0.6 + r() * 1.2, sc.shape[2], sc.shape[3]],
+            feedback: { amount: 0.55, zoom: 1.006, turn: (r() - 0.5) * 0.01, hue: 0.04 },
+          });
+        }
       }
       if (sectionStart) this.patterns.set(key, { scene: sc, seen: 0 });
     }
@@ -531,6 +615,10 @@ export class Visualiser implements ShowDriver {
 
   /** Of these elements, one of the two shown least recently (so everything gets its turn). */
   private freshest(opts: { i: number }[]) {
+    // The meter-like elements (ribbons, kick tunnel, bass rings, spectrum, hex pulse) are easy to
+    // overdo: skip them more often than not when anything else will do.
+    const keep = opts.filter(o => !RARE.has(o.i) || this.rand() < 0.35);
+    if (keep.length) opts = keep;
     const byAge = opts.slice().sort((a, b) => this.lastUsed[a.i] - this.lastUsed[b.i] || a.i - b.i);
     return byAge[Math.min(byAge.length - 1, Math.floor(this.rand() * 2))].i;
   }
@@ -561,6 +649,8 @@ export class Visualiser implements ShowDriver {
         mixes: [cur.mixes[0], cur.mixes[1], cur.mixes[2], r() * 6],
         fold: [Math.max(0, Math.min(5, cur.fold[0] + (r() < 0.5 ? -1 : 1) * (1 + Math.floor(r() * 2)))), 0.3 + r() * 1.2, cur.fold[2], cur.fold[3]],
         poly: [3 + Math.floor(r() * 6), cur.poly[1], -cur.poly[2], r() < 0.4 ? r() : 0],
+        pulse: randomPulse(r),
+        bassMode: r() < 0.5 ? cur.bassMode : randomBassMode(r),
         look: r() < 0.5 ? cur.look : LOOKS[Math.floor(r() * LOOKS.length)],
       };
     }
@@ -649,7 +739,7 @@ export class Visualiser implements ShowDriver {
     this.V.E4.value.set(w[16], w[17], w[18], w[19]);
     this.V.E5.value.set(w[20], w[21], w[22], w[23]); this.V.E6.value.set(w[24], w[25], w[26], w[27]);
     this.V.E7.value.set(w[28], w[29], w[30], w[31]); this.V.E8.value.set(w[32], w[33], w[34], w[35]);
-    this.V.E9.value.set(w[36], w[37], w[38], w[39]); this.V.E10.value.set(w[40], w[41], 0, 0);
+    this.V.E9.value.set(w[36], w[37], w[38], w[39]); this.V.E10.value.set(w[40], w[41], w[42], 0);
     this.V.pulse0.value = s - this.bassTimes[0]; this.V.pulse1.value = s - this.bassTimes[1];
     this.V.pulse2.value = s - this.bassTimes[2]; this.V.pulse3.value = s - this.bassTimes[3];
     this.V.crash.value *= Math.exp(-dt / 0.22);
