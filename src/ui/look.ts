@@ -50,7 +50,12 @@ export class LookController implements GazeSource {
 
   private clampTarget() {
     const my = this.maxYaw * deg, mp = this.maxPitch * deg;
-    this.targetYaw = Math.max(-my, Math.min(my, this.targetYaw));
+    if (this.maxYaw >= 180) {
+      // Right round: no wall behind you. Keep the angles in -pi..pi, shifting the eased view and
+      // its history along with the target so the turn stays smooth across the seam.
+      const turn = this.targetYaw > Math.PI ? -2 * Math.PI : this.targetYaw < -Math.PI ? 2 * Math.PI : 0;
+      this.targetYaw += turn; this.yaw += turn; this.prevYaw += turn;
+    } else this.targetYaw = Math.max(-my, Math.min(my, this.targetYaw));
     this.targetPitch = Math.max(-mp, Math.min(mp, this.targetPitch));
   }
 
@@ -115,6 +120,7 @@ export class LookController implements GazeSource {
     // Where the viewer is heading, damped: people overshoot less than straight extrapolation.
     const p = this.targetYaw + this.yawVel * Math.min(ahead, 0.6) * 0.5;
     const m = this.maxYaw * deg;
+    if (this.maxYaw >= 180) return Math.atan2(Math.sin(p), Math.cos(p));
     return Math.max(-m, Math.min(m, p));
   }
 }
