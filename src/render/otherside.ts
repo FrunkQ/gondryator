@@ -94,6 +94,7 @@ export class OtherSide {
    * the ride starts and ends as itself.
    */
   private discoAt(s: number) {
+    if (this.pack.farTakeover === false) return false;
     if (this.discoAlways) return true;
     const sc = this.score;
     const { section: sec, index } = sectionAt(sc, s);
@@ -121,7 +122,7 @@ export class OtherSide {
   }
 
   /** Objects hidden until the train leaves for space (for shader warm-up). */
-  get hidden(): THREE.Object3D[] { return [this.space, this.floor, ...this.disco.meshes, ...(this.discoFloor ? [this.discoFloor] : [])]; }
+  get hidden(): THREE.Object3D[] { return [this.space, this.floor, ...(this.pack.farTakeover === false ? [] : [...this.disco.meshes, ...(this.discoFloor ? [this.discoFloor] : [])])]; }
 
   reset(s: number) { this.spawner.reset(s); this.disco.reset(s); }
 

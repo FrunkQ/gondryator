@@ -149,6 +149,12 @@ export interface RigSpec {
    * middle of the view.
    */
   hitAt?: 'entry' | 'centre';
+  /**
+   * A fairground track that rises and falls (the Halloween ride): each section of the song sets
+   * its own height between `low` and `high` metres, the track swoops there across the change, rolls
+   * over a hill each phrase, plunges on a drop, and in loud parts bobs on the beat (`bump`, metres).
+   */
+  coaster?: { low: number; high: number; bump?: number };
 }
 
 export interface Pack {
@@ -179,15 +185,17 @@ export interface Pack {
   /**
    * The card the ride waits at while the song is read: 'station-board' (a lineside shed with the
    * name board, a departures strip and a platform clock) or 'launch-screen' (a floating screen
-   * with a T-minus strip and a countdown dial). It stands in the start view (rig.startYaw and
+   * with a T-minus strip and a countdown dial) or 'ghost-gate' (a fairground ghost-train sign:
+   * a bulb-lit board on crooked posts, a skull and two pumpkins on top). It stands in the start view (rig.startYaw and
    * startPitch), so the ride rolls up and turns to face it.
    */
-  title: { template: 'station-board' | 'launch-screen'; stationPrefix?: string };
+  title: { template: 'station-board' | 'launch-screen' | 'ghost-gate'; stationPrefix?: string };
   /**
    * How the ride ends after the last note: 'terminus' (pull into a station with the end board)
-   * or 'arrival-screen' (drift up to a floating screen with the end card). Default 'terminus'.
+   * or 'arrival-screen' (drift up to a floating screen with the end card) or 'ghost-gate' (roll
+   * up to the ghost-train sign again, with the end card on it). Default 'terminus'.
    */
-  end?: { template: 'terminus' | 'arrival-screen' };
+  end?: { template: 'terminus' | 'arrival-screen' | 'ghost-gate' };
   /** Things that happen on structure: overpass at new sections, passing train in breakdowns. */
   sectionEvents?: { onNewSection?: string; onBreakdown?: string; /** How far out the breakdown convoy passes, m (default 4.3: the next track). */ breakdownDepth?: number };
   /** perform mode: the cast. Mapping rules send events to a troupe by its id (as `layer`). */
@@ -196,11 +204,25 @@ export interface Pack {
   stage?: { floor: string; ring: string[]; screen: string };
   /** Effects: a look per section (cycled), or forced for some section labels. */
   fx?: { cycle: FxLookName[]; bySection?: Partial<Record<string, FxLookName>> };
+  /**
+   * The colours the psychedelic paint, the vortex and the warp use, by name (render/shaders.ts
+   * PALETTES: 'embers', 'ocean', 'pumpkin', 'blood', 'toxic', 'cyan-magenta'...). One per section,
+   * a returning part gets its colours back. Default: all of the general ones.
+   */
+  palettes?: string[];
   /** Optional glTF models: name -> url. */
   assets?: Record<string, string>;
-  /** What you are riding: 'train' (ground, track, carriage), 'ship' (space all round, an open canopy) or 'void' (nothing: the visualiser draws the whole world). */
-  vehicle?: 'train' | 'ship' | 'void';
+  /** What you are riding: 'train' (ground, track, carriage), 'ship' (space all round, an open canopy), 'cart' (a little open fairground car on a track that rises and falls: rig.coaster) or 'void' (nothing: the visualiser draws the whole world). */
+  vehicle?: 'train' | 'ship' | 'void' | 'cart';
   /** The window across the aisle: another pack's id, or 'trippy' for a psychedelic mirror of this one. */
   otherSide?: string;
+  /**
+   * The weather and the night: `rain` (a colour: rain of that colour falls in front of the main
+   * window, heavier in loud parts), `lightning` (0..1, how often strikes land on big hits, drops and
+   * section changes, on both sides), `pulse` (a colour the sky and the fog throb towards on every kick).
+   */
+  storm?: { rain?: string; lightning?: number; pulse?: string };
+  /** The far window's disco takeover on breaks and drops (render/otherside.ts). Default true. */
+  farTakeover?: boolean;
   window: { width: number; height: number; bottom: number; pillar: number; distance: number; frame: string; wall: string };
 }

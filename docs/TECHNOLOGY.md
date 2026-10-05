@@ -193,12 +193,13 @@ flowchart LR
 flowchart TB
     S[(score)] --> T[🚆 Star Guitar train<br/>main window: the homage<br/>other window: invented worlds]
     S --> SH[🚀 Starship<br/>open cockpit, space on one side,<br/>a space reef and a crystal canyon on the other]
+    S --> G[🎃 Ghost train<br/>an open fairground cart that climbs and plunges,<br/>hell on one side, Halloween on the other]
     S --> V[✨ The non-Gondry view<br/>no vehicle: a sphere of light<br/>all round you]
     V -. breaks and drops, far side only .-> T
     V -. breaks and drops, far side only .-> SH
 ```
 
-The train and the starship are scheduled scenery. The non-Gondry view is a different kind of show, a director picking effects for each part of the song. It has its own guide: [VISUALISER.md](VISUALISER.md).
+The train, the starship and the ghost train are scheduled scenery. The ghost train also moves up and down: its track's height follows the song's sections, plunging on the drop, and a storm (blood rain, lightning on the big hits, the sky throbbing on the kick) runs over both sides. The non-Gondry view is a different kind of show, a director picking effects for each part of the song. It has its own guide: [VISUALISER.md](VISUALISER.md).
 
 The two shows feed each other. The far window stays the ride (Provence and Cosmos on the train), but on breakdowns and drops **the disco** takes over that whole side: the non-Gondry show's backdrops on the sky and the ground, with the scenery still passing in trippy paint. It never does in the intro or the last stretch (`?side=disco` holds it on). The starship's other side flies through its own invented worlds, a reef adrift in space and a crystal canyon, and the disco takes over there on breaks and drops too. It waits for launch beside a floating screen with a T-minus countdown, and turns up its own rare finds: a derelict, a listening post, a solar sail, a space whale. The main window stays the homage, but now and then it turns up a **rare find**: a windmill, a fairground big wheel, a ruined abbey, an observatory, a glasshouse, a dovecote or a radio mast. These are seeded by the song, so a song always shows its own (`?rare` makes every building one, to look at them). The main window hears the sound pass and the moments too, in ways that stay photographic: animals in the track startle the starlings, an impact or a cheering crowd sends up a firework, and a drop sends up a volley.
 

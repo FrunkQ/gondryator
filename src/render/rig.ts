@@ -8,7 +8,7 @@
 import * as THREE from 'three/webgpu';
 import type { RigSpec } from '../packs/types';
 import type { Score } from '../score/types';
-import { sectionAt } from '../score/types';
+import { sectionAt, gridAt } from '../score/types';
 
 export interface CameraRig {
   readonly spec: RigSpec;
@@ -38,9 +38,12 @@ export interface CameraRig {
   /** Show time at which the camera reaches travel position x (for themed ground and ambient). */
   timeAtTravel(x: number): number;
   speedAt(s: number): number;
+  /** Height of the track above the ground at show time s (a coaster ride; 0 otherwise). */
+  heightAt?(s: number): number;
 }
 
 const DT = 0.05;
+const ZAXIS = new THREE.Vector3(0, 0, 1);
 export const MAX_LEAD = 9.5;
 
 /** Steady sideways motion past a window (Star Guitar). Travel is +x, the window faces -z. */
@@ -170,8 +173,69 @@ export class LateralRail implements CameraRig {
   }
 
   pose(s: number, pos: THREE.Vector3, quat: THREE.Quaternion) {
-    pos.set(this.travel(s), 0, 0);
+    pos.set(this.travel(s), this.heightAt(s), 0);
     quat.identity(); // camera default looks down -z: straight out of the window
+    if (this.spec.coaster) {
+      // The cart tips with the slope (nose up on a climb): the horizon tilts, as on a real ride.
+      const dh = this.heightAt(s + 0.1) - this.heightAt(s - 0.1);
+      const dx = Math.max(1, this.travel(s + 0.1) - this.travel(s - 0.1));
+      quat.setFromAxisAngle(ZAXIS, THREE.MathUtils.clamp(Math.atan2(dh, dx) * 0.7, -0.3, 0.3));
+    }
+  }
+
+  /**
+   * The coaster's track height at show time s (rig.coaster; 0 for a level line). Each section has
+   * its own height, picked from its energy and its place in the song; the track swoops there across
+   * the change (starting a little before it, so it lands on it), rolls over a hill each phrase,
+   * plunges on a drop and, in the loud parts, bobs on every beat. Only final sections are read, so
+   * the track ahead never changes under the cart.
+   */
+  heightAt(s: number): number {
+    const c = this.spec.coaster;
+    if (!c) return 0;
+    const sc = this.score;
+    if (!this.going || s < 0 || !sc) return c.low;
+    const D = sc.track.durationSec;
+    const span = c.high - c.low;
+    const level = (i: number) => {
+      const sec = sc.sections[i];
+      if (!sec || sec.label === 'intro' || sec.label === 'outro') return c.low;
+      const h = ((i * 2654435761) >>> 0) / 4294967296; // a seeded swing, so neighbours differ
+      return c.low + span * THREE.MathUtils.clamp(0.25 + 0.55 * sec.energy + 0.35 * (h - 0.5) + (sec.label === 'breakdown' ? -0.3 : 0), 0.08, 1);
+    };
+    const t = Math.min(s, Math.max(0, sc.frontierSec));
+    const { index } = sectionAt(sc, t);
+    let h = level(index);
+    // Swoop from the last section's height, over 3 s around the change.
+    const sec = sc.sections[index];
+    if (sec && index > 0) {
+      const u = THREE.MathUtils.clamp((s - (sec.t - 1.5)) / 3, 0, 1);
+      h = level(index - 1) + (h - level(index - 1)) * u * u * (3 - 2 * u);
+    }
+    // ...and towards the next one, if it starts within 1.5 s.
+    const next = sc.sections[index + 1];
+    if (next && next.t <= sc.frontierSec && next.t - s < 1.5) {
+      const u = THREE.MathUtils.clamp((s - (next.t - 1.5)) / 3, 0, 1);
+      h = h + (level(index + 1) - h) * u * u * (3 - 2 * u);
+    }
+    const g = gridAt(sc, t);
+    const e = sec?.energy ?? 0.5;
+    if (g) {
+      // A hill over each phrase (smaller near the ground), and a bob on the beat when it's loud.
+      h += Math.sin(g.phraseFrac * Math.PI * 2) * Math.min(span * 0.18, (h - 0.3) * 0.5);
+      if (e > 0.62 && c.bump) h += c.bump * (e - 0.62) / 0.38 * Math.sin(g.beatFrac * Math.PI) ** 2;
+    }
+    // The plunge: down towards the ground over the second before a drop, back up over the next four.
+    for (const m of sc.moments ?? []) {
+      if (m.t > s + 1.2) break;
+      if (m.kind !== 'drop' || m.t > sc.frontierSec) continue;
+      const d = s - m.t;
+      const k = d < 0 ? 1 - (-d / 1.2) ** 2 : d < 4 ? (1 - d / 4) ** 2 : 0;
+      if (k > 0) h = h + (Math.min(h, c.low * 0.6) - h) * k;
+    }
+    // Back down to the station after the last note.
+    if (s > D - 8) h += (c.low - h) * THREE.MathUtils.clamp((s - (D - 8)) / 8, 0, 1);
+    return Math.max(0.4, h);
   }
 
   placeFor(t: number, depth: number, yaw: number, out: THREE.Vector3) {

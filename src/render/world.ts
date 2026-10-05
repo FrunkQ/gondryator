@@ -18,6 +18,8 @@ export interface StationInfo { name: string; line2: string; line3?: string; art?
 const TILE = 300;
 const tmpPos = new THREE.Vector3();
 const tmpQuat = new THREE.Quaternion();
+const ZAX = new THREE.Vector3(0, 0, 1);
+const FLASH = new THREE.Color(0xd8d0ff);
 
 export class World {
   renderer!: THREE.WebGPURenderer;
@@ -59,12 +61,15 @@ export class World {
   readonly ship: boolean;
   /** Nothing at all: the visualiser draws the whole world. */
   readonly void: boolean;
+  /** A little open fairground cart on a track that rises and falls (rig.coaster). */
+  readonly cart: boolean;
   private shipSky: THREE.Mesh | null = null;
 
   constructor(private pack: Pack) {
     this.mode = pack.rig.type === 'lateral-rail' ? 'train' : 'stage';
     this.ship = pack.vehicle === 'ship';
     this.void = pack.vehicle === 'void';
+    this.cart = pack.vehicle === 'cart';
     this.camera = new THREE.PerspectiveCamera(pack.rig.fov, 16 / 9, 0.05, 4000);
     this.baseFov = pack.rig.fov;
     this.camera.rotation.order = 'YXZ';
@@ -93,7 +98,7 @@ export class World {
     sc2.left = -70; sc2.right = 70; sc2.top = 70; sc2.bottom = -70; sc2.near = 1; sc2.far = 500;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.04;
-    if (this.mode === 'train' && FLAGS.physSky && !this.ship) {
+    if (this.mode === 'train' && FLAGS.physSky && !this.ship && !this.cart) {
       this.phys = new SkyMesh();
       this.phys.scale.setScalar(6000);
       this.phys.frustumCulled = false;
@@ -119,6 +124,11 @@ export class World {
         this.sky.visible = false;
         sc.background = new THREE.Color(0x000000);
         this.buildCockpit();
+      } else if (this.cart) {
+        this.buildGround();
+        this.buildGrass();
+        this.buildCoaster();
+        this.buildCart();
       } else {
         this.buildGround();
         this.buildGrass();
@@ -186,6 +196,7 @@ export class World {
     const fogA = a.fog ?? 0.0014, fogB = b.fog ?? fogA;
     this.fog.density = fogA + (fogB - fogA) * f;
     this.fog.color.copy(hor);
+    this.baseFog.copy(hor);
     if (!this.ship) (this.scene.background as THREE.Color).copy(hor);
 
     // Sun moves from the right (ahead) in the morning, over, to behind in the evening.
@@ -224,7 +235,8 @@ export class World {
     this.sun.intensity = inten * 1.35;
     this.hemi.color.copy(sky).lerp(new THREE.Color(0xffffff), 0.35);
     this.hemi.groundColor.set(0xa89f80).lerp(sunC, 0.15);
-    this.hemi.intensity = this.ship ? 0.45 : this.phys ? 0.3 + 0.2 * (inten / 2.3) : 1.3 + 0.4 * (inten / 2.3);
+    this.hemi.intensity = this.ship ? 0.45 : this.cart ? 0.75 : this.phys ? 0.3 + 0.2 * (inten / 2.3) : 1.3 + 0.4 * (inten / 2.3);
+    this.baseHemi = this.hemi.intensity;
     (this.sunDisc.material as THREE.MeshBasicMaterial).color.copy(sunC).lerp(new THREE.Color(0xffffff), 0.5);
     this.sunDisc.userData.dir = dir;
 
@@ -308,7 +320,7 @@ export class World {
   private buildGrass() {
     const card = (rot: number) => new THREE.PlaneGeometry(0.9, 0.5, 1, 1).translate(0, 0.25, 0).rotateY(rot);
     const geo = mergeGeometries([card(0), card(Math.PI / 3), card(-Math.PI / 3)], false)!;
-    const mat = makeGrassMaterial();
+    const mat = makeGrassMaterial(this.cart ? 0.4 : 1);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
     for (let t = 0; t < 3; t++) {
       const N = 1400;
@@ -438,6 +450,116 @@ export class World {
   }
 
 
+  // ------------------------------------------------------------------ fairground cart
+  /**
+   * A little open car for two, like a ghost-train or a wild-mouse car: low sides you can see over,
+   * a padded lap bar, a bench, a carved nose with a skull and a lantern on a crooked pole. No roof
+   * and no glass: the night is right there. Colours from pack.window (frame = trim, wall = body).
+   */
+  private buildCart() {
+    const W = this.pack.window;
+    const lit = (c: THREE.ColorRepresentation, e = 0.25) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.2, emissive: new THREE.Color(c).multiplyScalar(e) });
+    const body = lit(W.wall), trim = lit(W.frame, 0.4), dark = lit(0x221a20, 0.15), bone = lit(0xd8cfb8, 0.3);
+    const glow = new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false });
+    const red = new THREE.MeshBasicMaterial({ color: 0xff2a10, toneMapped: false });
+    const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const add = (g: THREE.BufferGeometry, m: THREE.Material) => { if (!parts.has(m)) parts.set(m, []); parts.get(m)!.push(g); };
+    const L = 2.3, Z = 0.78, floorY = 0.28, sideTop = 0.86;
+    // Chassis and wheels on the rails.
+    add(new THREE.BoxGeometry(L, 0.18, 1.2).translate(0, 0.14, 0), dark);
+    for (const sx of [-0.75, 0.75]) for (const sz of [-0.45, 0.45]) add(new THREE.CylinderGeometry(0.14, 0.14, 0.1, 12).rotateX(Math.PI / 2).translate(sx, 0.08, sz), dark);
+    add(new THREE.BoxGeometry(L, 0.06, 2 * Z).translate(0, floorY, 0), dark);
+    // Low sides, both windows, with a padded trim rail along the top.
+    for (const sz of [-1, 1]) {
+      add(new THREE.BoxGeometry(L, sideTop - floorY, 0.07).translate(0, (sideTop + floorY) / 2, sz * Z), body);
+      add(new THREE.CylinderGeometry(0.06, 0.06, L, 8).rotateZ(Math.PI / 2).translate(0, sideTop + 0.03, sz * Z), trim);
+    }
+    // The nose (ahead, +x) curls up; the tail is a low back.
+    add(new THREE.BoxGeometry(0.1, 0.95, 2 * Z).translate(L / 2, floorY + 0.47, 0), body);
+    add(new THREE.CylinderGeometry(0.35, 0.35, 2 * Z, 12, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(-Math.PI / 2).translate(L / 2, floorY + 0.95, 0), trim);
+    add(new THREE.BoxGeometry(0.1, 0.7, 2 * Z).translate(-L / 2, floorY + 0.35, 0), body);
+    // A skull on the nose, with glowing eyes.
+    add(new THREE.SphereGeometry(0.2, 12, 8).scale(1, 0.95, 1.05).translate(L / 2 + 0.12, floorY + 1.3, 0), bone);
+    add(new THREE.BoxGeometry(0.14, 0.1, 0.22).translate(L / 2 + 0.16, floorY + 1.12, 0), bone);
+    for (const ez of [-0.07, 0.07]) add(new THREE.SphereGeometry(0.045, 8, 6).translate(L / 2 + 0.2, floorY + 1.33, ez), red);
+    // The bench, low enough to see over when you turn round to the other window.
+    add(new THREE.BoxGeometry(1.5, 0.12, 0.5).translate(0, 0.62, 0.22), trim);
+    add(new THREE.BoxGeometry(1.5, 0.4, 0.08).translate(0, 0.86, 0.5).rotateX(0), trim);
+    // The lap bar.
+    add(new THREE.CylinderGeometry(0.045, 0.045, 1.5, 10).rotateZ(Math.PI / 2).translate(0, 0.98, -0.42), trim);
+    for (const sx of [-0.75, 0.75]) add(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 8).translate(sx, 0.63, -0.42), dark);
+    // A lantern on a crooked pole at the front corner.
+    add(new THREE.CylinderGeometry(0.025, 0.035, 1.3, 6).rotateZ(-0.08).translate(L / 2 - 0.15, floorY + 0.65 + 0.5, Z - 0.1), dark);
+    add(new THREE.BoxGeometry(0.16, 0.22, 0.16).translate(L / 2 - 0.06, floorY + 1.75, Z - 0.1), glow);
+    // Little bulbs along both sides.
+    for (const sz of [-1, 1]) for (let k = 0; k < 7; k++) add(new THREE.SphereGeometry(0.03, 6, 4).translate(-L / 2 + 0.2 + k * (L - 0.4) / 6, sideTop - 0.08, sz * (Z + 0.04)), glow);
+    const cart = new THREE.Group();
+    for (const [m, gs] of parts) cart.add(new THREE.Mesh(mergeGeometries(gs, false)!, m));
+    this.train.add(cart);
+  }
+
+  /** The coaster track: rails, sleepers and trestles, rebuilt under and ahead of the cart each frame. */
+  private coaster: { rails: THREE.InstancedMesh; ties: THREE.InstancedMesh; posts: THREE.InstancedMesh } | null = null;
+  private static readonly SEG = 1.2;
+  private static readonly NSEG = 110;
+  private buildCoaster() {
+    const iron = new THREE.MeshStandardMaterial({ color: 0x3a3236, roughness: 0.45, metalness: 0.7, emissive: 0x120608 });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x2c2420, roughness: 0.9, emissive: 0x0a0605 });
+    const N = World.NSEG;
+    const rails = new THREE.InstancedMesh(new THREE.BoxGeometry(World.SEG + 0.02, 0.09, 0.08), iron, 2 * N);
+    const ties = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.07, 1.25), wood, N);
+    const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 1, 0.2).translate(0, 0.5, 0), wood, N);
+    for (const m of [rails, ties, posts]) { m.frustumCulled = false; this.scene.add(m); }
+    this.coaster = { rails, ties, posts };
+  }
+  private updateCoaster(rig: CameraRig, trainX: number) {
+    const c = this.coaster;
+    if (!c || !rig.heightAt) return;
+    const S = World.SEG, N = World.NSEG;
+    const H = (x: number) => rig.heightAt!(rig.timeAtTravel(x));
+    const k0 = Math.floor((trainX - 45) / S);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1);
+    let np = 0;
+    let h0 = H(k0 * S);
+    for (let i = 0; i < N; i++) {
+      const xa = (k0 + i) * S, h1 = H(xa + S);
+      const ang = Math.atan2(h1 - h0, S);
+      q.setFromAxisAngle(ZAX, ang);
+      const xm = xa + S / 2, hm = (h0 + h1) / 2 - 0.06;
+      sc.set(1 / Math.cos(ang), 1, 1);
+      for (const [j, z] of [[0, -0.45], [1, 0.45]] as const) c.rails.setMatrixAt(2 * i + j, m4.compose(p.set(xm, hm, z), q, sc));
+      sc.set(1, 1, 1);
+      c.ties.setMatrixAt(i, m4.compose(p.set(xa, h0 - 0.12, 0), q, sc));
+      // A trestle every few sleepers, down to the ground.
+      if ((k0 + i) % 4 === 0 && h0 > 0.5) {
+        q.identity();
+        c.posts.setMatrixAt(np++, m4.compose(p.set(xa, 0, 0), q, sc.set(1, h0 - 0.15, 1)));
+        sc.set(1, 1, 1);
+      }
+      h0 = h1;
+    }
+    c.posts.count = np;
+    c.rails.instanceMatrix.needsUpdate = c.ties.instanceMatrix.needsUpdate = c.posts.instanceMatrix.needsUpdate = true;
+  }
+
+  // ------------------------------------------------------------------ storm (render/storm.ts drives it)
+  private baseFog = new THREE.Color();
+  private baseHemi = 1;
+  private stormCol = new THREE.Color();
+  /**
+   * Lightning and the pulse: `flash` 0..1 lights the sky, the fog and every surface for a moment;
+   * `pulse` 0..1 throbs the sky and the fog towards `colour` (the beat, the blood).
+   */
+  setStorm(flash: number, pulse: number, colour: THREE.Color) {
+    const m = this.sky.material as THREE.MeshBasicMaterial;
+    m.color.setRGB(1, 1, 1).lerp(colour, Math.min(1, pulse * 0.7)).multiplyScalar(1 + pulse * 0.6 + flash * 3);
+    this.stormCol.copy(this.baseFog).lerp(colour, Math.min(1, pulse * 0.55));
+    this.stormCol.lerp(FLASH, Math.min(1, flash * 0.7));
+    this.fog.color.copy(this.stormCol);
+    if (!this.ship) (this.scene.background as THREE.Color).copy(this.stormCol);
+    this.hemi.intensity = this.baseHemi * (1 + pulse * 0.35 + flash * 5);
+  }
+
   // ------------------------------------------------------------------ starship cockpit
   /**
    * An open canopy: one sweep of glass from below the console on the main side, over your head,
@@ -499,7 +621,10 @@ export class World {
     const canopyMat = new THREE.MeshStandardMaterial({ color: 0x8d9497, emissive: 0x2a2d2f });
     // (A launch-screen ride has no platforms: its landing card floats too.)
     const screen = opts.end ? this.pack.end?.template === 'arrival-screen' : this.launch;
+    // (A ghost-gate ride has no platforms either: every card is the fairground sign.)
+    const gate = !screen && this.spooky && (!opts.end || this.pack.end?.template === 'ghost-gate');
     if (screen) this.launchScreen(grp, World.LAUNCH_Z);
+    else if (gate) { this.ghostGate(grp, -8.3, !!opts.end); canopyMat.color.set(0x1a1016); canopyMat.emissive.set(0x0a0408); }
     else if (!opts.trackside) this.platform(grp, canopyMat);
     else {
       // The title card: a lineside goods shed, its name board fixed to the wall facing the line.
@@ -515,13 +640,85 @@ export class World {
     }
     // The name board is fixed flat to a wall: the shed's, or the station building's (on the
     // starship's launch, the face of a floating screen).
-    this.boardOnWall(grp, info, opts, screen ? new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.35, metalness: 0.8 }) : canopyMat, screen ? World.LAUNCH_Z + 0.1 : opts.trackside ? -8.3 : -11.5);
+    this.boardOnWall(grp, info, gate ? { ...opts, trackside: !opts.end } : opts, screen ? new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.35, metalness: 0.8 }) : canopyMat, screen ? World.LAUNCH_Z + 0.1 : gate || opts.trackside ? -8.3 : -11.5);
     this.stations.add(grp);
     return grp;
   }
 
   /** The title card is the floating launch screen (pack.title.template), not a station board. */
   private get launch() { return this.pack.title.template === 'launch-screen'; }
+  /** The title card is the fairground ghost-train sign. */
+  private get spooky() { return this.pack.title.template === 'ghost-gate'; }
+  /** How high the ride waits above the ground (a coaster's station height). */
+  private get lift() { return this.pack.rig.coaster?.low ?? 0; }
+
+  /**
+   * The ghost train's sign: a tall black fascia on two crooked posts, the name board on its face,
+   * chaser bulbs round the edge (they run in update()), a skull on top between two jack-o'-lanterns,
+   * and a tattered bunting of pennants. The ride waits beside it, lap bar down.
+   */
+  private ghostGate(grp: THREE.Group, z: number, end: boolean) {
+    const eye = this.pack.rig.eyeHeight + this.lift;
+    const cy = eye + (end ? 1.3 : 0.35) + 0.5;
+    const W = 13.5, H = end ? 7 : 6.2;
+    const wood = new THREE.MeshStandardMaterial({ color: 0x2a1c22, roughness: 0.9, emissive: 0x0c0508 });
+    const paint = new THREE.MeshStandardMaterial({ color: 0x3a1430, roughness: 0.7, emissive: 0x12040e });
+    const bone = new THREE.MeshStandardMaterial({ color: 0xe0d6bc, roughness: 0.6, emissive: 0x2a2620 });
+    const orange = new THREE.MeshStandardMaterial({ color: 0xe0661a, roughness: 0.6, emissive: 0x401400 });
+    const lamp = (c: number) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
+    const fascia = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.4), paint);
+    fascia.position.set(0.7, cy, z - 0.3);
+    grp.add(fascia);
+    for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.45, cy + H / 2 + 1, 0.45), wood);
+      post.position.set(0.7 + sx * (W / 2 + 0.1), (cy + H / 2 + 1) / 2, z - 0.3);
+      post.rotation.z = sx * 0.035;
+      grp.add(post);
+      // A jack-o'-lantern on each post top.
+      const pk = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 10).scale(1.2, 0.9, 1.2), orange);
+      pk.position.set(post.position.x, cy + H / 2 + 1.6, z - 0.3);
+      grp.add(pk);
+      for (const ex of [-0.28, 0.28]) {
+        const e = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.22, 3), lamp(0xffc040));
+        e.position.set(pk.position.x + ex, pk.position.y + 0.15, z - 0.3 + 0.88);
+        e.rotation.z = Math.PI;
+        grp.add(e);
+      }
+      const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.05), lamp(0xffc040));
+      mouth.position.set(pk.position.x, pk.position.y - 0.25, z - 0.3 + 0.9);
+      grp.add(mouth);
+    }
+    // The skull on top, eyes lit red.
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(1.1, 18, 12).scale(1, 0.95, 0.9), bone);
+    skull.position.set(0.7, cy + H / 2 + 1.1, z - 0.2);
+    grp.add(skull);
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.45, 0.8), bone);
+    jaw.position.set(0.7, cy + H / 2 + 0.25, z - 0.1);
+    grp.add(jaw);
+    for (const ex of [-0.4, 0.4]) {
+      const eye_ = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), lamp(0xff2a10));
+      eye_.position.set(0.7 + ex, cy + H / 2 + 1.15, z + 0.55);
+      grp.add(eye_);
+    }
+    // Chaser bulbs round the edge of the fascia.
+    const per = 2 * (W + H), n = 56;
+    for (let i = 0; i < n; i++) {
+      let d = (i / n) * per, x: number, y: number;
+      if (d < W) { x = -W / 2 + d; y = H / 2; } else if ((d -= W) < H) { x = W / 2; y = H / 2 - d; } else if ((d -= H) < W) { x = W / 2 - d; y = -H / 2; } else { d -= W; x = -W / 2; y = -H / 2 + d; }
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), lamp(i % 2 ? 0xffb030 : 0xff5a20));
+      b.position.set(0.7 + x * 0.97, cy + y * 0.96, z - 0.05);
+      b.userData.chase = i;
+      this.blinkers.push(b);
+      grp.add(b);
+    }
+    // Tattered pennants strung from post to post above the sign.
+    for (let i = 0; i < 14; i++) {
+      const u = i / 13, x = 0.7 - W / 2 + u * W, y = cy + H / 2 + 0.6 - Math.sin(u * Math.PI) * 0.5;
+      const flag = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.6, 3).rotateZ(Math.PI), lamp(i % 3 === 0 ? 0x5a1a70 : i % 3 === 1 ? 0xd05010 : 0x1a1a1a));
+      flag.position.set(x, y - 0.3, z + 0.05);
+      grp.add(flag);
+    }
+  }
 
   /** Floating things on the launch (the screen): they bob and sway gently in update(). */
   private floaters: { o: THREE.Object3D; y: number; ph: number }[] = [];
@@ -610,7 +807,7 @@ export class World {
     const tex = this.boardTexture(info, !!opts.end);
     const bw = opts.end ? 7.4 : opts.trackside ? 7.2 : 6.4, bh = bw * (tex.image.height / tex.image.width);
     const board = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), new THREE.MeshBasicMaterial({ map: tex, fog: false, toneMapped: false }));
-    const cy = this.pack.rig.eyeHeight + (opts.trackside ? 0.35 : 1.3);
+    const cy = this.pack.rig.eyeHeight + this.lift + (opts.trackside ? 0.35 : 1.3);
     board.position.set(0, cy, z);
     grp.add(board);
     const back = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.12, bh + 0.12, 0.08), canopyMat);
@@ -698,12 +895,17 @@ export class World {
     g.fillRect(0, 0, c.width, c.height);
     g.font = `700 ${Math.round(c.height * 0.5)}px ui-monospace, "Courier New", monospace`;
     g.textBaseline = 'middle';
-    g.fillStyle = this.launch ? '#5ff0ff' : '#ffb22e';
-    g.shadowColor = this.launch ? '#00c8ff' : '#ff9a00'; g.shadowBlur = 14;
+    g.fillStyle = this.launch ? '#5ff0ff' : this.spooky ? '#ff6a1a' : '#ffb22e';
+    g.shadowColor = this.launch ? '#00c8ff' : this.spooky ? '#ff2a00' : '#ff9a00'; g.shadowBlur = 14;
     g.textAlign = 'left';
-    g.fillText(this.launch ? 'LAUNCH' : 'PLATFORM 1', 40, c.height / 2);
+    g.fillText(this.launch ? 'LAUNCH' : this.spooky ? 'GHOST TRAIN' : 'PLATFORM 1', 40, c.height / 2);
     g.textAlign = 'right';
-    g.fillText(this.launch ? launchText(text, this.countdown) : text.toUpperCase(), c.width - 40, c.height / 2);
+    const label = this.launch ? 'LAUNCH' : this.spooky ? 'GHOST TRAIN' : 'PLATFORM 1';
+    const room = c.width - 120 - g.measureText(label).width;
+    const words = this.launch ? launchText(text, this.countdown) : this.spooky ? spookyText(text, this.countdown) : text.toUpperCase();
+    let fs = Math.round(c.height * 0.5);
+    while (g.measureText(words).width > room && fs > 16) { fs -= 2; g.font = `700 ${fs}px ui-monospace, "Courier New", monospace`; }
+    g.fillText(this.launch ? launchText(text, this.countdown) : this.spooky ? spookyText(text, this.countdown) : text.toUpperCase(), c.width - 40, c.height / 2);
     g.shadowBlur = 0;
     // The dot-matrix grain.
     g.fillStyle = 'rgba(0,0,0,0.35)';
@@ -725,10 +927,11 @@ export class World {
     const g = c.getContext('2d')!, r = c.width / 2;
     g.setTransform(1, 0, 0, 1, 0, 0);
     if (this.launch) { this.drawDial(g, r); this.clockTex.needsUpdate = true; return; }
-    g.fillStyle = '#f4f1e8';
+    const ink = this.spooky ? '#ff8a2a' : '#1b1d20';
+    g.fillStyle = this.spooky ? '#140a10' : '#f4f1e8';
     g.fillRect(0, 0, c.width, c.height);
     g.translate(r, r);
-    g.fillStyle = '#1b1d20';
+    g.fillStyle = ink;
     for (let i = 0; i < 60; i++) {
       g.save(); g.rotate((i / 60) * Math.PI * 2);
       if (i % 5 === 0) g.fillRect(-4, -r + 10, 8, 26); else g.fillRect(-1.5, -r + 10, 3, 9);
@@ -749,8 +952,8 @@ export class World {
       g.save(); g.rotate(a); g.fillStyle = col; g.fillRect(-w / 2, -len, w, len + 18); g.restore();
     };
     const m = now.getMinutes() + sec / 60, h = (now.getHours() % 12) + m / 60;
-    hand((h / 12) * Math.PI * 2, r * 0.5, 12, '#1b1d20');
-    hand((m / 60) * Math.PI * 2, r * 0.78, 8, '#1b1d20');
+    hand((h / 12) * Math.PI * 2, r * 0.5, 12, ink);
+    hand((m / 60) * Math.PI * 2, r * 0.78, 8, ink);
     hand((sec / 60) * Math.PI * 2, r * 0.82, 3, '#c8241d');
     g.beginPath(); g.arc(0, 0, 9, 0, Math.PI * 2); g.fillStyle = '#c8241d'; g.fill();
     this.clockTex.needsUpdate = true;
@@ -787,23 +990,25 @@ export class World {
     const c = document.createElement('canvas');
     c.width = 1400; c.height = end ? 620 : 420;
     const g = c.getContext('2d')!;
-    g.fillStyle = this.launch ? '#06121f' : '#1f3b5a';
+    g.fillStyle = this.launch ? '#06121f' : this.spooky ? '#140810' : '#1f3b5a';
     g.fillRect(0, 0, c.width, c.height);
+    if (this.spooky) { g.shadowColor = '#ff3a00'; g.shadowBlur = 22; }
     if (this.launch) {
       // A screen, not a sign: faint scanlines and a cyan glow.
       g.fillStyle = 'rgba(95,240,255,0.06)';
       for (let y = 0; y < c.height; y += 8) g.fillRect(0, y, c.width, 3);
       g.shadowColor = '#5ff0ff'; g.shadowBlur = 18;
     }
-    g.strokeStyle = this.launch ? '#5ff0ff' : '#f2efe6';
+    g.strokeStyle = this.launch ? '#5ff0ff' : this.spooky ? '#ff7a1a' : '#f2efe6';
     g.lineWidth = 12;
     g.strokeRect(22, 22, c.width - 44, c.height - 44);
-    g.fillStyle = this.launch ? '#dffcff' : '#f2efe6';
+    g.fillStyle = this.launch ? '#dffcff' : this.spooky ? '#ffd27a' : '#f2efe6';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     const fit = (text: string, size: number, maxW: number, weight = '700') => {
       let s = size;
-      do { g.font = `${weight} ${s}px "Helvetica Neue", Arial, sans-serif`; s -= 4; } while (g.measureText(text).width > maxW && s > 20);
+      const face = this.spooky ? 'Georgia, "Times New Roman", serif' : '"Helvetica Neue", Arial, sans-serif';
+      do { g.font = `${this.spooky && weight === '700' ? 'italic 700' : weight} ${s}px ${face}`; s -= 4; } while (g.measureText(text).width > maxW && s > 20);
     };
     if (!end) {
       fit(info.name.toUpperCase(), 150, c.width - 120);
@@ -843,11 +1048,12 @@ export class World {
       for (const f of this.floaters) { f.o.position.y = Math.sin(t * 0.9 + f.ph) * 0.18; f.o.rotation.z = Math.sin(t * 0.55 + f.ph) * 0.012; }
       for (const b of this.blinkers) {
         if (b.userData.flame) { b.scale.y = 0.85 + 0.3 * Math.abs(Math.sin(t * 23 + b.id)); continue; }
+        if (b.userData.chase !== undefined) { b.visible = (Math.floor(t * 6) + b.userData.chase) % 3 !== 0; continue; }
         b.visible = ((t + b.userData.blink) % 1) < 0.5;
       }
     }
     // Turning right round, you lean across the aisle to the other window.
-    if (!xr && this.pack.rig.lookYaw) this.head.position.z = 1.55 * Math.max(0, -Math.cos(yaw)) ** 1.5;
+    if (!xr && this.pack.rig.lookYaw) this.head.position.z = (this.cart ? 0.3 : 1.55) * Math.max(0, -Math.cos(yaw)) ** 1.5;
     rig.pose(s, tmpPos, tmpQuat);
     this.train.position.copy(tmpPos);
     this.train.quaternion.copy(tmpQuat);
@@ -873,6 +1079,7 @@ export class World {
     const d0 = this.sunDisc.userData.dir as THREE.Vector3 | undefined;
     if (d0) this.sunDisc.position.set(trainX + d0.x * 2800, d0.y * 2800, tmpPos.z + d0.z * 2800);
     if (this.mode !== 'train') return;
+    this.updateCoaster(rig, trainX);
     for (const f of this.followers) f.position.x = trainX;
     if (this.ballast) this.ballast.position.x = trainX;
     if (this.ballastTex) this.ballastTex.offset.x = (((trainX - 400) / 800) * this.ballastTex.repeat.x) % 1;
@@ -990,4 +1197,11 @@ function launchText(text: string, countdown: number | null) {
   if (countdown !== null) return countdown > 0 ? `T-MINUS 00:${String(Math.min(99, countdown)).padStart(2, '0')}` : 'IGNITION';
   if (text === 'Departing') return 'IGNITION';
   return /line/i.test(text) ? 'AWAITING LAUNCH WINDOW' : text.toUpperCase();
+}
+
+/** The departures strip's words on the ghost train's sign. */
+function spookyText(text: string, countdown: number | null) {
+  if (countdown !== null) return countdown > 0 ? `DOORS CLOSE IN ${countdown}` : 'NO TURNING BACK';
+  if (text === 'Departing') return 'NO TURNING BACK';
+  return /line/i.test(text) ? 'THE DEAD ARE BOARDING' : text.toUpperCase();
 }

@@ -48,6 +48,7 @@ src/
   packs/      a "pack" is a vehicle or show, written entirely as data:
               star-guitar.ts  the train (homage to the video)
               starship.ts     an open cockpit in space; ship-other-side.ts its far side, a space reef and a crystal canyon
+              halloween.ts    the ghost train: an open fairground cart on a track that rises and falls, hell on one side, every Halloween cliché on the other
               non-gondry.ts   "the non-Gondry view :(": no vehicle, a 360° visualiser around you
               other-side.ts   the train's other window: Provence and Cosmos (the disco takes over on breaks and drops)
               types.ts        what a pack can say: layers, mapping rules, themes, light, fx, window
@@ -57,6 +58,10 @@ src/
               visualiser.ts  the non-Gondry view: a seeded sphere of plasma, flowers, waves and lightning
               otherside.ts the mirrored second window (and the far-side disco takeover; `?side=disco` holds it on)
               models.ts    every model, built from boxes, cylinders and lathes; `T(SURF.x, ...)` picks the surface
+                           (helpers in model-kit.ts; the ghost train's in models-spooky.ts and models-fair.ts: a new ride can keep its own file)
+              storm.ts     rain, lightning and a pulse on the kick, for any ride with `storm`
+              cues.ts      hits worth winding up for (fireworkCues): rockets launch early and burst exactly on them
+              rig.ts       how the ride moves: speed, the angled start, and `coaster` (a track that rises and falls with the song)
               shaders.ts   TSL node materials: one procedural material paints brick, glass, rust, foliage...
               fx.ts        post-processing looks (prism, trip, kaleido, liquid, thermal, echo, fold, hyper, tunnel, crt, film, glitch) and warp jumps
               pool.ts      instanced-mesh pools, so nothing allocates per frame
@@ -110,7 +115,7 @@ The smallest change that teaches the whole edit, preview, ride loop: a recoloure
 2. Pick your `layers`: for each one, a depth from the window, the models per theme, and how it scales with velocity, pitch (`pitchCenter`/`heightPerSemitone`) or note length (`lengthByDur`).
 3. `mapping` decides which sounds go to which layer (kick, snare, hat, bass, melody, pads).
 4. Add new models in `render/models.ts`. They are plain functions that merge primitives. Mark the materials with `T(SURF.glass, ...)`, `T(SURF.glow, ...)` and so on.
-5. Set `vehicle` ('train' gives ground, rails and a carriage; 'ship' gives space all round and an open canopy), `window` (size and colours of the carriage), `light` (sun over the length of the song) and `otherSide` ('trippy' for a psychedelic mirror). The start is described, not coded: `rig.startYaw` / `startPitch` set the view the ride turns to as it pulls up, and `title.template` picks the card waiting in that view ('station-board' for the train, 'launch-screen' for the starship's floating T-minus screen).
+5. Set `vehicle` ('train' gives ground, rails and a carriage; 'ship' gives space all round and an open canopy; 'cart' a little open fairground car on a roller track, with `rig.coaster` for its ups and downs), `window` (size and colours of the carriage), `light` (sun over the length of the song) and `otherSide` ('trippy' for a psychedelic mirror). The start is described, not coded: `rig.startYaw` / `startPitch` set the view the ride turns to as it pulls up, and `title.template` picks the card waiting in that view ('station-board' for the train, 'launch-screen' for the starship's floating T-minus screen, 'ghost-gate' for the ghost train's bulb-lit sign).
 6. Add it to `PACKS` in `src/packs/index.ts` and it appears in the menu.
 
 ### The ride checklist
@@ -119,7 +124,7 @@ A ride is a story with a beginning, a middle and an end. When someone asks for a
 
 **Beginning (while the song is read)**
 - [ ] `rig.startYaw` / `startPitch`: the view the ride turns to as it pulls up. Angle it so the card sits off-centre, clear of window pillars.
-- [ ] `title.template`: the card waiting in that view. 'station-board' (lineside shed, departures strip, platform clock) or 'launch-screen' (floating screen, T-minus strip, countdown dial). A new one is a branch in `World.stationBoard`, e.g. a gravestone with the song carved on it.
+- [ ] `title.template`: the card waiting in that view. 'station-board' (lineside shed, departures strip, platform clock), 'launch-screen' (floating screen, T-minus strip, countdown dial) or 'ghost-gate' (a fairground sign with chaser bulbs, a skull and two jack-o'-lanterns, "DOORS CLOSE IN 12"). A new one is a branch in `World.stationBoard`, e.g. a gravestone with the song carved on it.
 
 **Middle (the song)**
 - [ ] `layers` and `mapping`: one kind of object per instrument (kick, snare, hats, bass, melody, pads), each at its own depth.
@@ -130,12 +135,15 @@ A ride is a story with a beginning, a middle and an end. When someone asks for a
 - [ ] `sectionEvents`: something big on each new section (a ring gate, an overpass) and one in the breakdown (a passing train, a convoy).
 - [ ] `light`: the sun or moon over the length of the song.
 - [ ] `fx`: which looks the far side cycles through, and which belong to the intro or breakdown.
+- [ ] `palettes`: the two- or three-colour palettes the psychedelic paint uses, one per section (names in `PALETTES`, `render/shaders.ts`: 'embers', 'ocean', 'pumpkin', 'blood', 'toxic', 'cyan-magenta'...). Add your own there.
+- [ ] `storm` (optional): coloured rain in front of the main window, lightning on the big hits, the sky throbbing on the kick.
+- [ ] `rig.coaster` (optional): the track's height through the song, for a ride that climbs and plunges.
 
 **The other window**
 - [ ] `otherSide` and its own pack (`packs/other-side.ts`, `packs/ship-other-side.ts`): invented worlds on the same beat. The disco takes it over on breaks and drops for free.
 
 **End (after the last note)**
-- [ ] `end.template`: 'terminus' (pull into a station with the end board) or 'arrival-screen' (drift up to a floating end screen).
+- [ ] `end.template`: 'terminus' (pull into a station with the end board), 'arrival-screen' (drift up to a floating end screen) or 'ghost-gate' (back to the fairground sign).
 - [ ] The outro: what the last section looks like, and the last thing on screen.
 
 **Then go further.** Things nobody has asked for yet that would make it sing:
@@ -173,6 +181,7 @@ Not everything has to be a ride. `src/render/visualiser.ts` is a whole show with
 
 Rules of thumb:
 - **Think about the shape of the music first.** Before adding an effect, ask where it belongs in a song's story: the long intro, the verse that comes back, the build, the drop, the breakdown, the last chorus. The drops are where this beats any VJ, so give a new effect a way to wind up before one and land on it.
+- **Wind up, then land.** Anything with a run-up can start early and arrive on the beat: the fireworks' rockets leave the ground 1.3-1.6 s before their hit and burst exactly on it (`render/cues.ts`). A wave rolling in to break on the drop, a pendulum swinging to strike the downbeat, a train whistle that starts a bar before the section: same trick.
 - **You can see the future, so use it.** A classic visualiser only hears the present. This one knows where the song is going, so it can save its brightest colours for the climax and wind up before a drop. Read ahead up to `score.frontierSec`.
 - **One kind of data, one kind of reaction.** Don't let the kick and the bass do the same thing; the viewer should be able to *see* which instrument is which.
 - **Discrete things for notes, continuous things for continuous data.** A note is an object that appears; a slide is a line that bends. (This came from Alex and it is right.)
@@ -237,7 +246,7 @@ Real prompts that shaped this project:
 
 Rides and worlds:
 
-- **Halloween:** gothify everything. A ghost train through a graveyard at midnight, gravestones on the kicks, bats flapping off on the hi-hats, jack-o'-lanterns lighting up with the melody, fog rolling in on the breakdown, a full moon that swells with the bass.
+- **Halloween:** there is a ghost train now (`?pack=halloween`); remix it, or gothify everything else. A ghost train through a graveyard at midnight, gravestones on the kicks, bats flapping off on the hi-hats, jack-o'-lanterns lighting up with the melody, fog rolling in on the breakdown, a full moon that swells with the bass.
 - **Be a comet round a supernova.** Swing in close on the build, get flung out on the drop, the star collapsing into a pulsar that ticks on the beat.
 - **A non-Euclidean party at R'lyeh.** Angles that are wrong, corridors that fold back on themselves, tentacles keeping time, a bass so low the geometry wobbles.
 - What if the train drove through a cake? Sponge strata on the kicks, candles on the snares, icing dripping on the long notes.

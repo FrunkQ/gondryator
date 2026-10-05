@@ -1,24 +1,32 @@
 // Life in the sky, driven by the score:
 // - a starling murmuration that follows the lead line (height = pitch, a ripple on each note);
-// - fireworks (outdoors) or confetti (on the stage) that burst at every section change and on
-//   the strongest kicks of high-energy sections;
+// - fireworks (outdoors) or confetti (on the stage) that burst at every section change, drop and
+//   lift, and on a few big snares of the loud parts. The score is known ahead, so each rocket
+//   leaves the ground RISE seconds early, trailing sparks, and bursts exactly on its hit
+//   (render/cues.ts picks the hits);
 // - what the sound pass and the moments hear, kept photographic: animals in the track startle the
-//   flock, an impact or a cheering crowd sends up a shell, a drop or lift a volley.
+//   flock, an impact or a cheering crowd sends up a shell, a drop a volley.
 // Both are single instanced meshes updated on the CPU; cheap enough for any GPU.
 
 import * as THREE from 'three/webgpu';
 import type { Score, ScoreEvent } from '../score/types';
 import { instanceColor, vec3 } from 'three/tsl';
 import { perf } from '../ui/frames';
+import { fireworkCues } from './cues';
+
+/** Seconds a rocket climbs before it bursts on its hit. */
+const RISE = 1.6;
 
 const BIRDS = 260;
-const SPARKS = 900;
+const SPARKS = 2400;
 
 const m4 = new THREE.Matrix4();
 const q = new THREE.Quaternion();
 const v = new THREE.Vector3();
 const sc = new THREE.Vector3();
 const up = new THREE.Vector3(0, 1, 0);
+const GOLD = new THREE.Color(1.0, 0.72, 0.3);
+const TRAIL = new THREE.Color(1.0, 0.8, 0.5);
 
 export class SkyLife {
   readonly group = new THREE.Group();
@@ -41,6 +49,11 @@ export class SkyLife {
   private momentPtr = 0;
   private lastShell = -Infinity;
   private colors: THREE.Color[];
+  /** Rockets in flight: launched at t0, bursting at t (song time) at `to`. */
+  private rockets: { t0: number; t: number; from: THREE.Vector3; to: THREE.Vector3; col: THREE.Color; kind: number }[] = [];
+  private plannedUntil = -1;
+  private lastViewer = new THREE.Vector3();
+  private viewerVel = 0;
 
   /** No starlings in space. */
   set birdsVisible(v: boolean) { this.birds.visible = v; }
@@ -76,16 +89,20 @@ export class SkyLife {
   }
 
   /** Burst `n` sparks at `at`, `speed` m/s, in one colour (plus some white). */
-  private burst(at: THREE.Vector3, n: number, speed: number, color: THREE.Color) {
+  private burst(at: THREE.Vector3, n: number, speed: number, color: THREE.Color, kind = 0) {
+    // kind 0: a peony (a ball of stars), 1: a ring, 2: a golden willow (slow, long, drooping).
+    const willow = kind === 2, ring = kind === 1;
+    const tilt = Math.random() * Math.PI;
     for (let k = 0; k < n; k++) {
       const i = this.next; this.next = (this.next + 1) % SPARKS;
-      // Uniform direction on a sphere.
-      const z = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = Math.sqrt(1 - z * z);
-      const sp = speed * (0.7 + Math.random() * 0.3);
+      // Uniform direction on a sphere (or round a tilted circle, for a ring).
+      let z = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = Math.sqrt(1 - z * z);
+      if (ring) { a = (k / n) * Math.PI * 2; z = Math.sin(a) * Math.sin(tilt); r = Math.sqrt(1 - z * z); }
+      const sp = speed * (willow ? 0.55 : 1) * (ring ? 1 : 0.7 + Math.random() * 0.3);
       this.sp[i * 3] = at.x; this.sp[i * 3 + 1] = at.y; this.sp[i * 3 + 2] = at.z;
       this.sv[i * 3] = r * Math.cos(a) * sp; this.sv[i * 3 + 1] = z * sp + (this.stage ? speed * 0.6 : 0); this.sv[i * 3 + 2] = r * Math.sin(a) * sp;
-      this.life[i] = this.stage ? 4.5 : 2.2 + Math.random() * 0.6;
-      this.sparks.setColorAt(i, Math.random() < 0.15 ? this.colors[5] : (this.stage ? this.colors[(Math.random() * 5) | 0] : color));
+      this.life[i] = this.stage ? 4.5 : willow ? 3.4 + Math.random() * 0.8 : 2.2 + Math.random() * 0.6;
+      this.sparks.setColorAt(i, willow ? GOLD : Math.random() < 0.15 ? this.colors[5] : (this.stage ? this.colors[(Math.random() * 5) | 0] : color));
     }
     this.sparks.instanceColor!.needsUpdate = true;
   }
@@ -97,44 +114,78 @@ export class SkyLife {
       while (lo < hi) { const m = (lo + hi) >> 1; if (score.events[m].t <= s) lo = m + 1; else hi = m; }
       this.ptr = lo;
       this.life.fill(0);
+      this.rockets.length = 0;
+      this.plannedUntil = -1;
       this.soundPtr = (score.sounds ?? []).findIndex(c => c.t > s); if (this.soundPtr < 0) this.soundPtr = score.sounds?.length ?? 0;
       this.momentPtr = (score.moments ?? []).findIndex(m => m.t > s); if (this.momentPtr < 0) this.momentPtr = score.moments?.length ?? 0;
     }
     this.lastS = s;
     if (score && running) {
-      // Section changes: a big celebration.
-      let idx = 0;
-      for (let i = 0; i < score.sections.length; i++) if (score.sections[i].t <= s) idx = i;
-      if (idx !== this.secIdx) {
-        if (this.secIdx >= 0) { this.celebrate(viewer, 3); this.lastShell = s; }
-        this.secIdx = idx;
+      // Fireworks on cue: the hits coming within a rocket's climb get their rockets now.
+      const frontier = score.final ? Infinity : score.frontierSec;
+      const until = Math.min(s + (this.stage ? 0.05 : RISE), frontier);
+      if (this.plannedUntil < s - 0.05) this.plannedUntil = s;
+      if (until > this.plannedUntil) {
+        for (const c of fireworkCues(score, this.plannedUntil, until, 0.25 + 0.3 * energy)) this.launch(c.t, c.shells, s, viewer);
+        this.plannedUntil = until;
       }
-      // Recognised sounds (score.sounds), as they arrive.
+      // Recognised sounds (score.sounds), as they arrive: animals startle the flock.
       const cues = score.sounds ?? [];
       while (this.soundPtr < cues.length && cues[this.soundPtr].t <= s) {
         const c = cues[this.soundPtr++];
-        if (s - c.t > 0.5) continue;
-        if (c.kind === 'animal') this.startle = 1;
-        else if ((c.kind === 'impact' || c.kind === 'crowd') && s - this.lastShell > 2) { this.celebrate(viewer, c.kind === 'crowd' ? 2 : 1); this.lastShell = s; }
-      }
-      // Drops and lifts: a volley, unless a section change just sent one.
-      const ms = score.moments ?? [];
-      while (this.momentPtr < ms.length && ms[this.momentPtr].t <= s) {
-        const m = ms[this.momentPtr++];
-        if (s - m.t > 0.5 || (m.kind !== 'drop' && m.kind !== 'lift')) continue;
-        if (s - this.lastShell > 1) { this.celebrate(viewer, m.kind === 'drop' ? 3 : 2); this.lastShell = s; }
+        if (s - c.t < 0.5 && c.kind === 'animal') this.startle = 1;
       }
       while (this.ptr < score.events.length && score.events[this.ptr].t <= s) {
         const e = score.events[this.ptr++];
         if (s - e.t > 0.3) continue;
-        if (e.kind === 'kick' && energy > 0.7 && e.vel > 0.8 && Math.random() < 0.35) this.celebrate(viewer, 1);
         if (e.kind === 'note' && e.stem !== 'bass' && e.dur < 1.2) { this.lastNote = e; this.ripple = 1; }
       }
     }
+    if (dt > 0) { this.viewerVel = viewer.distanceTo(this.lastViewer) / dt < 200 ? (viewer.x - this.lastViewer.x) / dt : this.viewerVel; }
+    this.lastViewer.copy(viewer);
+    this.flyRockets(s);
     this.ripple *= Math.exp(-dt / 0.4);
     this.startle *= Math.exp(-dt / 1.2);
     if (!this.stage) this.updateBirds(s, dt, viewer);
     this.updateSparks(dt);
+  }
+
+  /** Rockets for a hit at song time t: each climbs from the ground and bursts at t, in view. */
+  private launch(t: number, shells: number, s: number, viewer: THREE.Vector3) {
+    perf.mark(this.stage ? 'confetti' : 'fireworks');
+    if (this.stage) { this.celebrate(viewer, shells); return; }
+    // Where the viewer will be when it bursts, so the burst lands in the window.
+    const ahead = viewer.x + this.viewerVel * Math.max(0, t - s);
+    for (let k = 0; k < shells; k++) {
+      const h = Math.abs(Math.sin(t * 91.7 + k * 13.1)) % 1;
+      const to = new THREE.Vector3(ahead + 30 + (k - (shells - 1) / 2) * 38 + (h - 0.5) * 30, 60 + h * 45, viewer.z - 170 - ((k * 37) % 70));
+      const from = new THREE.Vector3(to.x - 8 + h * 16, 0, to.z + 10);
+      this.rockets.push({ t0: s, t: t + k * 0.05, from, to, col: this.colors[Math.floor(h * 5)], kind: Math.floor(Math.abs(Math.sin(t * 17.3 + k)) * 3) % 3 });
+    }
+  }
+
+  /** Move the rockets up (fast, slowing as they near the top), shed a trail, burst on time. */
+  private flyRockets(s: number) {
+    for (let r = this.rockets.length - 1; r >= 0; r--) {
+      const k = this.rockets[r];
+      if (s >= k.t) {
+        this.burst(k.to, k.kind === 1 ? 90 : 120, k.kind === 1 ? 26 : 22, k.col, k.kind);
+        this.rockets.splice(r, 1);
+        continue;
+      }
+      const u = Math.min(1, Math.max(0, (s - k.t0) / Math.max(0.05, k.t - k.t0)));
+      const e = 1 - (1 - u) * (1 - u);
+      v.lerpVectors(k.from, k.to, e);
+      // The trail: a few short-lived sparks left behind, drifting down.
+      for (let n = 0; n < 2; n++) {
+        const i = this.next; this.next = (this.next + 1) % SPARKS;
+        this.sp[i * 3] = v.x + (Math.random() - 0.5) * 0.6; this.sp[i * 3 + 1] = v.y; this.sp[i * 3 + 2] = v.z;
+        this.sv[i * 3] = (Math.random() - 0.5) * 1.5; this.sv[i * 3 + 1] = -2 - Math.random() * 2; this.sv[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
+        this.life[i] = 0.35 + Math.random() * 0.3;
+        this.sparks.setColorAt(i, n === 0 ? this.colors[5] : TRAIL);
+      }
+      this.sparks.instanceColor!.needsUpdate = true;
+    }
   }
 
   private celebrate(viewer: THREE.Vector3, shells: number) {

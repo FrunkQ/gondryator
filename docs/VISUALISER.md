@@ -170,6 +170,8 @@ flowchart LR
 - **Timeless set pieces** (galaxy and comets, fractal lightning, Julia set and confetti, fire and flowers, caustics and copper bars) are the most common.
 - **Decade closers** are picked by the song's release year: the 50s atom on old film; the 60s oil-wheel light show; the 70s glitterball; the 80s outrun sun or an Amiga megademo; the 90s rave; the 00s fireworks; the 10s main-stage LED wall; the 20s glitch. A song gets its own decade's closer only about one time in four. Any closer can turn up for any song now and then, so a folder of songs from one era doesn't keep repeating.
 
+**Fireworks land on cue.** Whenever the fireworks are in the scene, the show reads the score ahead: a rocket leaves the horizon 1.3 s before each section change, drop, lift, cheering crowd, big snare or loud downbeat, and bursts exactly on it (`render/cues.ts`). A drop gets five at once, fanned across your view. The rides' own fireworks do the same from the ground.
+
 **The outro** takes the last twelve seconds or so, or the closing outro section. It is a calm scene (stars and the galaxy, aurora and nebula, the oil wheel flickering out on film, sinking under water, the dot globe, or simply the scene as it was). It then fades to black over six seconds. No new sparks are thrown and the trails dry up, so the curtain comes down on a clean screen.
 
 ## What to react to, if you build your own

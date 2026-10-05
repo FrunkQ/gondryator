@@ -12,7 +12,7 @@ import {
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
-import { U, palette } from './shaders';
+import { U, palette, PALETTES, DEFAULT_PALETTES } from './shaders';
 import { feedback } from './feedback';
 import { sampleEnvelope, type Score } from '../score/types';
 
@@ -278,7 +278,29 @@ export class FxDirector {
   /** 0..1, the current warp jump: the world widens the field of view with it. */
   get warpLevel() { return FX_UNIFORMS.warp.value; }
 
-  constructor(private cycle: FxLook[], private bySection: Partial<Record<string, FxLook>> = {}) {}
+  private palettes: string[];
+  private palTarget = PALETTES.rainbow;
+  constructor(private cycle: FxLook[], private bySection: Partial<Record<string, FxLook>> = {}, palettes?: string[]) {
+    this.palettes = (palettes ?? DEFAULT_PALETTES).filter(n => PALETTES[n]);
+    if (!this.palettes.length) this.palettes = DEFAULT_PALETTES;
+    this.palTarget = PALETTES[this.palettes[0]];
+  }
+
+  /**
+   * The palette for a section: a returning part of the song (same group) gets its colours back, a
+   * new part the next palette along from a song-seeded start, so a song keeps its own colours.
+   */
+  private paletteFor(sc: Score, idx: number) {
+    const P = this.palettes, seed = (sc.track.hash ?? '').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const byGroup = new Map<number, number>();
+    let fresh = 0, pick = seed % P.length;
+    for (let i = 0; i <= idx; i++) {
+      const g = sc.sections[i].group;
+      if (g !== undefined && byGroup.has(g)) pick = byGroup.get(g)!;
+      else { pick = (seed + fresh++ * 5) % P.length; if (g !== undefined) byGroup.set(g, pick); }
+    }
+    return PALETTES[P[pick]];
+  }
 
   setScore(score: Score | null) { this.score = score; this.ptr = 0; this.lastS = -Infinity; this.secIdx = -1; }
 
@@ -340,6 +362,7 @@ export class FxDirector {
         if (this.secIdx >= 0) { this.glitch = 1; this.warp = 1; }
         this.secIdx = idx;
         this.look = this.lookFor(sc.sections, idx);
+        this.palTarget = this.paletteFor(sc, idx);
       }
     } else this.look = 'clean';
     if (this.override && running) this.look = this.override;
@@ -372,6 +395,13 @@ export class FxDirector {
     // Surfaces in the world: the main side's scenery stays real, the far side takes the paint.
     U.trip.value = split ? 0 : this.cur.trip; U.tripFar.value = split ? this.cur.trip : 0;
     U.hue.value = this.hue; U.beatPhase.value = phase; U.showTime.value = s;
+    // The palette eases to the section's over a second or so.
+    const kp = 1 - Math.exp(-dt / 0.7);
+    const [pa, pb, pc, pd] = this.palTarget;
+    for (const [u, v] of [[U.pa, pa], [U.pb, pb], [U.pc, pc], [U.pd, pd]] as const) {
+      const x = u.value as THREE.Vector3;
+      x.set(x.x + (v[0] - x.x) * kp, x.y + (v[1] - x.y) * kp, x.z + (v[2] - x.z) * kp);
+    }
     // Rain on the glass: a breakdown's weather shows on every window, the liquid look's only far side.
     W.crt.value = this.cur.crt ?? 0; W.film.value = this.cur.film ?? 0; W.dmosh.value = this.cur.dmosh ?? 0;
     // The tube eases on and off rather than cutting, and its rolling band runs faster on the kick.

@@ -30,6 +30,9 @@ export const U = {
   showTime: uniform(0),
   rain: uniform(0),      // 0..1 raindrops on the carriage windows
   speed: uniform(0),     // travel speed, m/s (drops streak backwards)
+  // The world's palette (see PALETTES): starts as the rainbow, the FX director moves it per section.
+  pa: uniform(new THREE.Vector3(0.5, 0.5, 0.5)), pb: uniform(new THREE.Vector3(0.5, 0.5, 0.5)),
+  pc: uniform(new THREE.Vector3(1, 1, 1)), pd: uniform(new THREE.Vector3(0, 0.33, 0.67)),
 };
 
 export const SURF = {
@@ -37,11 +40,43 @@ export const SURF = {
   gas: 12, rock: 13, glow: 14, lavender: 15,
 } as const;
 
-/** Inigo Quilez's cosine palette: smooth rainbow-ish ramps from one phase value. */
-export const palette = Fn(([t]: [any]) => {
-  const a = vec3(0.5, 0.5, 0.5), b = vec3(0.5, 0.5, 0.5), c = vec3(1.0, 1.0, 1.0), d = vec3(0.0, 0.33, 0.67);
-  return a.add(b.mul(cos(c.mul(t).add(d).mul(6.28318))));
-});
+type Vec3 = [number, number, number];
+/** A two-colour cosine palette: it swings from `x` to `y` and back. */
+const two = (x: Vec3, y: Vec3): [Vec3, Vec3, Vec3, Vec3] => [
+  [(x[0] + y[0]) / 2, (x[1] + y[1]) / 2, (x[2] + y[2]) / 2], [(x[0] - y[0]) / 2, (x[1] - y[1]) / 2, (x[2] - y[2]) / 2], [0.5, 0.5, 0.5], [0, 0, 0]];
+/**
+ * Cosine palettes (Inigo Quilez): colour = a + b * cos(2pi * (c * t + d)). Mostly two- and
+ * three-colour harmonies (c at 0.5 sweeps half the hue circle, not all of it): a full rainbow on
+ * every scene reads as one look. The rainbow is kept, as one of many. Packs pick theirs by name
+ * (pack.palettes); the non-Gondry view uses them all.
+ */
+export const PALETTES: Record<string, [Vec3, Vec3, Vec3, Vec3]> = {
+  embers: [[0.5, 0.25, 0.15], [0.5, 0.3, 0.15], [0.5, 0.5, 0.5], [0, 0.1, 0.2]],
+  ocean: [[0.1, 0.35, 0.5], [0.1, 0.3, 0.4], [0.5, 0.5, 0.5], [0.5, 0.55, 0.6]],
+  'pink-cyan': [[0.5, 0.4, 0.6], [0.5, 0.4, 0.4], [0.5, 0.5, 0.5], [0, 0.5, 0.25]],
+  sunset: [[0.6, 0.35, 0.35], [0.4, 0.3, 0.3], [0.5, 0.5, 0.5], [0, 0.1, 0.35]],
+  forest: [[0.3, 0.5, 0.25], [0.25, 0.4, 0.2], [0.5, 0.5, 0.5], [0.2, 0.1, 0.35]],
+  'gold-violet': [[0.5, 0.4, 0.5], [0.45, 0.35, 0.45], [0.5, 0.5, 0.5], [0, 0.15, 0.5]],
+  ice: [[0.6, 0.75, 0.9], [0.3, 0.25, 0.15], [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]],
+  acid: [[0.5, 0.5, 0.4], [0.5, 0.5, 0.4], [0.5, 0.5, 0.5], [0.5, 0, 0.5]],
+  'peach-teal': [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [1, 0.7, 0.4], [0, 0.15, 0.2]],
+  terracotta: [[0.8, 0.5, 0.4], [0.2, 0.4, 0.2], [2, 1, 1], [0, 0.25, 0.25]],
+  ultraviolet: [[0.5, 0.2, 0.6], [0.5, 0.4, 0.4], [0.5, 0.5, 0.5], [0.6, 0.1, 0.3]],
+  rainbow: [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [1, 1, 1], [0, 0.33, 0.67]],
+  // Two-colour ones: a colour and its partner.
+  pumpkin: two([1.0, 0.42, 0.05], [0.42, 0.08, 0.62]),
+  blood: two([0.9, 0.05, 0.06], [0.16, 0.0, 0.05]),
+  toxic: two([0.4, 1.0, 0.2], [0.38, 0.05, 0.58]),
+  moonlight: two([0.78, 0.84, 1.0], [0.08, 0.1, 0.28]),
+  'cyan-magenta': two([0.1, 0.95, 1.0], [0.95, 0.1, 0.75]),
+  'gold-navy': two([1.0, 0.78, 0.25], [0.05, 0.1, 0.4]),
+  'lime-blue': two([0.7, 1.0, 0.2], [0.1, 0.25, 0.9]),
+};
+/** What a ride cycles through when its pack names none: everything but the rainbow, which is a treat. */
+export const DEFAULT_PALETTES = Object.keys(PALETTES).filter(k => !['pumpkin', 'blood', 'toxic', 'moonlight'].includes(k));
+
+/** The palette everything in the world paints with; the FX director sets it per section. */
+export const palette = Fn(([t]: [any]) => U.pa.add(U.pb.mul(cos(U.pc.mul(t).add(U.pd).mul(6.28318)))));
 
 /** 2D coordinates on whichever axis-aligned plane the surface mostly faces. */
 const planar = (p: any, n: any) => {
@@ -275,7 +310,8 @@ export function makeWindowGlassMaterial(): THREE.MeshBasicNodeMaterial {
 }
 
 /** Grass tufts beside the line: crossed cards cut into blades, swaying, catching the low sun. */
-export function makeGrassMaterial(): THREE.MeshStandardNodeMaterial {
+/** `dark` < 1: dead, dark grass for a night ride. */
+export function makeGrassMaterial(dark = 1): THREE.MeshStandardNodeMaterial {
   const m = new THREE.MeshStandardNodeMaterial({ side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.85 });
   const q = uv();
   const blade = abs(fract(q.x.mul(5.0)).mul(2.0).sub(1.0)).oneMinus();          // 0 at gaps, 1 at blade centre
@@ -283,7 +319,7 @@ export function makeGrassMaterial(): THREE.MeshStandardNodeMaterial {
   m.opacityNode = step(q.y, blade.mul(tall).mul(1.15));
   const wp = positionWorld;
   const tint = mx_noise_float(vec3(wp.x.mul(0.15), 0, wp.z.mul(0.15))).mul(0.5).add(0.5);
-  const base = mix(vec3(0.16, 0.22, 0.06), vec3(0.42, 0.42, 0.14), tint);
+  const base = dark < 1 ? mix(vec3(0.07, 0.06, 0.05), vec3(0.16, 0.13, 0.12), tint).mul(dark / 0.4) : mix(vec3(0.16, 0.22, 0.06), vec3(0.42, 0.42, 0.14), tint);
   m.colorNode = mix(base.mul(0.5), base.mul(1.25), q.y);
   // Sway in the wind (and with the music in trip looks).
   const sway = sin(U.showTime.mul(2.2).add(wp.x.mul(0.6))).mul(0.08).add(U.kick.mul(U.trip).mul(0.2));
@@ -429,6 +465,9 @@ export function makeConsoleMaterial(): THREE.MeshStandardNodeMaterial {
  * `far`: the disco on the far side of a train or starship: drawn by direction from the camera (so
  * a floor plane can wear it too), faded in by `far.reveal`.
  */
+/** How long a cued firework's rocket climbs before it bursts on its hit, seconds. */
+export const SHELL_RISE = 1.3;
+
 export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: boolean }): THREE.MeshBasicNodeMaterial {
   // (The floor writes depth, so the ground under it stays hidden.)
   const m = new THREE.MeshBasicNodeMaterial({ side: far?.floor ? THREE.DoubleSide : THREE.BackSide, fog: false, depthWrite: !!far?.floor });
@@ -976,11 +1015,39 @@ function moreElementsBody(V: any, g: any) {
     return pow(paletteAt(floor(cells).mul(0.27).add(U.hue)), vec3(1.8)).mul(1.4).mul(rim).mul(lens).mul(float(0.65).add(V.pad.mul(0.5)).add(U.kick.mul(0.15)));
   });
   // 45 Fireworks: shells going up all round the sky and bursting: rings of stars, peonies with
-  // trails, golden willows drooping. Every one different, all of them at once.
+  // trails, golden willows drooping. A few go up on their own; most are cued (V.shells, set by the
+  // visualiser from the score ahead): each rocket leaves the horizon RISE seconds early and bursts
+  // exactly on its hit (a section change, a drop, a big snare, a cheering crowd).
   on(45, () => {
     const acc = vec3(0.0).toVar();
     const ce = cos(el);
-    for (let i = 0; i < 20; i++) {
+    // One shell's burst: tau seconds since it burst (bt = 0..1 through its life).
+    const burstAt = (dA: any, sEl: any, tau: any, bt: any, seed: any, willow: any, ringK: any, col: any) => {
+      const R = float(0.15).add(hash(seed.add(0.31)).mul(0.17)).mul(float(1.0).sub(exp(tau.mul(-3.5))));
+      const droop = tau.mul(tau).mul(float(0.02).add(willow.mul(0.05)));
+      const v = vec2(dA, el.sub(sEl).add(droop));
+      const r = length(v), a = atan(v.y, v.x);
+      const N = floor(hash(seed.add(0.7)).mul(14.0)).add(18.0);
+      const dAng = abs(fract(a.div(6.28318).mul(N).add(0.5)).sub(0.5)).mul(6.28318).div(N).mul(r);
+      const tail = R.mul(mix(mix(float(0.55), float(0.15), willow), float(0.9), ringK));
+      const streak = smoothstep(tail, R, r).mul(step(r, R.add(0.004))).mul(smoothstep(0.005, 0.0, dAng));
+      const hr = r.sub(R);
+      const head = exp(hr.mul(hr).add(dAng.mul(dAng)).mul(-30000.0));
+      const crackle = mix(float(1.0), step(0.45, hash(floor(T.mul(25.0)).add(seed.mul(3.0)).add(floor(a.mul(N).div(6.28318))))), smoothstep(0.55, 0.85, bt));
+      const live = step(0.0, tau).mul(step(bt, 1.0));
+      const fade = pow(float(1.0).sub(clamp(bt, 0.0, 1.0)), 1.6).mul(live);
+      const flash = exp(tau.mul(-9.0)).mul(exp(r.mul(-7.0))).mul(0.7).mul(live);
+      return col.mul(streak.mul(0.9).add(head.mul(1.8)).mul(crackle).mul(fade).add(flash));
+    };
+    const rocketAt = (dA: any, rEl: any, on: any) => {
+      // The rocket: a hot spark with a short fading trail beneath it.
+      const dy = rEl.sub(el);
+      const spark = exp(length(vec2(dA, dy)).mul(-260.0)).mul(1.5);
+      const trail = exp(abs(dA).mul(-900.0)).mul(smoothstep(0.09, 0.0, dy)).mul(step(0.0, dy)).mul(0.5);
+      return vec3(1.0, 0.85, 0.6).mul(spark.add(trail)).mul(on);
+    };
+    // Ambient shells on their own clocks.
+    for (let i = 0; i < 8; i++) {
       const P = 1.4 + ((i * 0.618) % 1) * 1.6;
       const ph = T.div(P).add((i * 0.377) % 1);
       const n = floor(ph), f = fract(ph);
@@ -990,27 +1057,24 @@ function moreElementsBody(V: any, g: any) {
       const willow = step(0.72, kind), ringK = step(kind, 0.3);
       const col = mix(paletteAt(hash(n.mul(9.3).add(i))), vec3(1.0, 0.75, 0.35), willow.mul(0.8));
       const dA = atan(sin(az.sub(sAz)), cos(az.sub(sAz))).mul(ce);
-      // The rocket going up.
       const lt = clamp(f.div(0.2), 0.0, 1.0);
       const rEl = sEl.mul(float(1.0).sub(float(1.0).sub(lt).mul(float(1.0).sub(lt))));
-      const rocket = exp(length(vec2(dA, el.sub(rEl))).mul(-260.0)).mul(step(f, 0.2)).mul(1.5);
-      // The burst.
-      const tau = max(f.sub(0.2), 0.0).mul(P);
-      const bt = clamp(f.sub(0.2).div(0.8), 0.0, 1.0);
-      const R = float(0.15).add(hash(n.add(i * 0.31)).mul(0.17)).mul(float(1.0).sub(exp(tau.mul(-3.5))));
-      const droop = tau.mul(tau).mul(float(0.02).add(willow.mul(0.05)));
-      const v = vec2(dA, el.sub(sEl).add(droop));
-      const r = length(v), a = atan(v.y, v.x);
-      const N = floor(hash(n.add(i * 0.7)).mul(14.0)).add(18.0);
-      const dAng = abs(fract(a.div(6.28318).mul(N).add(0.5)).sub(0.5)).mul(6.28318).div(N).mul(r);
-      const tail = R.mul(mix(mix(float(0.55), float(0.15), willow), float(0.9), ringK));
-      const streak = smoothstep(tail, R, r).mul(step(r, R.add(0.004))).mul(smoothstep(0.005, 0.0, dAng));
-      const hr = r.sub(R);
-      const head = exp(hr.mul(hr).add(dAng.mul(dAng)).mul(-30000.0));
-      const crackle = mix(float(1.0), step(0.45, hash(floor(T.mul(25.0)).add(i * 3.0).add(floor(a.mul(N).div(6.28318))))), smoothstep(0.55, 0.85, bt));
-      const fade = pow(float(1.0).sub(bt), 1.6).mul(step(0.2, f));
-      const flash = exp(tau.mul(-9.0)).mul(exp(r.mul(-7.0))).mul(0.7).mul(step(0.2, f));
-      acc.addAssign(col.mul(streak.mul(0.9).add(head.mul(1.8)).mul(crackle).mul(fade).add(flash)).add(vec3(1.0, 0.85, 0.6).mul(rocket)));
+      acc.addAssign(rocketAt(dA, rEl, step(f, 0.2)));
+      acc.addAssign(burstAt(dA, sEl, max(f.sub(0.2), 0.0).mul(P).sub(step(f, 0.2).mul(9.0)), clamp(f.sub(0.2).div(0.8), 0.0, 1.0), n.add(i * 0.31), willow, ringK, col));
+    }
+    // Cued shells: (burst time, azimuth, elevation, seed).
+    for (let i = 0; i < V.shells.length; i++) {
+      const sh = V.shells[i];
+      const tau = T.sub(sh.x);
+      const seed = sh.w;
+      const kind = hash(seed.mul(2.9));
+      const willow = step(0.72, kind), ringK = step(kind, 0.3);
+      const col = mix(paletteAt(hash(seed.mul(9.3))), vec3(1.0, 0.75, 0.35), willow.mul(0.8));
+      const dA = atan(sin(az.sub(sh.y)), cos(az.sub(sh.y))).mul(ce);
+      const u = clamp(tau.div(SHELL_RISE).add(1.0), 0.0, 1.0);
+      const rEl = mix(float(-0.03), sh.z, float(1.0).sub(float(1.0).sub(u).mul(float(1.0).sub(u))));
+      acc.addAssign(rocketAt(dA, rEl, step(tau, 0.0).mul(step(float(-SHELL_RISE), tau))));
+      acc.addAssign(burstAt(dA, sh.z, tau, tau.div(2.6), seed, willow, ringK, col).mul(1.3));
     }
     return acc.mul(float(0.8).add(U.kick.mul(0.6))).mul(smoothstep(-0.05, 0.02, el));
   });

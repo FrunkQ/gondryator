@@ -37,30 +37,16 @@
 
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import { makeGlitterMaterial, makeSpriteMaterial, makeVisualiserMaterial } from './shaders';
+import { makeGlitterMaterial, makeSpriteMaterial, makeVisualiserMaterial, PALETTES as PALETTES_BY_NAME, SHELL_RISE } from './shaders';
+import { fireworkCues } from './cues';
 import type { CardInfo, ShowDriver } from './driver';
 import type { GazeSource } from './spawner';
 import type { FxLookName, Pack } from '../packs/types';
 import { sampleEnvelope, sectionAt, type Score, type SoundCue, type SoundKind } from '../score/types';
 
 type Vec3 = [number, number, number];
-/** Cosine palettes (Inigo Quilez): colour = a + b * cos(2pi * (c * t + d)). */
-// Mostly two- and three-colour harmonies (c at 0.5 sweeps half the hue circle, not all of it):
-// a full rainbow on every scene reads as one look. The rainbow is kept, as one of a dozen.
-const PALETTES: [Vec3, Vec3, Vec3, Vec3][] = [
-  [[0.5, 0.25, 0.15], [0.5, 0.3, 0.15], [0.5, 0.5, 0.5], [0, 0.1, 0.2]],      // embers
-  [[0.1, 0.35, 0.5], [0.1, 0.3, 0.4], [0.5, 0.5, 0.5], [0.5, 0.55, 0.6]],     // ocean
-  [[0.5, 0.4, 0.6], [0.5, 0.4, 0.4], [0.5, 0.5, 0.5], [0, 0.5, 0.25]],        // pink and cyan
-  [[0.6, 0.35, 0.35], [0.4, 0.3, 0.3], [0.5, 0.5, 0.5], [0, 0.1, 0.35]],      // sunset
-  [[0.3, 0.5, 0.25], [0.25, 0.4, 0.2], [0.5, 0.5, 0.5], [0.2, 0.1, 0.35]],    // forest
-  [[0.5, 0.4, 0.5], [0.45, 0.35, 0.45], [0.5, 0.5, 0.5], [0, 0.15, 0.5]],     // gold and violet
-  [[0.6, 0.75, 0.9], [0.3, 0.25, 0.15], [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]],    // ice
-  [[0.5, 0.5, 0.4], [0.5, 0.5, 0.4], [0.5, 0.5, 0.5], [0.5, 0, 0.5]],         // acid
-  [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [1, 0.7, 0.4], [0, 0.15, 0.2]],          // peach and teal
-  [[0.8, 0.5, 0.4], [0.2, 0.4, 0.2], [2, 1, 1], [0, 0.25, 0.25]],             // terracotta
-  [[0.5, 0.2, 0.6], [0.5, 0.4, 0.4], [0.5, 0.5, 0.5], [0.6, 0.1, 0.3]],       // ultraviolet
-  [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [1, 1, 1], [0, 0.33, 0.67]],             // rainbow (a treat)
-];
+// The palettes are shared with the rides (shaders.ts PALETTES); the show uses them all.
+const PALETTES = Object.values(PALETTES_BY_NAME);
 type Group = 'drums' | 'bass' | 'melody' | 'pads' | 'mix';
 /** The element library. The index is the element's slot in the shader's weights (E0..E3). */
 export const ELEMENTS: { name: string; group: Group }[] = [
@@ -407,6 +393,8 @@ export class Visualiser implements ShowDriver {
     kickT: uniform(99), pad: uniform(0), dim: uniform(0), pulseShape: uniform(new THREE.Vector4()), bassMode: uniform(new THREE.Vector2()),
     arc: uniform(0.3), tension: uniform(0), release: uniform(0), releaseT: uniform(99), phase: uniform(0), journey: uniform(new THREE.Vector3(1, 0, 0)),
     notes: null as unknown as THREE.DataTexture,
+    /** Cued fireworks (element 45): burst time, azimuth, elevation, seed. */
+    shells: Array.from({ length: 12 }, () => uniform(new THREE.Vector4(-99, 0, 0.3, 0))),
   };
   private noteData = new Uint8Array(16 * 4);
   private noteAct = new Float32Array(12);
@@ -527,6 +515,8 @@ export class Visualiser implements ShowDriver {
   }
 
   private seekTo(s: number) {
+    this.shellsUntil = -1;
+    for (const u of this.V.shells) (u.value as THREE.Vector4).x = -99;
     if (s < this.outroStart) this.outroOn = false;
     if (s < this.arcPeakT) this.glitterDone = false;
     const ev = this.score.events;
@@ -848,6 +838,7 @@ export class Visualiser implements ShowDriver {
       }
     }
     if (running && fade === 0) this.hearSounds(s, gazeAz);
+    if (running && fade === 0 && this.target[45] > 0) this.planShells(s, frontier, gazeAz);
     this.V.boltT.value += dt;
     this.V.kickT.value = s - this.lastKick;
     // Pads: how many long notes are sounding.
@@ -1146,6 +1137,27 @@ export class Visualiser implements ShowDriver {
 
   private soundPtr = 0;
   private cuesOn: { c: SoundCue; next: number; n: number }[] = [];
+
+  /**
+   * Fireworks on cue: the score is known ahead, so a rocket can leave the horizon SHELL_RISE
+   * seconds early and burst exactly on its hit. Each frame, the hits that have just come within
+   * reach get a rocket (render/cues.ts says which hits, and how many shells each).
+   */
+  private shellsUntil = -1;
+  private shellSlot = 0;
+  private planShells(s: number, frontier: number, gazeAz: number) {
+    const until = Math.min(s + SHELL_RISE, frontier);
+    if (this.shellsUntil < s - 0.05) this.shellsUntil = s; // after a seek, or when the show comes on
+    if (until <= this.shellsUntil) return;
+    for (const c of fireworkCues(this.score, this.shellsUntil, until)) {
+      for (let k = 0; k < c.shells; k++) {
+        const u = this.V.shells[this.shellSlot++ % this.V.shells.length].value as THREE.Vector4;
+        const spread = c.shells > 1 ? (k / (c.shells - 1) - 0.5) * 2.2 : (this.rand() - 0.5) * 1.8;
+        u.set(c.t + k * 0.06, gazeAz + spread + (this.rand() - 0.5) * 0.3, 0.22 + this.rand() * 0.3, Math.floor(c.t * 97 + k * 13) % 1000);
+      }
+    }
+    this.shellsUntil = until;
+  }
 
   private hearSounds(s: number, gazeAz: number) {
     const cues = this.score.sounds;

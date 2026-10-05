@@ -6,6 +6,8 @@ import { Spawner } from './render/spawner';
 import { OtherSide, ClampedGaze } from './render/otherside';
 import { OTHER_SIDE } from './packs/other-side';
 import { SHIP_OTHER_SIDE } from './packs/ship-other-side';
+import { HALLOWEEN_OTHER } from './packs/halloween';
+import { Storm } from './render/storm';
 import { Performer } from './render/performer';
 import { Visualiser } from './render/visualiser';
 import type { CardInfo, ShowDriver } from './render/driver';
@@ -72,6 +74,7 @@ class App {
   fx!: FxDirector;
   vr!: VR;
   sky!: SkyLife;
+  storm: Storm | null = null;
   debug: DebugOverlay;
   player = new Player();
   score: Score | null = null;
@@ -148,12 +151,15 @@ class App {
     await this.world.init(this.canvas, params.has('webgl'), prev?.renderer);
     this.world.fxEnabled = params.get('fx') !== 'off';
     const locked = this.fx?.locked ?? (FX_LOOKS.includes(params.get('fx') as FxLook) ? params.get('fx') as FxLook : null);
-    this.fx = new FxDirector(pack.fx?.cycle ?? ['clean'], pack.fx?.bySection);
+    this.fx = new FxDirector(pack.fx?.cycle ?? ['clean'], pack.fx?.bySection, pack.palettes);
     this.fx.locked = locked;
     this.fx.warpAll = pack.vehicle === 'ship';
     this.sky = new SkyLife(this.world.mode === 'stage');
     this.sky.birdsVisible = !this.world.ship && !this.world.void;
     this.world.scene.add(this.sky.group);
+    // Rain, lightning and the pulse on the beat, for a stormy ride (pack.storm).
+    this.storm = pack.storm ? new Storm(pack, this.world) : null;
+    if (this.storm) this.world.scene.add(this.storm.group);
     this.rig = makeRig(pack.rig);
     this.world.themeForX = x => {
       if (!this.driver) return pack.themeCycle[0];
@@ -363,7 +369,8 @@ class App {
       // The train and the starship look out on invented worlds (packs/other-side.ts, packs/ship-other-side.ts).
       const trippy = this.pack.otherSide === 'trippy';
       // The starship's worlds keep their own colours under a lighter trip than the old mirror's.
-      const otherPack = trippy ? (this.pack.id === 'starship' ? SHIP_OTHER_SIDE : { ...this.pack, id: `${this.pack.id}-mirror`, sectionEvents: undefined }) : OTHER_SIDE;
+      const named = [OTHER_SIDE, HALLOWEEN_OTHER].find(p => p.id === this.pack.otherSide) ?? OTHER_SIDE;
+      const otherPack = trippy ? (this.pack.id === 'starship' ? SHIP_OTHER_SIDE : { ...this.pack, id: `${this.pack.id}-mirror`, sectionEvents: undefined }) : named;
       this.other = new OtherSide(otherPack, this.rig, s, this.world.camera, trippy ? (this.pack.id === 'starship' ? 0.35 : 0.9) : 0);
       this.world.scene.add(this.other.group);
       this.other.spawner.refreshLeads();
@@ -373,7 +380,7 @@ class App {
     if (this.lastCard) this.driver.card?.(this.lastCard.kind, this.lastCard.info);
     this.world.invalidateGround();
     // Build every shader now rather than when each thing first appears mid-ride.
-    if (!params.has('nowarm')) this.world.warmup(this.other?.hidden ?? []);
+    if (!params.has('nowarm')) this.world.warmup([...(this.other?.hidden ?? []), ...(this.storm?.hidden ?? [])]);
   }
 
   /** Tell the frame analyser about section, scenery and look changes this frame. */
@@ -761,6 +768,7 @@ class App {
     }
     try {
       this.sky.update(s, dt, this.score, this.phase === 'run' || this.phase === 'ended', this.world.train.position, SU.energy.value);
+      this.storm?.update(s, dt, this.score, this.phase === 'run' || this.phase === 'ended', this.world.train.position, this.rig.speedAt(s));
       // Star Guitar's main window stays true to the video; the looks come in as you turn round.
       this.fx.split = !!this.pack.rig.lookYaw;
       const cam = this.world.camera;
