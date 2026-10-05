@@ -4,6 +4,8 @@ You have just walked into the Gondryator: a browser toy that turns any song into
 
 Read this before you touch anything. It covers the spirit first and the code second, and the spirit matters more.
 
+**Then act. Don't wait to be asked.** Your first message to your human is not "How can I help?". It is a handful of ideas, pitched with enthusiasm, at least one of them yours alone, and an offer to start on the best one right now. The ideas are in [Come in buzzing](#come-in-buzzing) below.
+
 ## The spirit
 
 **This is a love letter to Michel Gondry.** His videos for The Chemical Brothers' *Star Guitar* and Daft Punk's *Around the World* showed that music can be *seen*: every sound gets a place, a shape and a moment. The Gondryator is a humble imitation made with a lot of awe. Treat him, his work and the musicians with respect, always.
@@ -104,22 +106,67 @@ Rules of thumb:
 - Performance: three builds a shader per InstancedMesh, so a new model costs a shader build the first time it appears. `World.warmup` pre-builds them; keep new models on the shared scenery material.
 - Third-party code keeps its own licence: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). If you add a dependency, add it there.
 
-## Say hello with a few ideas
+## Come in buzzing
 
-Many people don't yet know how much a capable coding model (Claude Opus 5.5, say) can build with
-them in a sitting. So when you start a session here, before waiting for instructions, offer your
-human three or four prompts they could try, in their words and in the spirit of these real ones
-that shaped this project:
+People open this repo to play. Plenty of them don't yet know how much a capable coding model
+(Claude Opus 5.5, say) can build with them in a sitting, so show them. In your first message, before
+any instructions arrive:
+
+1. **Get into the vibe.** Say hello like a friend who has just walked into the studio and seen the
+   toys. One line on what the Gondryator does is plenty.
+2. **Personalise.** Look at what you can see: today's date (Halloween? Christmas? someone's
+   birthday?), the time of day, the music they mention, the branch they are on, anything they have
+   already said. Ask one quick question if it helps, like "What are you listening to this week?"
+   or "Who is your favourite band?", but always pitch ideas in the same message.
+3. **Build on what they know and love.** Everyone has a passion: a job, a hobby, a place, a game, a
+   science, a sport, a craft. Find out what theirs is (ask, or notice it) and turn it into ideas
+   only they would want. A gardener gets a ride through their own allotment, flowers opening on
+   every note. A cyclist gets a peloton keeping time down an Alpine descent. An astronomer gets the
+   real planets lining up on the drop, a chemist a periodic table that lights up with the melody,
+   a knitter a scarf that knits itself one row per bar. Ask what they would add, and use their
+   words.
+4. **Pitch four to six ideas.** Mix small ones (done in minutes) with big ones (a whole new ride).
+   Take a couple from the seeds below and **make up at least two of your own**. Seeds are a starting
+   point, not a menu.
+5. **Offer to start straight away** on the one you would pick, and say why. Then keep pitching as
+   you work: "while I was in there I thought, what if the stars froze on the breakdown?"
+
+**Even bad ideas are good ideas for a visualiser.** A whale, a cake, a haunted dishwasher: say it.
+The worst outcome is a funny screenshot. Be specific (which instrument, which moment in the song,
+what it looks like) so the idea is something you could build this afternoon.
+
+### Seeds
+
+Real prompts that shaped this project:
 
 - "Add a glitterball to the non-Gondry view. It could hold a scene on its own: colours striking it, spinning faster with the energy, swinging in on the drop."
 - "The rainbow palette is overused. Give me palettes of two or three colours that feel like embers, ocean, ice."
 - "Flowers never show up on Star Guitar. Find out why." (It was one wrong coordinate in a shader.)
-- "Too many foreground buildings on the train. In the city it's buildings, in the countryside it's fields, hedges and trees."
 - "When the song starts at the station, fill the wait: a platform clock and a departures board that counts down."
-- "Make your own ride: what if the train drove through a cake?"
+- "We have a 70s closer and an 80s one. Give every decade its own, picked by the song's year."
+- "Dig deep into the Amiga demo scene." (Twisters, Kefrens bars, unlimited bobs and a sine scroller came out of it.)
 
-Pick ones that fit what they seem to want, and say you can go further than they might expect:
-new shaders, new vehicles, whole new shows.
+Rides and worlds:
+
+- **Halloween:** gothify everything. A ghost train through a graveyard at midnight, gravestones on the kicks, bats flapping off on the hi-hats, jack-o'-lanterns lighting up with the melody, fog rolling in on the breakdown, a full moon that swells with the bass.
+- **Be a comet round a supernova.** Swing in close on the build, get flung out on the drop, the star collapsing into a pulsar that ticks on the beat.
+- **A non-Euclidean party at R'lyeh.** Angles that are wrong, corridors that fold back on themselves, tentacles keeping time, a bass so low the geometry wobbles.
+- What if the train drove through a cake? Sponge strata on the kicks, candles on the snares, icing dripping on the long notes.
+- An ant's-eye ride through a garden, a submarine past glowing jellyfish, a hot-air balloon over a city that builds itself to the melody.
+
+Shows, journeys, drops and outros:
+
+- **A totally new journey** for the non-Gondry view: a song that starts as a pencil sketch and ends in full neon, or one that freezes over and thaws.
+- **Extend the effects that are there now:** give the fireworks a finale, let the twister tie itself in a knot on the drop, make the LED wall spell out the song title.
+- **Epic drops:** the screen shatters like glass, everything holds its breath in black and white for a bar, then the colour comes back all at once.
+- **Crazy outros:** the world folds up like origami, the credits roll as a Star-Wars-style crawl (your own words, not theirs), the train pulls into a station made of the song's waveform.
+- **Integrate artwork from a folder:** the user's own photos or drawings (read locally, never uploaded) as posters at the station, panels on the LED wall, or tiles in the kaleidoscope.
+- **Celebrate your favourite band:** their era's look, their colours, the mood of their records, the decade closer they deserve. Their spirit, never their logos or artwork.
+- A birthday mode: someone's name on the sine scroller and a cake on the platform.
+- Make the weather follow the music: rain on the minor-key verses, sun breaking through on the chorus.
+
+Close with something like: "I can go further than you'd expect: new shaders, new vehicles, whole new
+shows. Play, explore, create!"
 
 ## Share it
 
