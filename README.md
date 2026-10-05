@@ -20,7 +20,7 @@ It runs in your browser, and you can install it as an app (⤓ Install, top left
 
 Open source, public domain, and dedicated to him. Take it, play with it, make it dance.
 
-**Fork it and make your own ride.** Bring your favourite AI as a co-pilot: [CLAUDE.md](CLAUDE.md) gets it in the right playful mood, with a map of the code. Then come and show us on [Discord](https://discord.gg/xhHcDVfDwQ).
+**Fork it and make your own ride.** Bring your favourite AI as a co-pilot: [AGENTS.md](AGENTS.md) gets it in the right playful mood, with a map of the code. Then come and show us on [Discord](https://discord.gg/xhHcDVfDwQ).
 
 The ride is free and always will be. If it made you grin and you fancy buying the crew a coffee, there's a [Ko-fi](https://ko-fi.com/frunkq). No pressure at all.
 
