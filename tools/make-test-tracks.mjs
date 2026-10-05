@@ -1,5 +1,7 @@
-// Synthesises test tracks with known ground truth (beats, drum hits, notes, sections),
-// so the analysis can be measured. Writes WAV + truth JSON (and MP3 with tags if ffmpeg exists).
+// Synthesises test tracks with known ground truth (beats, drum hits, notes, sections, and the
+// sudden changes in test-120: a build, a stop and a slam back in), so the analysis can be measured.
+// Section options: `ramp: [from, to]` swells the drums and bass across the section (a build),
+// `stop: n` silences the last n beats of its last bar, `moment` names the change it opens with. Writes WAV + truth JSON (and MP3 with tags if ffmpeg exists).
 //   node tools/make-test-tracks.mjs [outDir]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,7 +22,7 @@ function render({ name, title, artist, bpm, structure, seed, key = 45 }) {
   const L = new Float32Array(Math.ceil(dur * SR));
   const R = rand(seed);
   function rand(s) { return rng(s); }
-  const truth = { bpm, firstDownbeat: lead, kicks: [], snares: [], hats: [], bass: [], lead: [], pads: [], sections: [], downbeats: [] };
+  const truth = { bpm, firstDownbeat: lead, kicks: [], snares: [], hats: [], bass: [], lead: [], pads: [], sections: [], downbeats: [], moments: [] };
 
   const add = (t, fn, len) => {
     const a = Math.floor(t * SR), n = Math.floor(len * SR);
@@ -42,23 +44,29 @@ function render({ name, title, artist, bpm, structure, seed, key = 45 }) {
   for (const sec of structure) {
     const t0 = lead + barIdx * bar;
     truth.sections.push({ t: t0, label: sec.label, bar: barIdx + 1 });
+    if (sec.moment) truth.moments.push({ t: t0, kind: sec.moment });
+    if (sec.ramp) truth.moments.push({ t: t0, kind: 'build', dur: sec.bars * bar });
     for (let b = 0; b < sec.bars; b++) {
       const tb = t0 + b * bar;
       truth.downbeats.push(tb);
       const ci = b % 4;
       const ch = chords[ci];
-      if (sec.pads) pad(tb, ch.map(c => key + 12 + c), bar, sec.pads);
-      for (let q = 0; q < 4; q++) {
+      const cut = b === sec.bars - 1 ? sec.stop ?? 0 : 0;
+      if (cut) truth.moments.push({ t: tb + (4 - cut) * beat, kind: 'stop', dur: cut * beat });
+      const g = q => sec.ramp ? sec.ramp[0] + (sec.ramp[1] - sec.ramp[0]) * (b * 4 + q) / (sec.bars * 4) : 1;
+      if (sec.pads) pad(tb, ch.map(c => key + 12 + c), bar - cut * beat, sec.pads);
+      for (let q = 0; q < 4 - cut; q++) {
         const tq = tb + q * beat;
-        if (sec.kick) kick(tq, sec.kick);
-        if (sec.snare && (q === 1 || q === 3)) snare(tq, sec.snare);
-        if (sec.hats) for (let e = 0; e < (sec.hats16 ? 4 : 2); e++) { if (!sec.hats16 && e === 0 && sec.kick) continue; hat(tq + e * beat / (sec.hats16 ? 4 : 2), sec.hats * (e % 2 ? 1 : 0.7)); }
-        if (sec.bass) { const m = key - 12 + bassLine[ci * 4 + q]; bassNote(tq + beat / 2, m, beat / 2 - 0.02, sec.bass); }
+        if (sec.kick) kick(tq, sec.kick * g(q));
+        if (sec.snare && (q === 1 || q === 3)) snare(tq, sec.snare * g(q));
+        if (sec.hats) for (let e = 0; e < (sec.hats16 ? 4 : 2); e++) { if (!sec.hats16 && e === 0 && sec.kick) continue; hat(tq + e * beat / (sec.hats16 ? 4 : 2), sec.hats * g(q) * (e % 2 ? 1 : 0.7)); }
+        if (sec.bass) { const m = key - 12 + bassLine[ci * 4 + q]; bassNote(tq + beat / 2, m, beat / 2 - 0.02, sec.bass * g(q)); }
       }
-      if (sec.lead) for (let k = 0; k < 4; k++) { const m = key + 12 + melody[((b % 2) * 4 + k) % 8] + (ch[0] < 0 ? -2 : 0); leadNote(tb + k * beat, m, beat * 0.9, sec.lead); }
+      if (sec.lead) for (let k = 0; k < 4 - cut; k++) { const m = key + 12 + melody[((b % 2) * 4 + k) % 8] + (ch[0] < 0 ? -2 : 0); leadNote(tb + k * beat, m, beat * 0.9, sec.lead); }
     }
     barIdx += sec.bars;
   }
+  if (!truth.moments.length) delete truth.moments;
   // Normalise.
   let peak = 0;
   for (const v of L) peak = Math.max(peak, Math.abs(v));
@@ -98,5 +106,17 @@ render({
     { label: 'chorus', bars: 8, kick: 1, snare: 0.9, hats: 0.8, bass: 1, lead: 1, pads: 0.7 },
     { label: 'breakdown', bars: 4, pads: 1, lead: 0.8 },
     { label: 'drop', bars: 8, kick: 1, snare: 0.9, hats: 0.8, hats16: true, bass: 1, lead: 1, pads: 0.7 },
+  ],
+});
+render({
+  name: 'test-120', title: 'Stop Start', artist: 'Test Tones', bpm: 120, seed: 11, key: 41,
+  structure: [
+    { label: 'intro', bars: 4, pads: 1, hats: 0.5 },
+    { label: 'verse', bars: 8, kick: 1, snare: 0.8, hats: 0.7, bass: 1, pads: 0.6, moment: 'lift' },
+    { label: 'breakdown', bars: 4, pads: 1, lead: 0.8, moment: 'break' },
+    { label: 'build', bars: 4, kick: 1, snare: 0.9, hats: 0.8, hats16: true, pads: 1, ramp: [0.12, 1] },
+    { label: 'drop', bars: 8, kick: 1, snare: 0.9, hats: 0.8, hats16: true, bass: 1, lead: 0.9, pads: 0.6, stop: 2, moment: 'drop' },
+    { label: 'chorus', bars: 8, kick: 1, snare: 0.9, hats: 0.8, bass: 1, lead: 1, pads: 0.7, moment: 'drop' },
+    { label: 'outro', bars: 4, pads: 0.8, hats: 0.4, moment: 'break' },
   ],
 });

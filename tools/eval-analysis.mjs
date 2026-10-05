@@ -16,14 +16,14 @@ for (let i = 0; i < n; i++) pcm[i] = wav.readInt16LE(44 + i * 2) / 32768;
 
 const t0 = performance.now();
 const a = new Analyzer(pcm, sr, { chunkSec: 4 });
-const score = { events: [], beats: [], sections: [], phrases: [], tempo: [] };
+const score = { events: [], beats: [], sections: [], phrases: [], tempo: [], moments: [] };
 const frontiers = [];
 let d;
 while (!a.finished) {
   d = a.step();
   if (!d) continue;
   frontiers.push([a.analyzedSec, d.frontierSec]);
-  for (const k of ['events', 'beats', 'sections', 'phrases', 'tempo']) score[k].push(...d[k]);
+  for (const k of ['events', 'beats', 'sections', 'phrases', 'tempo', 'moments']) score[k].push(...(d[k] ?? []));
 }
 const wall = (performance.now() - t0) / 1000;
 const dur = n / sr;
@@ -58,6 +58,13 @@ console.log('beats ', match(score.beats.map(b => b.t), truth.kicks.length ? (() 
 console.log('downb ', match(score.beats.filter(b => b.downbeat).map(b => b.t), truth.downbeats, 0.07));
 console.log('sections', score.sections.map(s => `${s.t.toFixed(1)}:${s.label}(${s.energy})`).join(' '));
 console.log('truth   ', truth.sections.map(s => `${s.t.toFixed(1)}:${s.label}`).join(' '));
+console.log('moments ', score.moments.map(m => `${m.t.toFixed(2)}:${m.kind}(${m.size}${m.dur ? ', ' + m.dur.toFixed(1) + 's' : ''})`).join(' '));
+if (truth.moments) {
+  // A moment is right if one of the same kind lands within a quarter of a second.
+  const hit = truth.moments.filter(r => score.moments.some(m => m.kind === r.kind && Math.abs(m.t - r.t) < 0.25)).length;
+  const extra = score.moments.filter(m => !truth.moments.some(r => r.kind === m.kind && Math.abs(m.t - r.t) < 0.25)).length;
+  console.log('truth   ', truth.moments.map(m => `${m.t.toFixed(2)}:${m.kind}`).join(' '), `-> found ${hit}/${truth.moments.length}, ${extra} extra`);
+}
 console.log('phrases', score.phrases.map(p => `${p.bar}:${p.id}${p.repeatOf !== null ? '*' : ''}${p.entering.length ? '+' + p.entering.join('/') : ''}`).join(' '));
 console.log('frontier lead (analysed - frontier) max', Math.max(...frontiers.map(([a, f]) => a - f)).toFixed(1), 's; first frontier', frontiers[0]?.[1]);
 const pads = notes('other').filter(e => e.dur >= 1.2);

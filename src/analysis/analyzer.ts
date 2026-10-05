@@ -3,14 +3,14 @@
 // This is the "bands" engine: no neural stem separation. Drums are found from band-split
 // onsets (kick / snare / hats), bass and lead notes from YIN pitch tracking on band-passed
 // signals, pads from chroma, plus a causal beat tracker, bars, 4-bar phrases with repeat
-// detection, and section boundaries. Every stage is causal or bounded-lookahead, so the
+// detection, section boundaries, and moments (drops, breaks, stops, builds) judged beat by beat. Every stage is causal or bounded-lookahead, so the
 // score's frontier is honest: nothing before `frontierSec` ever changes.
 //
 // It is pure TypeScript with no DOM dependency so it runs in a Web Worker and in Node tests.
 
 import { DEFAULT_TUNING, type Tuning } from './tuning';
 import { FFT, biquad, clamp, decimate, halve, hzToMidi, percentile, yin } from './dsp';
-import type { Beat, EventKind, Phrase, ScoreDelta, ScoreEvent, Section, Stem } from '../score/types';
+import type { Beat, EventKind, Moment, Phrase, ScoreDelta, ScoreEvent, Section, Stem } from '../score/types';
 
 const N = 1024; // STFT size at ~22 kHz
 const HOP = 256; // ~11.6 ms
@@ -97,14 +97,25 @@ export class Analyzer {
   private sectionDrums: boolean[] = [];
   private groups = 0;
   private lastSectionBar = -999;
+  private deferTo = -1; // a section boundary moved on to the next phrase start
   private prevBlockActive: Set<Stem> = new Set();
   private padEvents: ScoreEvent[] = [];
 
   private bass: NoteTrack; private lead: NoteTrack;
 
+  // Moments: sudden changes, judged per beat on loudness and kick/snare hits.
+  private hitFrames: Float32Array; // kick + snare velocity per frame
+  private beatLv: { db: number; hits: number; x: number }[] = [];
+  private beatScore: MomentScore[] = [];
+  private beatDbSorted: number[] = [];
+  private momentScored = 0; private momentFinal = 0;
+  private momentsOut: Moment[] = []; private dipBeats: number[] = []; private grooveSeen = false;
+  private lastUp = -99; private lastDown = -99; private soundBeat = -1;
+  private buildBar = 2; private buildStart = -1; private buildEnd = 0;
+
   // Commit bookkeeping.
   private committedSec = 0;
-  private sentBeats = 0; private sentSections = 0; private sentPhrases = 0; private sentTempo = 0;
+  private sentBeats = 0; private sentSections = 0; private sentPhrases = 0; private sentTempo = 0; private sentMoments = 0;
   private sentEnv = 0;
   private eventId = 0;
   private pendingEvents: ScoreEvent[] = [];
@@ -136,6 +147,7 @@ export class Analyzer {
     this.odf = new Float32Array(F);
     this.topLine = new Float32Array(F);
     this.centroid = new Float32Array(F);
+    this.hitFrames = new Float32Array(F);
 
     // Band signals for pitch tracking.
     let b = biquad(x, sr, 'lp', k.bassCutHz);
@@ -244,12 +256,14 @@ export class Analyzer {
         const vel = clamp(lo[f] / this.p95.low, 0.05, 1);
         this.onsets.push({ frame: f, t, kind: 'kick', vel });
         this.lastOnsetFrame.kick = f;
+        this.hitFrames[f] += vel;
         accent += 2 * vel;
       }
       if ((snare || snareWithKick) && f - this.lastOnsetFrame.snare > K.snareGap / this.hopSec) {
         const vel = clamp(mi[f] / this.p95.mid, 0.05, 1);
         this.onsets.push({ frame: f, t, kind: 'snare', vel });
         this.lastOnsetFrame.snare = f;
+        this.hitFrames[f] += vel;
         accent += vel;
       }
       if (hat && f - this.lastOnsetFrame.hat > K.hatGap / this.hopSec) {
@@ -435,8 +449,11 @@ export class Analyzer {
     }
     const prev = i > 0 ? this.beatFrames[i - 1] : f - this.periodFrames;
     const next = i + 1 < this.beatFrames.length ? this.beatFrames[i + 1] : f + this.periodFrames;
-    const v = kickHere - 0.8 * snareHere + 3 * this.harmonicChange(prev, f) + this.bassChange(prev, f, next);
-    if (i < this.beatsFrozen) this.dbEvidence[i] = v;
+    // Arrangements change on the one: a big loudness step (the drums coming in or dropping out)
+    // is a vote for a downbeat. Only judged where the beats around are settled.
+    const step = i >= 4 && i + 4 < this.beatsFrozen ? Math.abs(this.levelStep(i)) : 0;
+    const v = kickHere - 0.8 * snareHere + 3 * this.harmonicChange(prev, f) + this.bassChange(prev, f, next) + 0.1 * Math.max(0, step - 3);
+    if (i + 4 < this.beatsFrozen) this.dbEvidence[i] = v;
     return v;
   }
 
@@ -613,6 +630,8 @@ export class Analyzer {
       this.beatsFrozen = Math.max(this.beatsFrozen, Math.min(eb + 1, this.beatFrames.length));
       this.barFeatures.push(this.barFeature(sb, fs, fe));
     }
+    // Sudden changes first, so a drop or a stop can open a section.
+    this.findMoments(final);
     // Decide 4-bar blocks.
     this.decideBars(final);
   }
@@ -704,7 +723,18 @@ export class Analyzer {
         const base = Math.max(this.k.sectionNovelty, typical);
         const need = b - this.lastSectionBar >= this.k.sectionMinBars ? base : base * 2.2;
         boundary = n0 > need && n0 >= n1 && n0 > nm;
+        // A sudden change on this downbeat (a drop, a break, a stop, a build starting) opens a
+        // section as soon as a phrase has passed, if the arrangement really changed with it: the
+        // novelty peak can sit a bar late when the change runs into silence or another change.
+        const m = this.momentAtBar(b);
+        if (!boundary && m && m.size >= 0.3 && b - this.lastSectionBar >= 4 && n0 > 0.5 * base) boundary = true;
+        // Songs move in 4-bar phrases: a change one bar short of the next phrase that is nearly as
+        // strong a bar later waits for the phrase to start, unless something sudden happened here.
+        else if (boundary && !m && (b - this.lastSectionBar) % 4 === 3 && n1 >= 0.8 * n0) { boundary = false; this.deferTo = b + 1; }
       }
+      if (b === this.deferTo) boundary = true;
+      // The silence after the music has ended is not a section of its own.
+      if (boundary && b > 1 && avgOf(F.slice(b - 1, b + 1), x => x.midDb) < -55) boundary = false;
       if (boundary || b - this.phraseStart >= 4) {
         if (b > this.phraseStart) this.emitPhrase(this.phraseStart, b - 1);
         this.phraseStart = b;
@@ -718,6 +748,19 @@ export class Analyzer {
       this.phraseStart = F.length + 1;
     }
   }
+
+  /** The biggest moment landing on bar b's downbeat (a build where it starts), if already decided. */
+  private momentAtBar(b: number): Moment | undefined {
+    let best: Moment | undefined;
+    for (let i = this.momentsOut.length - 1; i >= 0; i--) {
+      const m = this.momentsOut[i];
+      if (m.bar === b && m.beat === 1 && (!best || m.size > best.size)) best = m;
+    }
+    return best;
+  }
+
+  /** A build starts at bar b. */
+  private buildAt(b: number) { return this.momentsOut.some(m => m.kind === 'build' && m.bar === b); }
 
   private barTime(b: number) { return this.frameTime(this.beatFrames[this.barStartBeat(b)]); }
 
@@ -762,7 +805,7 @@ export class Analyzer {
     if (b === 1) label = 'intro';
     else if (!drums && remaining < 25 && this.framesDone >= this.frames) label = 'outro';
     else if (!drums && energy < 0.75) label = 'breakdown';
-    else if (prevLabel === 'breakdown' && drums) label = 'drop';
+    else if (drums && (prevLabel === 'breakdown' || this.momentAtBar(b)?.kind === 'drop') && !this.buildAt(b)) label = 'drop';
     else if (known) label = known.label;
     else {
       // A new kind of section: a chorus if it is fuller or clearly louder than every groove so far.
@@ -796,6 +839,202 @@ export class Analyzer {
     }
   }
 
+  // ---------------------------------------------------------------- moments
+  /**
+   * Beat i's loudness (dB, power mean over the beat, floored at -60), its kick and snare hits, and
+   * an "intensity" for builds (loudness, brightness and how busy the drums are). Settled beats only.
+   */
+  private beatLevel(i: number) {
+    const c = this.beatLv[i];
+    if (c) return c;
+    const fa = this.beatFrames[i];
+    const fb = i + 1 < this.beatFrames.length ? this.beatFrames[i + 1] : Math.min(this.frames, fa + Math.round(this.periodFrames));
+    const n = Math.max(1, fb - fa);
+    let p = 0, br = 0, h = 0;
+    for (let f = fa; f < fa + n && f < this.frames; f++) { p += 10 ** (this.dbAll[f] / 10); br += this.centroid[f]; }
+    // Hits are counted a little early: an onset is stamped a frame or two after the beat it is on.
+    for (let f = Math.max(0, fa - 3); f < fb - 3; f++) h += this.hitFrames[f];
+    const db = Math.max(-60, 10 * Math.log10(p / n + 1e-12));
+    const v = { db, hits: h, x: db + 12 * (br / n) + 2 * Math.min(4, h) };
+    if (i + 1 < this.beatsFrozen || this.framesDone >= this.frames) this.beatLv[i] = v;
+    return v;
+  }
+
+  /** Mean of fn over beats a..b-1 (clipped to the beats that exist), NaN if none. */
+  private beatMean(a: number, b: number, nB: number, fn: (v: { db: number; hits: number; x: number }) => number) {
+    a = Math.max(0, a); b = Math.min(nB, b);
+    if (b <= a) return NaN;
+    let s = 0;
+    for (let k = a; k < b; k++) s += fn(this.beatLevel(k));
+    return s / (b - a);
+  }
+
+  /**
+   * Loudness of beats a..b-1 in dB, averaged as power: a beat or two of silence ahead pulls a bar
+   * down by a few dB, not by half the distance to the floor. NaN if no beats.
+   */
+  private beatDb(a: number, b: number, nB: number) {
+    return Math.max(-60, 10 * Math.log10(this.beatMean(a, b, nB, v => 10 ** (v.db / 10)) + 1e-12));
+  }
+
+  /** Loudness of the bar after beat i minus the bar before it (dB). */
+  private levelStep(i: number) {
+    const nB = this.beatsFrozen;
+    return this.beatDb(i, i + 4, nB) - this.beatDb(i - 4, i, nB);
+  }
+
+  private isDownbeat(i: number) { const b = this.beatsOut()[i]; return !!b && b.downbeat; }
+
+  /**
+   * Find sudden changes. Each settled beat gets an "up" and a "down" score: the loudness step across
+   * it at three scales (half a bar, a bar, two bars) plus a bonus when the kicks and snares arrive or
+   * vanish. Peaks above MOMENT_MIN become moments, snapped to the downbeat when one is close and
+   * nearly as strong. Needs two bars of settled beats after a beat to judge it.
+   */
+  private findMoments(final: boolean) {
+    const nB = final ? this.beatFrames.length : this.beatsFrozen;
+    const scoreTo = final ? nB : nB - 9;
+    for (; this.momentScored < scoreTo; this.momentScored++) this.scoreBeat(this.momentScored, nB);
+    const finalTo = final ? this.momentScored : this.momentScored - 4;
+    for (; this.momentFinal < finalTo; this.momentFinal++) {
+      const j = this.momentFinal;
+      if (this.isDownbeat(j)) this.buildStep(j);
+      this.pickMoment(j, nB);
+    }
+    if (final && this.buildStart >= 0) this.closeBuild(this.bars.length + 1);
+  }
+
+  private scoreBeat(i: number, nB: number) {
+    // Nothing changes in the first bar of sound, and the silence before it is not compared:
+    // the song starting is not a lift.
+    if (this.soundBeat < 0 && this.beatLevel(i).db > -45) this.soundBeat = i;
+    const early = this.soundBeat < 0 || i < this.soundBeat + 4;
+    const from = Math.max(0, this.soundBeat);
+    const hits = (v: { hits: number }) => v.hits;
+    const m = (a: number, b: number) => this.beatDb(Math.max(from, i + a), i + b, nB);
+    const pre1 = m(-1, 0), post1 = m(0, 1), pre2 = m(-2, 0), post2 = m(0, 2), pre4 = m(-4, 0), post4 = m(0, 4);
+    const hPre = this.beatMean(Math.max(from, i - 4), i, nB, hits), hPost = this.beatMean(i, i + 4, nB, hits);
+    // The drums arriving or leaving: in proportion to how many hits come or go, so a stray
+    // detection in a quiet intro counts for little.
+    const drumsIn = !(hPre > 0.35 * hPost) ? clamp((hPost - (hPre || 0)) / 0.8, 0, 1) : 0;
+    const drumsOut = !(hPost > 0.35 * hPre) ? clamp((hPre - (hPost || 0)) / 0.8, 0, 1) : 0;
+    const best = (...xs: number[]) => xs.reduce((a, x) => (x > a ? x : a), 0);
+    // Sudden means within a bar: a slow swell over two bars is a build, not a step. Half a bar
+    // counts for a little less, and a single beat only going down (one quiet beat is a stop).
+    const up = early ? 0 : best(post4 - pre4, 0.8 * (post2 - pre2)) + 4 * drumsIn;
+    const down = early ? 0 : best(pre4 - post4, 0.8 * (pre2 - post2), 0.6 * (pre1 - post1)) + 4 * drumsOut;
+    // The song's loud level so far (90th percentile of beats), so a stop is judged against it.
+    const lv = this.beatLevel(i).db, S = this.beatDbSorted;
+    let lo = 0, hi = S.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (S[mid] < lv) lo = mid + 1; else hi = mid; }
+    S.splice(lo, 0, lv);
+    const ref = S[Math.floor(S.length * 0.9)];
+    this.beatScore[i] = { up, down, pre4: isNaN(pre4) ? lv : pre4, post1: isNaN(post1) ? lv : post1, drumsIn, drumsOut, ref };
+  }
+
+  private pickMoment(j: number, nB: number) {
+    const S = this.beatScore;
+    for (const dir of ['up', 'down'] as const) {
+      const v = S[j][dir];
+      if (v < MOMENT_MIN) continue;
+      let peak = true;
+      for (let k = j - 3; k <= j + 3 && peak; k++) if (k !== j && S[k] && (S[k][dir] > v || (S[k][dir] === v && k < j))) peak = false;
+      if (!peak) continue;
+      // Changes land on the one: move to a downbeat within two beats if it is nearly as strong.
+      let at = j;
+      if (!this.isDownbeat(j)) for (const d of [1, -1, 2, -2]) { const k = j + d; if (S[k] && this.isDownbeat(k) && S[k][dir] >= 0.7 * v) { at = k; break; } }
+      if (at - (dir === 'up' ? this.lastUp : this.lastDown) < 6) continue;
+      const s = S[at], size = clamp(v / 14, 0.15, 1);
+      let kind: Moment['kind'], dur: number | undefined, slam = -1;
+      if (dir === 'up') {
+        // Coming back after a break or a stop, or the end of a build, is a drop; so is a big
+        // slam with the drums arriving once they have been heard before. Anything else lifts.
+        const atBar = this.beatsOut()[at]?.bar ?? 0;
+        const afterDip = this.dipBeats.some(b => at > b && at - b <= 16);
+        const afterBuild = this.buildStart >= 0 && atBar - this.buildStart >= 2 && this.buildClimb(atBar) >= BUILD_MIN;
+        kind = afterDip || afterBuild || (s.drumsIn > 0.5 && v >= 10 && this.grooveSeen) ? 'drop' : 'lift';
+        if (afterBuild) this.closeBuild(atBar);
+        // A build can only start after the step up, never take it in.
+        this.buildEnd = Math.max(this.buildEnd, atBar);
+        this.lastUp = at;
+      } else {
+        // Nearly silent compared with the bar before (or with the song's loud level): a stop.
+        if (s.post1 <= Math.max(s.ref - 30, s.pre4 - 18)) {
+          kind = 'stop';
+          let k = at;
+          while (k < Math.min(nB, at + 16) && S[k] && this.beatLevel(k).db < s.pre4 - 12) k++;
+          // Silence to the end is the song ending, not a stop.
+          if (k >= nB && this.framesDone >= this.frames) { this.lastDown = at; continue; }
+          // Where it comes back in is a drop (judged here: after a beat of silence, a bar either
+          // side hardly differs, so the up score cannot see it).
+          if (k < nB && S[k] && this.beatLevel(k).db >= s.pre4 - 6 && k - this.lastUp >= 6) slam = k;
+          dur = round3(this.frameTime(this.beatFrames[Math.min(k, this.beatFrames.length - 1)]) - this.frameTime(this.beatFrames[at]));
+        } else kind = 'break';
+        this.lastDown = at;
+        this.dipBeats.push(at);
+        this.grooveSeen = true;
+      }
+      this.pushMoment(at, kind, size, dur);
+      if (slam >= 0) {
+        this.pushMoment(slam, 'drop', size, undefined);
+        this.lastUp = slam;
+        this.buildEnd = Math.max(this.buildEnd, this.beatsOut()[slam]?.bar ?? 0);
+      }
+    }
+  }
+
+  private pushMoment(at: number, kind: Moment['kind'], size: number, dur?: number) {
+    const b = this.beatsOut()[at];
+    const m: Moment = { t: round3(this.frameTime(this.beatFrames[at])), kind, size: Math.round(size * 100) / 100, bar: b?.bar ?? 0, beat: b?.beat ?? 1 };
+    if (dur !== undefined && dur > 0) m.dur = dur;
+    this.momentsOut.push(m);
+  }
+
+  /** Intensity of bar b (mean over its beats). */
+  private barX(b: number) {
+    const sb = this.barStartBeat(b);
+    return this.beatMean(sb, sb + 4, this.beatFrames.length, v => v.x);
+  }
+
+  /** How much the open build has climbed by the bar before `bar`. */
+  private buildClimb(bar: number) { return this.buildStart >= 0 && bar - 1 > this.buildStart ? this.barX(bar - 1) - this.barX(this.buildStart) : 0; }
+
+  /**
+   * Builds, a bar at a time as each downbeat j is reached: a run of bars each more intense than the
+   * last (louder, brighter, busier drums). The run closes when it stops climbing or a drop lands,
+   * and becomes a build if it climbed far enough over two bars or more.
+   */
+  private buildStep(j: number) {
+    // j starts the bar after bar b, which has just been heard in full.
+    let b = 0;
+    while (b < this.bars.length && this.bars[b].sb < j) b++;
+    if (b < 2 || b < this.buildBar || b <= this.buildEnd) return;
+    this.buildBar = b + 1;
+    const rising = this.barX(b) >= this.barX(b - 1) + 0.3;
+    if (rising) {
+      if (this.buildStart < 0) this.buildStart = Math.max(this.buildEnd, b - 1);
+      // A build is a run-up of a few bars, not a slow swell over minutes.
+      if (b - this.buildStart > 8) this.buildStart = b - 8;
+    } else if (this.buildStart >= 0) this.closeBuild(b);
+  }
+
+  /** Close the open run at the start of bar `end`, emitting a build if it climbed enough. */
+  private closeBuild(end: number) {
+    const start = this.buildStart;
+    this.buildStart = -1;
+    this.buildEnd = end;
+    // At least two rising bars, climbing far enough, and not all in one jump (that is a lift).
+    if (start < 1 || end - start < 3) return;
+    const climb = this.barX(end - 1) - this.barX(start);
+    let jump = 0;
+    for (let k = start + 1; k < end; k++) jump = Math.max(jump, this.barX(k) - this.barX(k - 1));
+    if (!(climb >= BUILD_MIN) || jump > 0.6 * climb) return;
+    const sb = this.barStartBeat(start), eb = Math.min(this.barStartBeat(end), this.beatFrames.length - 1);
+    if (sb >= this.beatFrames.length) return;
+    const dur = round3(this.frameTime(this.beatFrames[eb]) - this.frameTime(this.beatFrames[sb]));
+    this.pushMoment(sb, 'build', clamp(climb / 14, 0.15, 1), dur);
+  }
+
   // ---------------------------------------------------------------- commit
   private commit(final: boolean): ScoreDelta | null {
     // Frontier: end of the last decided 4-bar block (bars + phrases + sections all known),
@@ -810,6 +1049,11 @@ export class Analyzer {
       frontier = this.frameTime(this.beatFrames[endBeat]);
       for (const tr of [this.bass, this.lead]) if (tr.active) frontier = Math.min(frontier, this.frameTime(tr.active.start) - 0.01);
       frontier = Math.min(frontier, this.frameTime(this.onsetScanned) - 0.05);
+      // Moments are decided a few beats behind the beats (and may snap back two), and a build is
+      // only known once it ends, so hold the frontier before both.
+      const undecided = this.momentFinal - 2;
+      if (undecided < this.beatFrames.length) frontier = Math.min(frontier, this.frameTime(this.beatFrames[Math.max(0, undecided)]) - 0.01);
+      if (this.buildStart >= 0) frontier = Math.min(frontier, this.frameTime(this.beatFrames[Math.min(this.beatFrames.length - 1, this.barStartBeat(this.buildStart))]) - 0.01);
     }
     if (frontier <= this.committedSec && !final) return null;
 
@@ -846,6 +1090,11 @@ export class Analyzer {
     this.sentPhrases += phrases.length;
     const tempo = this.tempoOut.slice(this.sentTempo);
     this.sentTempo = this.tempoOut.length;
+    // A build is found after the moments inside it, so put the unsent ones in time order first.
+    const unsent = this.momentsOut.slice(this.sentMoments).sort((a, b) => a.t - b.t);
+    this.momentsOut.splice(this.sentMoments, unsent.length, ...unsent);
+    const moments = unsent.filter(m => m.t < frontier);
+    this.sentMoments += moments.length;
 
     // Envelopes at 50 Hz.
     const envTo = Math.floor(frontier * ENV_RATE);
@@ -877,7 +1126,7 @@ export class Analyzer {
     this.committedSec = frontier;
     const wall = (performance.now() - this.startWall) / 1000;
     return {
-      frontierSec: round3(frontier), final, tempo, beats, sections, phrases, events,
+      frontierSec: round3(frontier), final, tempo, beats, sections, phrases, moments, events,
       envelopes: env, envelopeRate: ENV_RATE,
       realtimeFactor: Math.round((this.analyzedSec / Math.max(1e-3, wall)) * 10) / 10,
     };
@@ -990,6 +1239,12 @@ function meanVec(vs: Float32Array[]) {
   return out;
 }
 function avgOf<T>(xs: T[], f: (x: T) => number) { return xs.reduce((a, x) => a + f(x), 0) / Math.max(1, xs.length); }
+
+interface MomentScore { up: number; down: number; pre4: number; post1: number; drumsIn: number; drumsOut: number; ref: number }
+/** Score (about dB) a beat needs to be a moment: a bar 5 dB louder or quieter, or the drums arriving or leaving with a step. */
+const MOMENT_MIN = 5;
+/** How far (intensity units, about dB) a run of rising bars must climb to count as a build. */
+const BUILD_MIN = 5;
 
 /** How alike two sections must sound (cosine of sectionVec) to count as the same part coming back. */
 const SECTION_SAME = 0.925;
