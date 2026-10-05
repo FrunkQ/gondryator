@@ -28,7 +28,7 @@ const LOOKS: Record<FxLook, Weights> = {
   liquid:  { rain: 1, kal: 0, liquid: 1,   rgb: 0.3,  thermal: 0, trip: 0.45, echo: 0.6,  bloom: 0.6,  punch: 0.3 },
   thermal: { kal: 0, liquid: 0.1, rgb: 0.6,  thermal: 1, trip: 0,    echo: 0.2,  bloom: 0.5,  punch: 0.9 },
   echo:    { kal: 0, liquid: 0.3, rgb: 0.5,  thermal: 0, trip: 0.2,  echo: 1,    bloom: 0.7,  punch: 0.5 },
-  // The world folds over: the sky becomes a mirror of the ground, turning slowly.
+  // The world folds sideways: one half becomes a mirror of the other, leaning slowly.
   fold:    { fold: 1, kal: 0, liquid: 0.15, rgb: 0.5, thermal: 0, trip: 0.4, echo: 0.2, bloom: 0.8, punch: 0.6 },
   // Hyperspace: stars stream out of the centre and everything smears towards it on the kick.
   hyper:   { hyper: 1, kal: 0, liquid: 0, rgb: 0.7, thermal: 0, trip: 0.35, echo: 0.35, bloom: 1, punch: 1 },
@@ -106,10 +106,12 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     const a = abs(mod(a0, seg).sub(seg.mul(0.5)));
     const uk = vec2(cos(a), sin(a)).mul(r).div(vec2(W.aspect, 1)).mul(float(0.9).add(U.kick.mul(0.06))).add(0.5);
     u = mix(u, uk, W.kal);
-    // Fold: mirror the lower half into the sky about a horizon that tilts with the music.
+    // Fold: mirror one side of the picture onto the other about an upright line that leans and
+    // drifts with the music. (A horizontal fold left a seam along the horizon; upright, it reads
+    // as a mirror standing in the world.)
     const tilt = sin(U.showTime.mul(0.3)).mul(0.08).add(U.kick.mul(0.01));
-    const hz = float(0.42).add(u.x.sub(0.5).mul(tilt));
-    const uf = vec2(u.x, select(u.y.greaterThan(hz), hz.mul(2.0).sub(u.y), u.y));
+    const vx = float(0.5).add(sin(U.showTime.mul(0.11)).mul(0.06)).add(u.y.sub(0.5).mul(tilt));
+    const uf = vec2(select(u.x.greaterThan(vx), vx.mul(2.0).sub(u.x), u.x), u.y);
     u = mix(u, uf, W.fold);
     // Liquid: noise displacement that flows with time and swells with energy.
     const t = U.showTime.mul(0.35);
