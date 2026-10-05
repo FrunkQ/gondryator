@@ -293,9 +293,15 @@ export function makeGrassMaterial(): THREE.MeshStandardNodeMaterial {
 
 /** The sky beyond the other window when the train crosses into space: stars of several sizes,
  * slow nebula clouds in the palette, and a dissolve edge that eats the real sky away. */
-export function makeSpaceMaterial(reveal: any): THREE.MeshBasicNodeMaterial {
-  const m = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, fog: false, depthWrite: true });
-  const d = positionLocal.normalize();
+/**
+ * `floor`: the plane under it. It mirrors the sky (so the nebula and stars go on below the
+ * horizon, like a dark glassy lake), with a grid of light lines fixed to the world, so they stream
+ * past as the train moves and keep the ride feeling fast.
+ */
+export function makeSpaceMaterial(reveal: any, floor_ = false): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial({ side: floor_ ? THREE.DoubleSide : THREE.BackSide, fog: false, depthWrite: true });
+  const look = positionWorld.sub(cameraPosition).normalize();
+  const d = floor_ ? vec3(look.x, look.y.negate(), look.z) : positionLocal.normalize();
   const stars = (k: number, th: number) => {
     const c = floor(d.mul(k));
     const h = hash(c.dot(vec3(1.0, 57.0, 113.0)));
@@ -312,7 +318,21 @@ export function makeSpaceMaterial(reveal: any): THREE.MeshBasicNodeMaterial {
   // Dissolve: noise threshold sweeps with `reveal`, with a hot glowing edge.
   const n = mx_noise_float(d.mul(6.0)).mul(0.5).add(0.5);
   const edge = smoothstep(0.06, 0.0, abs(n.sub(reveal)));
-  m.colorNode = col.add(vec3(1.0, 0.55, 0.9).mul(edge).mul(3.0));
+  let out = col;
+  if (floor_) {
+    // The mirror matches the sky exactly at the horizon (so there is no seam), then darkens
+    // towards your feet.
+    const near = smoothstep(0.0, 0.45, look.y.negate());
+    const p = positionWorld;
+    // Lines across the track every 24 m (they rush past), and along it every 30 m (lanes).
+    const across = smoothstep(0.06, 0.0, abs(fract(p.x.div(24.0)).sub(0.5)).sub(0.47));
+    const along = smoothstep(0.05, 0.0, abs(fract(p.z.div(30.0)).sub(0.5)).sub(0.48));
+    const grid = max(across, along.mul(0.6));
+    const fade = smoothstep(900.0, 60.0, length(p.sub(cameraPosition)));
+    const glow = pow(palette(U.hue.add(p.x.mul(0.002))), vec3(1.6)).mul(grid).mul(fade).mul(float(0.55).add(U.kick.mul(0.9)));
+    out = col.mul(float(1).sub(near.mul(0.75))).add(glow);
+  }
+  m.colorNode = out.add(vec3(1.0, 0.55, 0.9).mul(edge).mul(3.0));
   m.opacityNode = step(n, reveal);
   m.alphaTest = 0.5;
   return m;

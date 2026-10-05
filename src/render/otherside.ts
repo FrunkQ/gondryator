@@ -66,8 +66,7 @@ export class OtherSide {
     // phi 0..π is already the +z half.
     this.space.frustumCulled = false;
     this.space.renderOrder = -6;
-    const floorMat = makeSpaceMaterial(this.reveal);
-    floorMat.side = THREE.DoubleSide;
+    const floorMat = makeSpaceMaterial(this.reveal, true);
     this.floor = new THREE.Mesh(new THREE.PlaneGeometry(4800, 2400).rotateX(-Math.PI / 2).translate(0, 0.12, 1200 + 3.3), floorMat);
     this.floor.frustumCulled = false;
     this.group.add(this.space, this.floor);
