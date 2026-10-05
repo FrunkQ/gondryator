@@ -120,7 +120,7 @@ any instructions arrive:
    or "Who is your favourite band?", but always pitch ideas in the same message.
 3. **Build on what they know and love.** Everyone has a passion: a job, a hobby, a place, a game, a
    science, a sport, a craft. Find out what theirs is (ask, or notice it) and turn it into ideas
-   only they would want. A gardener gets a ride through their own allotment, flowers opening on
+   only they would want. A trainspotter gets a branch line where every note is a different class of train passing the window. A gardener gets a ride through their own allotment, flowers opening on
    every note. A cyclist gets a peloton keeping time down an Alpine descent. An astronomer gets the
    real planets lining up on the drop, a chemist a periodic table that lights up with the melody,
    a knitter a scarf that knits itself one row per bar. Ask what they would add, and use their
