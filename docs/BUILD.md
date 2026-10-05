@@ -6,7 +6,7 @@ This is the current technical reference. For a first session with an AI co-pilot
 
 ## Run it
 
-Needs Node 22 or newer (Vite 8; `.nvmrc` says 22, Node 24 works too) and a browser with WebGPU or WebGL2.
+Needs Node 22.12 or newer (Vite 8; `.nvmrc` says 22, Node 24 works too) and a browser with WebGPU or WebGL2.
 
 ```
 npm install
@@ -19,7 +19,7 @@ node tools/eval-analysis.mjs test-tracks/test-124   # analysis accuracy + speed
 npm run build && node tools/e2e.mjs --webgl --virtual --strict --wander --file test-tracks/test-124.mp3   # headless run + screenshots
 ```
 
-The headless tools need a Chromium: `npx playwright-core install chromium` once, or `CHROME=/path/to/chrome`. `npm run smoke` exits 2 when something is missing on the machine and 1 when the project itself fails; CI (`.github/workflows/smoke.yml`) runs it on every push.
+The headless tools need a Chromium: `npx playwright-core install chromium` once, or `CHROME=/path/to/chrome`. `npm run smoke` reports progress every 10 s, exits 2 when something is missing on the machine, 1 when the project itself fails and 3 when it times out without errors (`-- --timeout 900` for slow machines); CI (`.github/workflows/smoke.yml`) runs it on every push.
 
 Pick a ride from the menu in the bar (or `?pack=non-gondry`; the hidden `?pack=around-the-world` still works); rides switch mid-track without losing your place.
 

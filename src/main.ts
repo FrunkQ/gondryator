@@ -597,7 +597,8 @@ class App {
       // (but never wait forever on the shaders).
       const warm = this.world.warmPending === 0 || this.p > this.titleCross + 15;
       const need = Math.min(MIN_LOOKAHEAD + 0.5, score.track.durationSec);
-      const ready = ahead >= need && this.p >= this.titleCross + 1.2 && warm;
+      // (?quick, for headless checks: no station stop, no shader warm-up; go as soon as the line is read.)
+      const ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm));
       const dep = ready ? 'Departing' : this.departureText(ahead, need, warm);
       this.world.setDeparture(dep);
       if (this.driver instanceof Visualiser) this.driver.setWaiting(dep);

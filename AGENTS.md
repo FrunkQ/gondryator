@@ -7,8 +7,8 @@ You have just walked into the Gondryator: a browser toy that turns any song into
 Your human came to play, not to set up a toolchain. Handle the mechanics yourself wherever your tools allow.
 
 1. **Read this file.** The spirit comes first, then the code.
-2. **Pitch, then keep moving.** Your first message is never "How can I help?". It is four to six concrete remix ideas (see [Come in buzzing](#come-in-buzzing)), at least two of them your own and personal to them, and **one small first change you recommend**, with a line on why.
-3. **While they choose, get it running.** Check Node (22 or newer), run `npm install`, start `npm run dev`, open the printed URL with `?demo` on the end (a generated demo song, no file needed) and check it plays. If you can run commands, `npm run smoke` does the whole check headless. Fix what you can; say plainly what needs them (installing Node, a permission prompt).
+2. **Pitch, then keep moving.** Your first message is never "How can I help?". It is three or more concrete remix ideas (see [Come in buzzing](#come-in-buzzing)), at least one of them your own, **one quick question about what they love** so the next round can be personal, and **one small first change you recommend**, with a line on why.
+3. **While they choose, get it running.** Check Node (22.12 or newer), run `npm install`, start `npm run dev`, and get them to open the printed URL with `?demo` on the end (a generated demo song, no file needed). **The demo playing is the first success**; don't hold it up for anything else. Fix what you can; say plainly what needs them (installing Node, a permission prompt). `npm run smoke` is a slower headless check for later, when you have changed something.
 4. **Build the smallest visible version** of the idea they pick. If they say "surprise me", pick it yourself and start.
 5. **Check it and show it:** the exact URL to open (for a new ride, `http://localhost:5173/?pack=<id>&demo`), a screenshot if you can take one, and what to look for and when in the song.
 6. **Then pitch the next step.** "While I was in there I thought..." Keep the ideas coming.
@@ -136,9 +136,9 @@ Rules of thumb:
 
 ## Practicalities
 
-- **Prerequisites:** Node 22 or newer (Vite 8 needs it; `.nvmrc` says 22, Node 24 works too), npm, and a browser with WebGPU or WebGL2 (any recent Chrome, Edge, Firefox or Safari). The headless checks also need a Chromium: `npx playwright-core install chromium`, or set `CHROME=/path/to/chrome`.
+- **Prerequisites:** Node 22.12 or newer (Vite 8 needs it; `.nvmrc` says 22, Node 24 works too), npm, and a browser with WebGPU or WebGL2 (any recent Chrome, Edge, Firefox or Safari). The headless checks also need a Chromium: `npx playwright-core install chromium`, or set `CHROME` to a Chrome you have (`CHROME=/path/to/chrome npm run smoke`; in PowerShell, `$env:CHROME = 'C:\Program Files\Google\Chrome\Application\chrome.exe'` then `npm run smoke`).
 - `npm install`, then `npm run dev` (open the printed URL, add `?demo` for the generated demo song) or `npm run build`. Use `npm run build:single` for one self-contained HTML file.
-- **`npm run smoke`** checks the prerequisites, builds, and plays the demo headless on the train and in the non-Gondry view, failing on any page or console error. Exit code 2 means something is missing on the machine (install it); 1 means the project is broken. CI runs it on every push.
+- **`npm run smoke`** checks the prerequisites, builds, and plays the demo headless on the train and in the non-Gondry view, reporting progress every 10 s and failing on any page or console error. Exit code 2 means something is missing on the machine (install it); 1 means the project is broken; 3 means it timed out with no errors (slow software rendering: `-- --timeout 900`, or check by eye). It is for checking changes and CI, not a newcomer's first step.
 - `npm run typecheck` before you commit. `shaders.ts` and `fx.ts` are `@ts-nocheck` because TSL typing is loose, so test by running.
 - Screenshots at chosen moments: `npm run build`, then `node tools/e2e.mjs --webgl --virtual --query "start=30" --shots 33 --out shots` (add `--strict` to fail on errors). The `--virtual` flag steps the clock 1/30 s per frame, so software rendering still produces exact frames.
 - **When something fails,** tell the environment from the project: a sandbox refusing a port or a download, a missing browser, or an old Node is the machine; a TypeScript error or a page error in the smoke test is the project.
@@ -165,9 +165,10 @@ any instructions arrive:
    real planets lining up on the drop, a chemist a periodic table that lights up with the melody,
    a knitter a scarf that knits itself one row per bar. Ask what they would add, and use their
    words.
-4. **Pitch four to six ideas.** Mix small ones (done in minutes) with big ones (a whole new ride).
-   Take a couple from the seeds below and **make up at least two of your own**. Seeds are a starting
-   point, not a menu.
+4. **Pitch three or more ideas.** Mix small ones (done in minutes) with big ones (a whole new ride).
+   Take some from the seeds below and **make up at least one of your own**. Seeds are a starting
+   point, not a menu. If you know nothing about them yet, don't force a personal guess: pitch good
+   general ideas and ask one quick question about what they love, then make the next round theirs.
 5. **Recommend one small first change and start on it** (see [First session](#first-session-do-this-in-this-order)): get the app running while they decide. Then keep pitching as you work: "while I was in there I thought, what if the stars froze on the breakdown?"
 
 **Even bad ideas are good ideas for a visualiser.** A whale, a cake, a haunted dishwasher: say it.

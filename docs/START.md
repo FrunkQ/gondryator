@@ -8,20 +8,39 @@ A good co-pilot will pitch ideas, install everything, start the app and show you
 
 ## What you need
 
-- **Node.js 22 or newer** ([nodejs.org](https://nodejs.org), the LTS download). Node 24 works too.
-- **git**, to get the code: `git clone https://github.com/FrunkQ/gondryator`.
+- **Node.js 22.12 or newer** ([nodejs.org](https://nodejs.org), the LTS download). Node 24 works too.
+- **git**, to get the code ([git-scm.com](https://git-scm.com)).
 - **A recent browser**: Chrome, Edge, Firefox or Safari. WebGPU is used where it exists, WebGL2 everywhere else.
 
-Then, in the folder:
+Then open a terminal (Terminal on a Mac, PowerShell on Windows) and paste these, one line at a time:
 
 ```
+git clone https://github.com/FrunkQ/gondryator
+cd gondryator
 npm install
 npm run dev
 ```
 
-Open the address it prints (usually http://localhost:5173) and add `?demo` to hear the generated demo song, or drop in any song of your own. Nothing is uploaded: your music stays on your machine.
+The last one keeps running and prints an address, usually http://localhost:5173. Open **http://localhost:5173/?demo** in your browser: a generated demo song plays, no music file needed. That's the first success. After that, drop in any song of your own. Nothing is uploaded: your music stays on your machine.
 
-To check everything at once: `npm run smoke`. It checks Node, builds, and plays the demo in a hidden browser on the train and in the non-Gondry view. The hidden browser needs a one-off `npx playwright-core install chromium`, or `CHROME=/path/to/chrome npm run smoke` to use the Chrome you already have.
+To stop it, press Ctrl+C in the terminal. To start it again later: `cd gondryator`, then `npm run dev`.
+
+### Optional: the full headless check
+
+`npm run smoke` checks Node, builds, and plays the demo in a hidden browser on the train and in the non-Gondry view, reporting progress as it goes. It's for contributors and for checking a change didn't break anything, not a step you need before playing. It renders without a GPU, so it can take a few minutes, and gives up after five minutes per ride (`npm run smoke -- --timeout 900` for longer).
+
+It needs a Chromium. Either install Playwright's once with `npx playwright-core install chromium`, or point it at the Chrome you have:
+
+```
+# macOS
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run smoke
+```
+
+```
+# Windows (PowerShell)
+$env:CHROME = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+npm run smoke
+```
 
 ## If your assistant can read code but can't run it
 
@@ -35,7 +54,7 @@ Or switch to an assistant with a terminal (a coding agent in your editor or on t
 
 ## When something goes wrong
 
-- **"npm: command not found" or a Vite error about the Node version:** install Node 22 or newer, then run `npm install` again. `nvm use` picks the right version if you have nvm.
+- **"npm: command not found" or a Vite error about the Node version:** install Node 22.12 or newer, then run `npm install` again. `nvm use` picks the right version if you have nvm.
 - **The page stays black:** try Chrome or Edge, and check hardware acceleration is on in the browser's settings.
 - **A port or permission error from a sandboxed assistant:** that is the assistant's environment, not the project. Approve the prompt, or run the command yourself.
-- **`npm run smoke` exits with code 2:** something is missing on the machine (it says what). Code 1 means the project itself hit an error: share the output with your co-pilot.
+- **`npm run smoke` exits with code 2:** something is missing on the machine (it says what). Code 1 means the project itself hit an error: share the output with your co-pilot. Code 3 means it ran out of time without errors: the machine is just slow at rendering without a GPU, so check by eye with `npm run dev` instead.

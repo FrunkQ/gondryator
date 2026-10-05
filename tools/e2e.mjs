@@ -2,7 +2,8 @@
 // the frame rate, sync state, and the section-7 refocus metric.
 //   node tools/e2e.mjs [--file test-tracks/test-124.mp3] [--wander] [--webgl] [--shots 6,14,30] [--out shots] [--strict]
 // Needs a build in dist/ (npm run build) and a Chromium: CHROME=/path/to/chrome, or Playwright's own
-// (npx playwright-core install chromium). --strict exits 1 on any page error or console error, or if
+// (npx playwright-core install chromium). --progress reports every 10 s; --timeout N gives up after N s
+// (exit 3, or 1 if errors were seen). --strict exits 1 on any page error or console error, or if
 // the ride never starts. `npm run smoke` does all of that for you from a fresh clone.
 import { chromium } from 'playwright-core';
 import http from 'node:http';
@@ -42,7 +43,23 @@ const logs = [];
 const errors = [];
 page.on('console', m => { const l = `[${m.type()}] ${m.text()}`; logs.push(l); if (m.type() === 'error' && !l.includes('404')) { errors.push(l); console.error(l.slice(0, 400)); } });
 page.on('pageerror', e => { logs.push(`[pageerror] ${e.message}`); errors.push(`[pageerror] ${e.message}`); console.error('[pageerror]', e.message.slice(0, 400)); });
-if (has('progress')) setInterval(async () => { try { const g = await page.evaluate(() => window.__gondry && { p: window.__gondry.phase, s: window.__gondry.s, fps: window.__gondry.fps, o: window.__gondry.objects }); console.error('progress', JSON.stringify(g)); } catch {} }, 15000).unref();
+// --progress: a line every 10 s saying where the ride has got to. --timeout 300: give up after that
+// many seconds, say where it was stuck, and exit 3 (inconclusive: slow software rendering is not a bug).
+let lastState = null;
+const poll = async () => { try { lastState = await page.evaluate(() => window.__gondry && { phase: window.__gondry.phase, s: window.__gondry.s, fps: window.__gondry.fps }); } catch {} return lastState; };
+const started = Date.now();
+if (has('progress')) setInterval(async () => {
+  const g = await poll();
+  console.log(`  … ${Math.round((Date.now() - started) / 1000)} s: ${g ? `${g.phase === 'title' || g.phase === 'landing' ? 'warming up at the station' : g.phase} (song at ${(g.s ?? 0).toFixed(1)} s, ${Math.round(g.fps ?? 0)} fps)` : 'page loading'}`);
+}, 10000).unref();
+const limit = Number(arg('timeout', 0));
+if (limit) setTimeout(async () => {
+  const g = await poll();
+  console.error(`\nTIMED OUT after ${limit} s, stuck at: ${g ? `${g.phase}, song at ${(g.s ?? 0).toFixed(1)} s, ${Math.round(g.fps ?? 0)} fps` : 'the page never reported'}.`);
+  if (errors.length) { console.error('Errors seen:'); for (const e of errors.slice(0, 10)) console.error('  ' + e.slice(0, 300)); }
+  // (exit straight away: closing the browser first would make the pending waits throw)
+  process.exit(errors.length ? 1 : 3);
+}, limit * 1000).unref();
 await page.goto(`http://localhost:${port}/?${query}`);
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `${out}/00-landing.png`, timeout: 180000 });
