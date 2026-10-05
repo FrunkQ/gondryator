@@ -688,15 +688,19 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   // Not always rings: the wind-up takes the scene's bass style. Rings (shaped like the pulses) for
   // rings and circles, lines closing in on the horizon for the horizon and the road, a spiral for the swell.
   const angT0 = acos(clamp(dot(d, V.gaze), -1.0, 1.0));
-  const angT = select(bm.lessThan(0.5).or(bm.greaterThan(1.5).and(bm.lessThan(2.5))), angT0.div(pMul),
-    select(bm.lessThan(3.5), abs(el).mul(1.3), angT0.add(th.mul(0.16))));
+  // The angle round the gaze jumps by a full turn along one line (straight out to the left of your
+  // gaze), so the spiral takes a whole number of arms (two) per turn: the jump lands on itself and
+  // leaves no seam. The shockwave, a single ring, never spirals.
+  const angS = select(bm.lessThan(0.5).or(bm.greaterThan(1.5).and(bm.lessThan(2.5))), angT0.div(pMul),
+    select(bm.lessThan(3.5), abs(el).mul(1.3), angT0));
+  const angT = angS.add(select(bm.greaterThan(3.5), th.mul(2.0 / (2.5 * 6.28318)), float(0.0)));
   const conv = pow(fract(angT.mul(2.5).add(U.showTime.mul(float(0.6).add(V.tension.mul(3.0))))), 18.0);
   const strobeRate = select(V.tension.greaterThan(0.7), float(4.0), float(2.0));
   const strobe = step(0.5, fract(U.beatPhase.mul(strobeRate))).mul(smoothstep(0.35, 0.9, V.tension));
   // The lift lands (V.releaseT seconds ago): a shockwave out of your gaze.
-  const shockX = angT.sub(V.releaseT.mul(2.6)).div(0.09);
+  const shockX = angS.sub(V.releaseT.mul(2.6)).div(0.09);
   const shock = exp(shockX.mul(shockX).negate()).mul(exp(V.releaseT.mul(-1.2)));
-  const windUp = paletteAt(angT.mul(0.3).add(V.mixes.w)).mul(conv.mul(V.tension).mul(0.9)).add(vec3(shock.mul(1.4)));
+  const windUp = paletteAt(angS.mul(0.3).add(V.mixes.w)).mul(conv.mul(V.tension).mul(0.9)).add(vec3(shock.mul(1.4)));
   arcCol = arcCol.mul(float(1.0).sub(strobe.mul(0.45))).add(windUp);
   // The crash: an inverted flash that tears the old scene down.
   m.colorNode = mix(arcCol, vec3(1.0).sub(arcCol).add(V.crash.mul(0.6)), V.crash.mul(0.85));
