@@ -49,7 +49,8 @@ const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as
 
 type Phase = 'landing' | 'title' | 'run' | 'ended';
 
-const MIN_LOOKAHEAD = 10; // seconds the score must be ahead of the playhead before the music starts
+const MIN_LOOKAHEAD = 10; // seconds the score must be ahead of the playhead before the music starts (at most)
+const REPARSE_MARGIN = 20; // re-tuned events are swapped in only this far ahead of the playhead
 const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
@@ -96,6 +97,7 @@ class App {
   private tuning = savedTuning();
   /** The settings this track is parsed with: yours, or what auto-tune found for this song. */
   private trackTuning = this.tuning;
+  private stoppedThisRide = false;
   private trackHash = '';
   private tuneWorker: Worker | null = null;
   private deep: DeepListen | null = null;
@@ -294,6 +296,7 @@ class App {
     this.pausedMenu(false);
     if (this.phase !== 'landing') this.resetForNewTrack();
     this.preStarted = false;
+    this.stoppedThisRide = false;
     $('#drop').classList.add('hidden');
     void this.player.ctx.resume();
     this.phase = 'title';
@@ -420,6 +423,9 @@ class App {
         perf.mark(`score update (+${d.events.length} events)`);
         if (d.final) {
           this.score.final = true;
+          // (a ride with no signal stop earns back a second of the margin)
+          if (!this.stoppedThisRide) learn('extra', Math.max(0, learned('extra', 0) - 1));
+          if (this.analysisWall > 1) learn('rate', 0.5 * learned('rate', this.analysedSec / this.analysisWall) + 0.5 * (this.analysedSec / this.analysisWall));
           if (isDefaultTuning(this.trackTuning)) void saveScore(this.score);
           // First play of a song on the default settings: learn better ones in the background.
           if (!this.midi && isDefaultTuning(this.trackTuning) && !params.has('noautotune')) void this.backgroundAutoTune(pcm, sampleRate, this.trackHash);
@@ -478,8 +484,51 @@ class App {
     const r = await this.runAutoTune(pcm, sampleRate, DEFAULT_TUNING);
     if (!r || hash !== this.trackHash || !r.changes.length || r.score.total < r.baseline.total + 0.15) return;
     saveSongTuning(hash, r.tuning);
+    this.trackTuning = r.tuning;
     this.tuner?.setTuning(r.tuning);
-    this.toast(`Auto-tuned the parser for this song (${r.changes.length} setting${r.changes.length > 1 ? 's' : ''}). Next time it plays, it uses them.`, 5000);
+    // Use them this ride too: re-parse in the background, gently, and swap in what is still ahead.
+    const n = `${r.changes.length} setting${r.changes.length > 1 ? 's' : ''}`;
+    const used = await this.reparseAhead(pcm, sampleRate, r.tuning, hash);
+    if (hash !== this.trackHash) return;
+    this.toast(used ? `Auto-tuned the parser for this song (${n}): the rest of this ride already uses them.` : `Auto-tuned the parser for this song (${n}). Next time it plays, it uses them.`, 5000);
+  }
+
+  /**
+   * Parse the song again with new settings (throttled, so the visuals keep the machine) and swap
+   * the new events into the live score from REPARSE_MARGIN seconds ahead of the playhead, beyond
+   * anything already scheduled. Deep-listened melody and bass are kept. Resolves whether it did.
+   */
+  private reparseAhead(pcm: Float32Array, sampleRate: number, tuning: Tuning, hash: string): Promise<boolean> {
+    const live = this.score;
+    if (!live) return Promise.resolve(false);
+    return new Promise(resolve => {
+      let w: Worker;
+      try { w = new AnalysisWorker(); } catch { resolve(false); return; }
+      this.tuneWorker = w;
+      const fresh = emptyScore(live.track, live.track.durationSec);
+      w.onmessage = (ev: MessageEvent) => {
+        if (ev.data.type !== 'delta') return;
+        applyDelta(fresh, ev.data.delta);
+        if (!ev.data.delta.final) return;
+        w.terminate();
+        if (this.tuneWorker === w) this.tuneWorker = null;
+        if (hash !== this.trackHash || this.score !== live) { resolve(false); return; }
+        const a = this.player.time + REPARSE_MARGIN;
+        if (a >= live.track.durationSec - 5) { resolve(false); return; }
+        const deep = !!this.deep && this.deep.state !== 'skipped';
+        const isDeepNote = (e: { kind: string; stem: string }) => deep && e.kind === 'note' && (e.stem === 'bass' || e.stem === 'other');
+        const ev2 = live.events;
+        let lo = 0;
+        while (lo < ev2.length && ev2[lo].t < a) lo++;
+        const kept = ev2.slice(lo).filter(isDeepNote);
+        const add = fresh.events.filter(e => e.t >= a && !isDeepNote(e)).map((e, i) => ({ ...e, id: `rt${i}-${e.id}` }));
+        ev2.splice(lo, ev2.length - lo, ...kept.concat(add).sort((x, y) => x.t - y.t));
+        perf.mark(`re-tuned score from ${a.toFixed(0)} s (+${add.length} events)`);
+        resolve(true);
+      };
+      w.onerror = () => { w.terminate(); resolve(false); };
+      w.postMessage({ type: 'start', pcm: pcm.slice(), sampleRate, throttleMsPerSec: 25, tuning });
+    });
   }
 
   /**
@@ -597,7 +646,7 @@ class App {
       // Pull away from the name board only when the line ahead is read and every shader is built
       // (but never wait forever on the shaders).
       const warm = this.world.warmPending === 0 || this.p > this.titleCross + 15;
-      const need = Math.min(MIN_LOOKAHEAD + 0.5, score.track.durationSec);
+      const need = Math.min(this.leadNeeded(), score.track.durationSec);
       // (?quick, for headless checks: no station stop, no shader warm-up; go as soon as the line is read.)
       const ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm));
       const dep = ready ? 'Departing' : this.departureText(ahead, need, warm);
@@ -615,6 +664,8 @@ class App {
           // Never let the visuals sync late: wait at a signal until the line ahead is clear.
           this.signalStop = true;
           this.player.pause();
+          learn('extra', Math.min(9, learned('extra', 0) + 2));
+          this.stoppedThisRide = true;
           this.toast('Signal stop: waiting for the line ahead to clear', 3000);
         }
         if (this.signalStop && ahead > 8) { this.signalStop = false; this.player.play(this.player.time); }
@@ -698,6 +749,18 @@ class App {
    * wait can be predicted (from how fast the analysis and the shader warm-up are going), and
    * "waiting for a clear line" while it cannot.
    */
+  /**
+   * How far the score must be read before departing, learned from this machine: the parser's
+   * speed (measured now, or remembered from earlier rides) sets it between 6 and 15 seconds, and
+   * every signal stop (the music catching up with the parser) adds a little for next time.
+   */
+  private leadNeeded() {
+    const now = this.analysisWall > 1 ? this.analysedSec / this.analysisWall : 0;
+    const rate = now || learned('rate', 0);
+    const base = rate > 0 ? 4 + 12 / rate : MIN_LOOKAHEAD;
+    return THREE.MathUtils.clamp(base + learned('extra', 0), 6, 15);
+  }
+
   private departureText(ahead: number, need: number, warm: boolean): string {
     const rate = this.analysisWall > 0 ? this.analysedSec / this.analysisWall : 0;
     const analysis = ahead >= need ? 0 : rate > 0 ? (need - ahead) / rate : Infinity;
@@ -1008,7 +1071,7 @@ class App {
     const status = $('#status');
     if (this.phase === 'title' && sc) {
       const rtf = this.analysisWall > 0 ? this.analysedSec / this.analysisWall : 0;
-      status.textContent = sc.final || sc.frontierSec >= MIN_LOOKAHEAD ? 'Departing…' : `Reading the line ahead · ${Math.round(sc.frontierSec)}s of ${Math.round(MIN_LOOKAHEAD)}s${rtf ? ` · ${rtf.toFixed(0)}× real time` : ''}`;
+      status.textContent = sc.final || sc.frontierSec >= this.leadNeeded() ? 'Departing…' : `Reading the line ahead · ${Math.round(sc.frontierSec)}s of ${Math.round(this.leadNeeded())}s${rtf ? ` · ${rtf.toFixed(0)}× real time` : ''}`;
     } else status.textContent = '';
     if (this.debug.visible) {
       const m = this.driver?.metric;
@@ -1097,3 +1160,9 @@ function deepPref(): 'off' | 'try' | null {
 function setDeepPref(v: 'off' | 'try' | null) {
   try { if (v) localStorage.setItem('gondryator.deep', v); else localStorage.removeItem('gondryator.deep'); } catch { /* private window */ }
 }
+
+/** What this machine has taught us about itself (the parser's speed, signal stops), kept between rides. */
+function learned(key: string, fallback: number): number {
+  try { const v = Number(localStorage.getItem(`gondryator-learn-${key}`)); return Number.isFinite(v) && localStorage.getItem(`gondryator-learn-${key}`) !== null ? v : fallback; } catch { return fallback; }
+}
+function learn(key: string, v: number) { try { localStorage.setItem(`gondryator-learn-${key}`, String(v)); } catch { /* private mode */ } }
