@@ -64,6 +64,18 @@ src/
   main.ts     wires it all together: loading, phases, switching rides
 ```
 
+## The listening passes (what you can react to)
+
+Three analysers build the score in layers, all in the browser, and each swaps its improvements in ahead of the playhead (from the first bar beyond anything already on screen), never under the viewer's feet:
+
+| Pass | When | What it gives you |
+|---|---|---|
+| **Fast parser** (`analysis/analyzer.ts`) | always, from the first second, far faster than real time | `events` (kick, snare, hat, bass and melody notes, pads), `beats` / `phrases` (the 4/4 grid), `sections` with `group`, `moments` (drop, lift, break, stop, build) and the `envelopes` (loudness, brightness, build-ups, continuous pitch) |
+| **Auto-tune** (`analysis/autotune.ts`) | first play of a song, after the fast parse | better parser settings for this song, re-parsed and swapped in for the rest of the ride, and saved for next time |
+| **Deep listen** (`analysis/deep.ts`) | after the fast parse, on machines that can take it | sharper melody, bass and pad notes from a neural transcriber |
+
+A MIDI file of the same song, dropped alongside it, beats all three for the parts it covers. The friendly tour with diagrams is [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md); the non-Gondry view's own guide is [docs/VISUALISER.md](docs/VISUALISER.md). The full field-by-field table is in [Build a visualiser](#build-a-visualiser-reading-the-score) below.
+
 ## Your first remix in ten minutes
 
 The smallest change that teaches the whole edit, preview, ride loop: a recoloured copy of the starship.

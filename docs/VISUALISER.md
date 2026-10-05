@@ -124,11 +124,12 @@ xychart-beta
 ```
 
 - **The arc:** the loudness of the song, smoothed and normalised, sets a ceiling on colour and brightness. The opening stays dark and muted even when loud; full colour is saved for the **climax**.
-- **Tension:** in the eight seconds before a lift (a drop, a louder section, the end of a build-up) the show holds its breath. It goes greyer and darker, its trails pull inwards and its clock rushes. Then it lets go on the beat with a shockwave from your gaze.
+- **Tension:** in the eight seconds before a lift (a drop or lift the parser marked as a *moment*, the peak of a build, or else a louder section) the show holds its breath. It goes greyer and darker, its trails pull inwards and its clock rushes. Then it lets go on the beat with a shockwave from your gaze.
 - **Eras:** stretches whose instrumentation is clearly different (a long intro, a solo, a breakdown with the drums gone) each get a new vibe and one of three **journeys**:
   - **colour rise:** dark and muted to full colour;
   - **complexity bloom:** one element and plain mirrors growing to a deep, crowded kaleidoscope;
   - **thaw:** icy monochrome warming into the palette.
+- **Stops:** when the music cuts out for a beat or two, the lights go down with it and snap back on the slam.
 
 ## The song's story, start to finish
 
@@ -162,7 +163,8 @@ flowchart LR
 | `envelopes.mix` and per stem | fullness | glow and density |
 | `envelopes.bright` | filters opening | colour speed, sparkle |
 | `envelopes.rise` and lifts ahead | tension, release | wind up before, burst on the beat |
-| `beats`, `phrases` | the grid | timing anything that should land "on the one" |
+| `beats`, `phrases`, `gridAt(score, t)` | the grid | timing anything that should land "on the one"; knowing how far through the bar or phrase you are |
+| `moments`: drop, lift, break, stop, build (`nextMoment`) | a slam, the floor falling away, a held breath | wind up before a drop and burst on it; dim with a stop and snap back on the slam |
 | `sections` with `group` | the story | scene changes; repeated groups come back as themselves |
 
 The data table in [AGENTS.md](../AGENTS.md#build-a-visualiser-reading-the-score) has the full field names and rules of thumb.

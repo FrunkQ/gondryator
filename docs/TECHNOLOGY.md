@@ -40,8 +40,8 @@ sequenceDiagram
     Fast-->>App: final score
     App->>Tune: find better settings for this song
     App->>Deep: transcribe melody and bass with a neural net
-    Tune-->>App: re-tuned events, swapped in ahead of the playhead
-    Deep-->>App: better notes, swapped in ahead of the playhead
+    Tune-->>App: re-tuned events, from the next bar beyond what is on screen
+    Deep-->>App: better notes, swapped in well ahead of the playhead
     App->>App: cache the finished score for next time
 ```
 
@@ -60,6 +60,7 @@ flowchart TB
         a5[chroma] --> a6[pads]
         a7[beat tracker] --> a8[beats · bars · phrases]
         a9[section finder] --> a10[sections and groups<br/>A B A C...]
+        a11[change finder] --> a12[moments: drop · lift ·<br/>break · stop · build]
     end
     subgraph P2 [2 · Auto-tune: first play]
         b1[re-parse a loud stretch<br/>a couple of dozen times] --> b2[keep the settings with the<br/>most self-consistent parse]
@@ -74,7 +75,7 @@ flowchart TB
 
 | Pass | Where | Speed | What it adds |
 |---|---|---|---|
-| **Fast parser** (`src/analysis/analyzer.ts`) | a Web Worker | many times faster than real time | Drums from band-split onsets; bass and lead notes from pitch tracking; pads from chroma; a beat tracker with bars and four-bar phrases; sections, each with a `group` so parts that sound alike share a letter; envelopes for loudness, brightness, build-ups and continuous pitch. No neural network, so it starts at once on any machine. |
+| **Fast parser** (`src/analysis/analyzer.ts`) | a Web Worker | many times faster than real time | Drums from band-split onsets; bass and lead notes from pitch tracking; pads from chroma; a beat tracker with bars and four-bar phrases; sections, each with a `group` so parts that sound alike share a letter; **moments**, the sudden changes (a drop, a lift, a break, a stop, a build), each on the beat it lands on; envelopes for loudness, brightness, build-ups and continuous pitch. No neural network, so it starts at once on any machine. |
 | **Auto-tune** (`src/analysis/autotune.ts`) | its own worker, after the first full parse | in the background | No answer key: it scores parses on what good parses of real music look like (a steady beat, drums on the grid, a plausible number of hits per bar, a melody that moves in steps) and keeps the best settings. They are saved for that song and applied to the rest of the same ride. |
 | **Deep listen** (`src/analysis/deep.ts`) | its own worker, after the first full parse | depends on the machine; skipped on phones | Spotify's Basic Pitch model transcribes the notes far more precisely than the fast parser. It runs in windows; each window is spliced in only when it is comfortably ahead of the playhead. |
 
@@ -94,6 +95,7 @@ classDiagram
       beats: bar and beat numbers
       phrases: 4-bar blocks
       sections: label, energy, group
+      moments: drop, lift, break, stop, build
       events: every hit and note
       envelopes: continuous curves
       frontierSec: read up to here
@@ -117,6 +119,8 @@ classDiagram
     Score --> Event
     Score --> Envelopes
 ```
+
+Two helpers make the grid easy to use: `gridAt(score, t)` says which bar and beat you are in and when the next downbeat and phrase start, and `nextMoment(score, t)` finds the next drop (or any kind of moment), so an effect can wind up and land exactly on it.
 
 One rule makes the whole thing safe: **everything before `frontierSec` is final.** The parser only ever appends, so a renderer can schedule anything up to the frontier knowing it will never change. Later passes respect a margin ahead of the playhead for the same reason.
 
@@ -165,7 +169,7 @@ The train and the starship are scheduled scenery. The non-Gondry view is a diffe
 - **Score cache:** finished scores are kept in your browser (IndexedDB), keyed by a hash of the file, so a second ride on a song starts at once.
 - **Tags:** title, artist, album, year and cover art are read straight from the file (ID3, Vorbis, MP4) and drive the station boards and the decade closers.
 - **Shuffle a folder** plays a folder one song after another, parsing the next while this one plays. **Listen along** rides along to another browser tab, one song behind, so each song is read whole before it plays.
-- **Export:** the score downloads as JSON or MIDI.
+- **Export:** the score downloads as JSON or MIDI. The MIDI file carries a structure track with markers and held notes for sections, phrases, downbeats and moments, so a DAW or another tool can line up with the song's shape.
 - **Debug tools:** D (overlay and song-structure strip), T (tuning screen), P (frame analyser), X (force an effects look).
 
 ## Why it is built this way
