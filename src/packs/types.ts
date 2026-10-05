@@ -176,7 +176,18 @@ export interface Pack {
   /** 0..1: how milky the sky is (Star Guitar's bleached summer haze is about 0.6). */
   haze?: number;
   light: { at: number; sky: string; horizon: string; sun: string; sunIntensity: number; sunElevation: number; fog?: number }[];
-  title: { template: 'station-board'; stationPrefix?: string };
+  /**
+   * The card the ride waits at while the song is read: 'station-board' (a lineside shed with the
+   * name board, a departures strip and a platform clock) or 'launch-screen' (a floating screen
+   * with a T-minus strip and a countdown dial). It stands in the start view (rig.startYaw and
+   * startPitch), so the ride rolls up and turns to face it.
+   */
+  title: { template: 'station-board' | 'launch-screen'; stationPrefix?: string };
+  /**
+   * How the ride ends after the last note: 'terminus' (pull into a station with the end board)
+   * or 'arrival-screen' (drift up to a floating screen with the end card). Default 'terminus'.
+   */
+  end?: { template: 'terminus' | 'arrival-screen' };
   /** Things that happen on structure: overpass at new sections, passing train in breakdowns. */
   sectionEvents?: { onNewSection?: string; onBreakdown?: string; /** How far out the breakdown convoy passes, m (default 4.3: the next track). */ breakdownDepth?: number };
   /** perform mode: the cast. Mapping rules send events to a troupe by its id (as `layer`). */

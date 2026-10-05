@@ -47,7 +47,7 @@ src/
               midi.ts      MIDI in (sharper sync) and out (with a structure track); cache.ts stores parsed scores
   packs/      a "pack" is a vehicle or show, written entirely as data:
               star-guitar.ts  the train (homage to the video)
-              starship.ts     an open cockpit in space, a psychedelic vortex out of the other side
+              starship.ts     an open cockpit in space; ship-other-side.ts its far side, a space reef and a crystal canyon
               non-gondry.ts   "the non-Gondry view :(": no vehicle, a 360° visualiser around you
               other-side.ts   the train's other window: Provence and Cosmos (the disco takes over on breaks and drops)
               types.ts        what a pack can say: layers, mapping rules, themes, light, fx, window
@@ -110,8 +110,39 @@ The smallest change that teaches the whole edit, preview, ride loop: a recoloure
 2. Pick your `layers`: for each one, a depth from the window, the models per theme, and how it scales with velocity, pitch (`pitchCenter`/`heightPerSemitone`) or note length (`lengthByDur`).
 3. `mapping` decides which sounds go to which layer (kick, snare, hat, bass, melody, pads).
 4. Add new models in `render/models.ts`. They are plain functions that merge primitives. Mark the materials with `T(SURF.glass, ...)`, `T(SURF.glow, ...)` and so on.
-5. Set `vehicle` ('train' gives ground, rails and a carriage; 'ship' gives space all round and an open canopy), `window` (size and colours of the carriage), `light` (sun over the length of the song) and `otherSide` ('trippy' for a psychedelic mirror).
+5. Set `vehicle` ('train' gives ground, rails and a carriage; 'ship' gives space all round and an open canopy), `window` (size and colours of the carriage), `light` (sun over the length of the song) and `otherSide` ('trippy' for a psychedelic mirror). The start is described, not coded: `rig.startYaw` / `startPitch` set the view the ride turns to as it pulls up, and `title.template` picks the card waiting in that view ('station-board' for the train, 'launch-screen' for the starship's floating T-minus screen).
 6. Add it to `PACKS` in `src/packs/index.ts` and it appears in the menu.
+
+### The ride checklist
+
+A ride is a story with a beginning, a middle and an end. When someone asks for a new one ("a Halloween ride!"), work down this list so nothing is left on the defaults by accident. Every line is a field in the pack (see `src/packs/types.ts`); copy the train or the starship and change each one.
+
+**Beginning (while the song is read)**
+- [ ] `rig.startYaw` / `startPitch`: the view the ride turns to as it pulls up. Angle it so the card sits off-centre, clear of window pillars.
+- [ ] `title.template`: the card waiting in that view. 'station-board' (lineside shed, departures strip, platform clock) or 'launch-screen' (floating screen, T-minus strip, countdown dial). A new one is a branch in `World.stationBoard`, e.g. a gravestone with the song carved on it.
+
+**Middle (the song)**
+- [ ] `layers` and `mapping`: one kind of object per instrument (kick, snare, hats, bass, melody, pads), each at its own depth.
+- [ ] `themes` and `themeCycle`: two or three worlds that alternate by section; `themeBySection` pins one to the intro or breakdown.
+- [ ] `ridges`: what slides and glides become (mountain lines, ribbons of light).
+- [ ] `ambient` and `idle`: what fills the gaps, so the window is never empty.
+- [ ] `rare` on a layer: one or two surprises a song turns up now and then.
+- [ ] `sectionEvents`: something big on each new section (a ring gate, an overpass) and one in the breakdown (a passing train, a convoy).
+- [ ] `light`: the sun or moon over the length of the song.
+- [ ] `fx`: which looks the far side cycles through, and which belong to the intro or breakdown.
+
+**The other window**
+- [ ] `otherSide` and its own pack (`packs/other-side.ts`, `packs/ship-other-side.ts`): invented worlds on the same beat. The disco takes it over on breaks and drops for free.
+
+**End (after the last note)**
+- [ ] `end.template`: 'terminus' (pull into a station with the end board) or 'arrival-screen' (drift up to a floating end screen).
+- [ ] The outro: what the last section looks like, and the last thing on screen.
+
+**Then go further.** Things nobody has asked for yet that would make it sing:
+- a special object only for the drop (`moments`: the drop's exact beat is known ahead);
+- the sound pass: a reaction per family (`score.sounds`), photographic in the main window, wild on the far side;
+- something that grows across the whole song, so the last chorus looks different from the first;
+- an object that comes back every time a part repeats (`sections[].group`), changed a little each time.
 
 Keep the golden rule: **everything that moves must land on its beat** (by default it appears at the leading edge as it sounds; `rig.hitAt: 'centre'` times it to the middle of the view instead). The spawner handles that for you if your models stand on y=0, centred on x=0, with +z facing the viewer.
 

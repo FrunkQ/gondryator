@@ -512,6 +512,106 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     T1(SURF.metal, box(3, 1.6, 0.2, -8, 6.1, 0, 0x9da2a8)),
   ]),
 
+  // --- the starship's far side: a reef adrift in space, and a crystal canyon ----------------
+  // A jellyfish: a glowing bell with a frilled rim and long trailing tentacles.
+  'jellyfish': () => {
+    const parts: Part[] = [
+      T1(SURF.glow, colorize(new THREE.SphereGeometry(2.4, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.8, 1).translate(0, 9, 0), 0xff8ad8, 0.6)),
+      T1(SURF.glass, colorize(new THREE.SphereGeometry(1.4, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 9.1, 0), 0xffd0f0, 0.7)),
+      T1(SURF.glow, colorize(new THREE.TorusGeometry(2.35, 0.12, 6, 32).rotateX(Math.PI / 2).translate(0, 9, 0), 0xffe0ff)),
+    ];
+    for (let i = 0; i < 9; i++) {
+      const a = i / 9 * Math.PI * 2, r = 1.6 + (i % 3) * 0.25, len = 4 + (i % 4) * 1.3;
+      const g = new THREE.CylinderGeometry(0.03, 0.09, len, 4, 1).translate(0, -len / 2, 0).rotateZ(Math.sin(i * 2.3) * 0.12).translate(Math.cos(a) * r, 9, Math.sin(a) * r);
+      parts.push(T1(SURF.glow, colorize(g, i % 2 ? 0x8ad8ff : 0xff9ae0, 0.4)));
+    }
+    return merge(parts);
+  },
+  // An anemone: a bed of soft tapering stalks, each with a glowing bead at the tip.
+  'anemone': () => {
+    const parts: Part[] = [T1(SURF.rock, rockBlob(1.8, 21, 0x4a3a5a, 0, 0.6, 0, [1.4, 0.5, 1.2]))];
+    for (let i = 0; i < 14; i++) {
+      const a = i * 2.39996, r = 0.3 + Math.sqrt(i / 14) * 1.5, h = 2.2 + ((i * 7) % 5) * 0.45;
+      const lean = (r / 1.8) * 0.5;
+      const g = new THREE.CylinderGeometry(0.06, 0.16, h, 5, 1).translate(0, h / 2, 0).rotateZ(-Math.cos(a) * lean).rotateX(Math.sin(a) * lean).translate(Math.cos(a) * r, 0.8, Math.sin(a) * r);
+      parts.push(T1(SURF.paint, colorize(g, 0x5ad8b8, 0.5)));
+      const tip = new THREE.Vector3(0, h, 0).applyEuler(new THREE.Euler(Math.sin(a) * lean, 0, -Math.cos(a) * lean)).add(new THREE.Vector3(Math.cos(a) * r, 0.8, Math.sin(a) * r));
+      parts.push(T1(SURF.glow, sphere(0.16, tip.x, tip.y, tip.z, i % 3 ? 0xfff27a : 0xff7ac8, 1, 1, 1, 6)));
+    }
+    return merge(parts);
+  },
+  // A coral fan: a flat lattice of branches, edge-on to nothing, facing the window.
+  'coral-fan': () => {
+    const parts: Part[] = [];
+    const branch = (x: number, y: number, a: number, len: number, depth: number) => {
+      const g = new THREE.CylinderGeometry(0.06 + depth * 0.03, 0.09 + depth * 0.04, len, 4, 1).translate(0, len / 2, 0).rotateZ(a).translate(x, y, 0);
+      parts.push(T1(depth > 1 ? SURF.paint : SURF.glow, colorize(g, depth > 1 ? 0xe0603a : 0xffa070, 0.6)));
+      if (depth <= 0) return;
+      const ex = x - Math.sin(a) * len, ey = y + Math.cos(a) * len;
+      branch(ex, ey, a + 0.42, len * 0.72, depth - 1);
+      branch(ex, ey, a - 0.42, len * 0.72, depth - 1);
+    };
+    branch(0, 0, 0, 3.2, 4);
+    return merge(parts);
+  },
+  // A space whale: a long smooth body, a fluked tail, long fins, and a line of lights down its side.
+  'space-whale': () => {
+    const parts: Part[] = [
+      T1(SURF.paint, colorize(new THREE.CapsuleGeometry(3.4, 18, 8, 16).rotateZ(Math.PI / 2).scale(1, 0.85, 0.9).translate(0, 14, 0), 0x3a4f78, 0.5)),
+      T1(SURF.paint, colorize(new THREE.CapsuleGeometry(2.6, 14, 6, 14).rotateZ(Math.PI / 2).scale(1, 0.6, 0.8).translate(1, 12.4, 0), 0xb8c4d8, 0.8)),
+      // Flukes and fins: flattened, swept.
+      T1(SURF.paint, box(4.5, 0.4, 7, -14.5, 14.6, 0, 0x34466c, [0, 0, 0.2])),
+      T1(SURF.paint, box(6, 0.35, 2.4, 3, 11.6, 3.6, 0x34466c, [0.5, 0.4, -0.25])),
+      T1(SURF.paint, box(6, 0.35, 2.4, 3, 11.6, -3.6, 0x34466c, [-0.5, -0.4, -0.25])),
+    ];
+    for (let i = 0; i < 12; i++) parts.push(T1(SURF.glow, sphere(0.26, -9 + i * 1.6, 13.6 + Math.sin(i * 0.5) * 0.3, 2.95, i % 2 ? 0x8ae8ff : 0xffe07a, 1, 1, 1, 6)));
+    parts.push(T1(SURF.glow, sphere(0.45, 9.6, 15, 2.2, 0xffffff, 1, 1, 1, 8)));
+    return merge(parts);
+  },
+  // A geode: a split rock, its open face full of glowing crystal points.
+  'geode': () => {
+    const parts: Part[] = [T1(SURF.rock, rockBlob(3.2, 31, 0x5a5048, 0, 4, -0.8, [1.2, 1, 0.7]))];
+    for (let i = 0; i < 16; i++) {
+      const a = i * 2.39996, r = Math.sqrt(i / 16) * 2.6;
+      const g = new THREE.OctahedronGeometry(0.35 + (i % 4) * 0.12, 0).scale(1, 2.2, 1).rotateX(Math.PI / 2 - 0.3).translate(Math.cos(a) * r, 4 + Math.sin(a) * r * 0.9, 1.2);
+      parts.push(T1(i % 3 ? SURF.glass : SURF.glow, colorize(g, i % 2 ? 0xb07aff : 0x7af0ff)));
+    }
+    return merge(parts);
+  },
+  // A lantern buoy: a little floating paper lantern on a tether.
+  'lantern-buoy': () => merge([
+    T1(SURF.glow, sphere(0.42, 0, 2.6, 0, 0xffc070, 1, 1.3, 1, 10)),
+    T1(SURF.metal, cyl(0.2, 0.2, 0.12, 0, 3.2, 0, 0x5a4636, 8)),
+    T1(SURF.metal, cyl(0.015, 0.015, 2, 0, 1.0, 0, 0x8a8a8a, 3)),
+  ]),
+  // --- the starship's rare finds -------------------------------------------------------------
+  // A derelict: a broken hull drifting, its ribs showing.
+  'derelict': () => {
+    const parts: Part[] = [
+      T1(SURF.metal, box(14, 4.4, 5.6, -3, 8, 0, 0x6a6e72, [0, 0, 0.12])),
+      T1(SURF.paint, box(14.1, 0.6, 5.65, -3, 7, 0, 0x8a3a2a, [0, 0, 0.12])),
+    ];
+    for (let i = 0; i < 6; i++) parts.push(T1(SURF.metal, colorize(new THREE.TorusGeometry(2.8, 0.18, 4, 12, Math.PI * 1.2).rotateY(Math.PI / 2).translate(6 + i * 1.6, 8.6 + i * 0.2, 0), 0x55595d)));
+    parts.push(T1(SURF.glow, box(0.4, 0.4, 0.1, -6, 9, 2.85, 0xff5a3a)));
+    return merge(parts);
+  },
+  // A solar sail: a vast square of shimmering foil on four booms, a tiny probe at its heart.
+  'solar-sail': () => merge([
+    T1(SURF.glass, colorize(new THREE.PlaneGeometry(26, 26).rotateZ(Math.PI / 4).translate(0, 22, 0), 0xe8d8ff, 1)),
+    ...[0, 1, 2, 3].map(k => T1(SURF.metal, box(0.15, 18.4, 0.15, 0, 22, 0.1, 0xd0d0d0, [0, 0, k * Math.PI / 2]))),
+    T1(SURF.glow, sphere(0.7, 0, 22, 0.4, 0xfff0c0, 1, 1, 1, 10)),
+  ]),
+  // A deep-space listening post: three dishes on a little station, turned to the stars.
+  'dish-array': () => {
+    const parts: Part[] = [T1(SURF.metal, box(10, 1.4, 4, 0, 6, 0, 0x9da2a8))];
+    for (const x of [-3.5, 0, 3.5]) {
+      parts.push(T1(SURF.metal, cyl(0.2, 0.3, 2, x, 7.7, 0, 0x7d8286, 6)));
+      parts.push(T1(SURF.paint, colorize(new THREE.SphereGeometry(2.2, 16, 6, 0, Math.PI * 2, 0, 0.9).rotateX(-0.9).translate(x, 9.4, 0.4), 0xf2efe8, 0.85)));
+      parts.push(T1(SURF.glow, sphere(0.18, x, 9.9, 1.5, 0xff5a3a, 1, 1, 1, 6)));
+    }
+    return merge(parts);
+  },
+
   // --- rare finds: the odd surprise in the main window (Layer.rare) -------------------------
   // A tower mill: a tapering stone body, a boat-shaped cap and four lattice sails facing the line.
   'windmill': () => {

@@ -6,6 +6,9 @@ import type { Pack } from './types';
 // with a light ring at eye level, snare -> cargo pods and tumbling rocks, hats -> nav lights,
 // bass -> freighters as long as the note, melody -> spires of light at its pitch, pads -> planets.
 // At every new section the ship jumps through a ring gate; in the breakdown, a star-liner convoy.
+// Now and then a rare find drifts past: a derelict, a listening post, a solar sail, a space whale.
+// It waits for launch beside a floating screen counting down (render/world.ts launchScreen), and
+// its other side flies through a reef and a crystal canyon (packs/ship-other-side.ts).
 const ALL = <T>(v: T) => ({ nebula: v, belt: v, deep: v });
 
 export const STARSHIP: Pack = {
@@ -15,23 +18,27 @@ export const STARSHIP: Pack = {
   vehicle: 'ship',
   otherSide: 'trippy',
   viewpoint: 'cockpit',
-  rig: { type: 'lateral-rail', speed: 34, speedByEnergy: 0.4, eyeHeight: 4, maxYaw: 75, lookYaw: 180, startYaw: 12, startPitch: -4, maxPitch: 35, fov: 62 },
+  rig: { type: 'lateral-rail', speed: 34, speedByEnergy: 0.4, eyeHeight: 4, maxYaw: 75, lookYaw: 180, startYaw: -16, startPitch: 2, maxPitch: 35, fov: 62 },
   spawnMode: 'pass-by',
   layers: [
     { id: 'fence', depth: 6, depthJitter: 0.2, scale: 1, scaleByVel: 0.4, models: ALL(['nav-light']) },
     { id: 'trackside', depth: 10, scale: 1, scaleByVel: 0.1, models: ALL(['gate-strut']) },
     { id: 'near', depth: 24, depthJitter: 4, scale: 1, scaleByVel: 0.35,
       models: { nebula: ['cargo-pod', 'satellite', 'asteroid-big'], belt: ['asteroid-big', 'asteroid-big', 'cargo-pod'], deep: ['satellite', 'cargo-pod', 'halo-gate'] },
-      tints: ALL(['#ffffff', '#ffe8d0', '#e0f0ff']) },
+      tints: ALL(['#ffffff', '#ffe8d0', '#e0f0ff']),
+      rare: { chance: 0.03, models: ALL(['derelict']) } },
     { id: 'mid', depth: 50, depthJitter: 4, scale: 1, scaleByVel: 0.2, lengthByDur: 0.85, stretch: ['freighter'],
       models: { nebula: ['freighter', 'freighter', 'star-dock'], belt: ['freighter'], deep: ['star-dock', 'space-station', 'freighter'] },
-      tints: ALL(['#ffffff', '#e6ecf4', '#f4e6dc']) },
+      tints: ALL(['#ffffff', '#e6ecf4', '#f4e6dc']),
+      rare: { chance: 0.04, models: ALL(['dish-array', 'derelict']) } },
     { id: 'row', depth: 85, depthJitter: 3, scale: 1, scaleByVel: 0.1, pitchCenter: 64, heightPerSemitone: 0.08,
       models: { nebula: ['light-spire'], belt: ['crystal', 'light-spire'], deep: ['light-spire', 'crystal'] },
       tints: ALL(['#ffffff', '#ffc8f0', '#c8ffe8', '#fff0b0']) },
     { id: 'far', depth: 320, depthJitter: 60, scale: 1.5, scaleByVel: 0.3,
       models: { nebula: ['ringed-planet', 'gas-giant'], belt: ['moon', 'gas-giant'], deep: ['gas-giant', 'ringed-planet', 'moon'] },
-      tints: ALL(['#ffffff', '#c8d8ff', '#ffd0c0']) },
+      tints: ALL(['#ffffff', '#c8d8ff', '#ffd0c0']),
+      // Rare finds: a solar sail, a space whale, sometimes.
+      rare: { chance: 0.1, models: ALL(['solar-sail', 'space-whale']) } },
   ],
   mapping: [
     { match: { stem: 'drums', kind: 'kick' }, layer: 'trackside', tier: 1 },
@@ -73,7 +80,8 @@ export const STARSHIP: Pack = {
     { at: 0.5, sky: '#000000', horizon: '#000000', sun: '#ffe6c8', sunIntensity: 2.6, sunElevation: 12, fog: 0 },
     { at: 1.0, sky: '#000000', horizon: '#000000', sun: '#ffc8a0', sunIntensity: 2.2, sunElevation: 3, fog: 0 },
   ],
-  title: { template: 'station-board' },
+  title: { template: 'launch-screen' },
+  end: { template: 'arrival-screen' },
   // The star view stays clean (the warp jumps aside); the looks belong to the other side.
   fx: { cycle: ['trip', 'hyper', 'kaleido', 'tunnel', 'prism', 'fold', 'echo', 'thermal'], bySection: { intro: 'hyper', breakdown: 'tunnel' } },
   sectionEvents: { onNewSection: 'ring-gate', onBreakdown: 'star-liner', breakdownDepth: 16 },

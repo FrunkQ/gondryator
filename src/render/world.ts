@@ -497,7 +497,10 @@ export class World {
     const grp = new THREE.Group();
     grp.position.x = x;
     const canopyMat = new THREE.MeshStandardMaterial({ color: 0x8d9497, emissive: 0x2a2d2f });
-    if (!opts.trackside) this.platform(grp, canopyMat);
+    // (A launch-screen ride has no platforms: its landing card floats too.)
+    const screen = opts.end ? this.pack.end?.template === 'arrival-screen' : this.launch;
+    if (screen) this.launchScreen(grp, World.LAUNCH_Z);
+    else if (!opts.trackside) this.platform(grp, canopyMat);
     else {
       // The title card: a lineside goods shed, its name board fixed to the wall facing the line.
       const pad = new THREE.Mesh(new THREE.BoxGeometry(22, 0.1, 4), new THREE.MeshStandardMaterial({ color: this.ship ? 0x5b6168 : 0x9d968a }));
@@ -510,12 +513,70 @@ export class World {
       sr.position.set(0, 5.75, -8.3 - 3);
       grp.add(sr);
     }
-    // The name board is fixed flat to a wall: the shed's, or the station building's.
-    this.boardOnWall(grp, info, opts, canopyMat, opts.trackside ? -8.3 : -11.5);
+    // The name board is fixed flat to a wall: the shed's, or the station building's (on the
+    // starship's launch, the face of a floating screen).
+    this.boardOnWall(grp, info, opts, screen ? new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.35, metalness: 0.8 }) : canopyMat, screen ? World.LAUNCH_Z + 0.1 : opts.trackside ? -8.3 : -11.5);
     this.stations.add(grp);
     return grp;
   }
 
+  /** The title card is the floating launch screen (pack.title.template), not a station board. */
+  private get launch() { return this.pack.title.template === 'launch-screen'; }
+
+  /** Floating things on the launch (the screen): they bob and sway gently in update(). */
+  private floaters: { o: THREE.Object3D; y: number; ph: number }[] = [];
+
+  /**
+   * The starship's title card: a big screen hanging in space beside the launch, the song's name on
+   * it, a T-minus countdown above, a countdown dial beside, a bezel with light strips, antennas
+   * with blinking tips, and little thruster pods underneath keeping it up. It bobs as it waits.
+   */
+  /** How far out the launch screen hangs: beyond the gate struts, so nothing passes in front. */
+  static readonly LAUNCH_Z = -14;
+  private launchScreen(grp: THREE.Group, z: number) {
+    const float = new THREE.Group();
+    const eye = this.pack.rig.eyeHeight;
+    const cy = eye + 0.35 + 0.6;
+    const bezel = new THREE.MeshStandardMaterial({ color: 0x232b38, roughness: 0.3, metalness: 0.85 });
+    const glow = (c: number) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false, fog: false });
+    const W = 12.6, H = 5.4;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.7), bezel);
+    body.position.set(0.7, cy, z - 0.45);
+    float.add(body);
+    // Light strips round the bezel.
+    for (const [w, h, x, y] of [[W, 0.08, 0.7, cy + H / 2], [W, 0.08, 0.7, cy - H / 2], [0.08, H, 0.7 - W / 2, cy], [0.08, H, 0.7 + W / 2, cy]] as const) {
+      const s = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.76), glow(0x5ff0ff));
+      s.position.set(x, y, z - 0.45);
+      float.add(s);
+    }
+    // Antennas with blinking tips (blink() below).
+    for (const sx of [-1, 1]) {
+      const a = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 2.4, 6), bezel);
+      a.position.set(0.7 + sx * (W / 2 - 1), cy + H / 2 + 1.2, z - 0.45);
+      a.rotation.z = -sx * 0.25;
+      float.add(a);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), glow(0xff3b3b));
+      tip.position.set(0.7 + sx * (W / 2 - 1) + sx * 0.3, cy + H / 2 + 2.35, z - 0.45);
+      tip.userData.blink = sx > 0 ? 0 : 0.5;
+      this.blinkers.push(tip);
+      float.add(tip);
+    }
+    // Thruster pods underneath, each with a soft glowing cone of exhaust.
+    for (const sx of [-1, 1]) {
+      const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, 1.1, 14), bezel);
+      pod.position.set(0.7 + sx * 3.8, cy - H / 2 - 0.6, z - 0.45);
+      float.add(pod);
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.8, 14, 1, true).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.55, toneMapped: false, depthWrite: false, fog: false }));
+      flame.position.set(pod.position.x, pod.position.y - 1.4, pod.position.z);
+      this.blinkers.push(flame);
+      flame.userData.flame = true;
+      float.add(flame);
+    }
+    grp.add(float);
+    // The whole card bobs (the board and dial are added to grp after this).
+    this.floaters.push({ o: grp, y: 0, ph: Math.random() * 6 });
+  }
+  private blinkers: THREE.Object3D[] = [];
   private platform(grp: THREE.Group, canopyMat: THREE.Material) {
     // Platform along the window side.
     const plat = new THREE.Mesh(new THREE.BoxGeometry(180, 1.1, 5.5), new THREE.MeshStandardMaterial({ color: this.ship ? 0x6f767e : 0xbdb5a3 }));
@@ -637,12 +698,12 @@ export class World {
     g.fillRect(0, 0, c.width, c.height);
     g.font = `700 ${Math.round(c.height * 0.5)}px ui-monospace, "Courier New", monospace`;
     g.textBaseline = 'middle';
-    g.fillStyle = '#ffb22e';
-    g.shadowColor = '#ff9a00'; g.shadowBlur = 14;
+    g.fillStyle = this.launch ? '#5ff0ff' : '#ffb22e';
+    g.shadowColor = this.launch ? '#00c8ff' : '#ff9a00'; g.shadowBlur = 14;
     g.textAlign = 'left';
-    g.fillText('PLATFORM 1', 40, c.height / 2);
+    g.fillText(this.launch ? 'LAUNCH' : 'PLATFORM 1', 40, c.height / 2);
     g.textAlign = 'right';
-    g.fillText(text.toUpperCase(), c.width - 40, c.height / 2);
+    g.fillText(this.launch ? launchText(text, this.countdown) : text.toUpperCase(), c.width - 40, c.height / 2);
     g.shadowBlur = 0;
     // The dot-matrix grain.
     g.fillStyle = 'rgba(0,0,0,0.35)';
@@ -663,6 +724,7 @@ export class World {
     this.clockSec = sec;
     const g = c.getContext('2d')!, r = c.width / 2;
     g.setTransform(1, 0, 0, 1, 0, 0);
+    if (this.launch) { this.drawDial(g, r); this.clockTex.needsUpdate = true; return; }
     g.fillStyle = '#f4f1e8';
     g.fillRect(0, 0, c.width, c.height);
     g.translate(r, r);
@@ -694,16 +756,49 @@ export class World {
     this.clockTex.needsUpdate = true;
   }
 
+  /** The starship's dial: a countdown ring that empties to lift-off, the seconds big in the middle. */
+  private drawDial(g: CanvasRenderingContext2D, r: number) {
+    g.fillStyle = '#06121f';
+    g.fillRect(0, 0, r * 2, r * 2);
+    g.translate(r, r);
+    g.strokeStyle = 'rgba(95,240,255,0.25)'; g.lineWidth = 3;
+    for (let i = 0; i < 60; i++) {
+      g.save(); g.rotate((i / 60) * Math.PI * 2);
+      g.beginPath(); g.moveTo(0, -r + 12); g.lineTo(0, -r + (i % 5 ? 20 : 34)); g.stroke();
+      g.restore();
+    }
+    const left = this.countdown === null ? null : Math.min(60, this.countdown);
+    g.lineWidth = 16; g.lineCap = 'round';
+    g.strokeStyle = '#5ff0ff'; g.shadowColor = '#00c8ff'; g.shadowBlur = 16;
+    g.beginPath();
+    const frac = left === null ? (this.clockSec / 60) : left / 60;
+    g.arc(0, 0, r - 52, -Math.PI / 2, -Math.PI / 2 + Math.max(0.001, frac) * Math.PI * 2);
+    g.stroke();
+    g.fillStyle = '#dffcff';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '700 30px ui-monospace, "Courier New", monospace';
+    g.fillText('T-MINUS', 0, -34);
+    g.font = '700 74px ui-monospace, "Courier New", monospace';
+    g.fillText(left === null ? '--' : left > 0 ? String(left).padStart(2, '0') : 'GO', 0, 26);
+    g.shadowBlur = 0;
+  }
+
   private boardTexture(info: StationInfo, end: boolean): THREE.CanvasTexture {
     const c = document.createElement('canvas');
     c.width = 1400; c.height = end ? 620 : 420;
     const g = c.getContext('2d')!;
-    g.fillStyle = '#1f3b5a';
+    g.fillStyle = this.launch ? '#06121f' : '#1f3b5a';
     g.fillRect(0, 0, c.width, c.height);
-    g.strokeStyle = '#f2efe6';
+    if (this.launch) {
+      // A screen, not a sign: faint scanlines and a cyan glow.
+      g.fillStyle = 'rgba(95,240,255,0.06)';
+      for (let y = 0; y < c.height; y += 8) g.fillRect(0, y, c.width, 3);
+      g.shadowColor = '#5ff0ff'; g.shadowBlur = 18;
+    }
+    g.strokeStyle = this.launch ? '#5ff0ff' : '#f2efe6';
     g.lineWidth = 12;
     g.strokeRect(22, 22, c.width - 44, c.height - 44);
-    g.fillStyle = '#f2efe6';
+    g.fillStyle = this.launch ? '#dffcff' : '#f2efe6';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     const fit = (text: string, size: number, maxW: number, weight = '700') => {
@@ -740,6 +835,17 @@ export class World {
   // ------------------------------------------------------------------ per frame
   update(s: number, rig: CameraRig, yaw: number, pitch: number, xr = false) {
     this.drawClock();
+    if (this.floaters.length || this.blinkers.length) {
+      const t = performance.now() / 1000;
+      // (Cards taken down leave the list.)
+      this.floaters = this.floaters.filter(f => f.o.parent);
+      this.blinkers = this.blinkers.filter(b => b.parent?.parent?.parent);
+      for (const f of this.floaters) { f.o.position.y = Math.sin(t * 0.9 + f.ph) * 0.18; f.o.rotation.z = Math.sin(t * 0.55 + f.ph) * 0.012; }
+      for (const b of this.blinkers) {
+        if (b.userData.flame) { b.scale.y = 0.85 + 0.3 * Math.abs(Math.sin(t * 23 + b.id)); continue; }
+        b.visible = ((t + b.userData.blink) % 1) < 0.5;
+      }
+    }
     // Turning right round, you lean across the aisle to the other window.
     if (!xr && this.pack.rig.lookYaw) this.head.position.z = 1.55 * Math.max(0, -Math.cos(yaw)) ** 1.5;
     rig.pose(s, tmpPos, tmpQuat);
@@ -877,4 +983,11 @@ export class World {
   blurScale = 1;
   private baseFov = 50;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
+}
+
+/** The departure strip's words on the starship's launch screen. */
+function launchText(text: string, countdown: number | null) {
+  if (countdown !== null) return countdown > 0 ? `T-MINUS 00:${String(Math.min(99, countdown)).padStart(2, '0')}` : 'IGNITION';
+  if (text === 'Departing') return 'IGNITION';
+  return /line/i.test(text) ? 'AWAITING LAUNCH WINDOW' : text.toUpperCase();
 }

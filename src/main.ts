@@ -5,6 +5,7 @@ import { makeRig, OrbitRig, type CameraRig } from './render/rig';
 import { Spawner } from './render/spawner';
 import { OtherSide, ClampedGaze } from './render/otherside';
 import { OTHER_SIDE } from './packs/other-side';
+import { SHIP_OTHER_SIDE } from './packs/ship-other-side';
 import { Performer } from './render/performer';
 import { Visualiser } from './render/visualiser';
 import type { CardInfo, ShowDriver } from './render/driver';
@@ -359,10 +360,11 @@ class App {
       this.other.reset(-1e9);
       this.other.setScore(s, this.world.camera);
     } else if (this.pack.rig.lookYaw && this.pack.spawnMode !== 'perform' && !params.has('noother')) {
-      // The train looks out on invented worlds; the starship on a psychedelic double of its own.
+      // The train and the starship look out on invented worlds (packs/other-side.ts, packs/ship-other-side.ts).
       const trippy = this.pack.otherSide === 'trippy';
-      const otherPack = trippy ? { ...this.pack, id: `${this.pack.id}-mirror`, sectionEvents: undefined } : OTHER_SIDE;
-      this.other = new OtherSide(otherPack, this.rig, s, this.world.camera, trippy ? 0.9 : 0);
+      // The starship's worlds keep their own colours under a lighter trip than the old mirror's.
+      const otherPack = trippy ? (this.pack.id === 'starship' ? SHIP_OTHER_SIDE : { ...this.pack, id: `${this.pack.id}-mirror`, sectionEvents: undefined }) : OTHER_SIDE;
+      this.other = new OtherSide(otherPack, this.rig, s, this.world.camera, trippy ? (this.pack.id === 'starship' ? 0.35 : 0.9) : 0);
       this.world.scene.add(this.other.group);
       this.other.spawner.refreshLeads();
     }
@@ -394,7 +396,8 @@ class App {
   /** Where the song's name board stands: right in the angled view from where the train stops. */
   private titleBoardX() {
     const x = this.rig.titleTravel(this.rig.titleArrival());
-    return this.world.mode === 'train' ? x + 8.2 * Math.tan(THREE.MathUtils.degToRad(this.pack.rig.startYaw ?? 0)) : x;
+    const out = this.pack.title.template === 'launch-screen' ? -World.LAUNCH_Z : 8.2;
+    return this.world.mode === 'train' ? x + out * Math.tan(THREE.MathUtils.degToRad(this.pack.rig.startYaw ?? 0)) : x;
   }
 
   private showCard(kind: 'landing' | 'title' | 'end', x: number, info: CardInfo, opts: { end?: boolean; trackside?: boolean } = {}) {
