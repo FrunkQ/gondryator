@@ -20,7 +20,7 @@ import { DebugOverlay } from './ui/debug';
 import { Player, toMono } from './audio/player';
 import { readTags } from './audio/tags';
 import { makeDemoTrack } from './audio/demo';
-import { applyDelta, emptyScore, type Score, type ScoreDelta } from './score/types';
+import { applyDelta, emptyScore, gridAt, sampleEnvelope, type Score, type ScoreDelta } from './score/types';
 import { hashFile, loadScore, saveScore } from './score/cache';
 import { parseMidi, scoreToMidi, type MidiImport } from './score/midi';
 import { PACKS, HIDDEN_PACKS } from './packs';
@@ -151,6 +151,52 @@ class App {
     if (params.has('demo')) void this.loadDemo();
     // The gatekeeper: test the machine while the rider looks for a song (not in the stepped-clock tests).
     if (!params.has('nodyno') && (this.player.virtual === null || params.has('dyno'))) void this.runDyno();
+  }
+
+  /** The black-screen check: when to look next, a nudge waiting for its beat, and when one last fired. */
+  private dark = { next: 0, nudgeAt: -1, last: -1e9, off: false };
+  private darkCtx: CanvasRenderingContext2D | null = null;
+
+  /**
+   * The disco now and then paints itself almost entirely black while the music is still going
+   * (a dark scene meeting a dark palette). Every couple of seconds, shrink the frame just drawn to
+   * 32x18 and count the lit pixels. If hardly any are lit while the music is loud, reroll (as R
+   * does) on the next bar. Never in the last stretch (the outro fades to black on purpose), in a
+   * stop, or within eight seconds of the last nudge.
+   */
+  private checkBlack(s: number) {
+    const d = this.dark, sc = this.score, drv = this.driver;
+    if (d.off || !(drv instanceof Visualiser) || this.phase !== 'run' || !sc || this.player.virtual !== null) return;
+    if (d.nudgeAt >= 0 && s >= d.nudgeAt) {
+      d.nudgeAt = -1; d.last = s;
+      const seed = drv.reroll();
+      perf.mark(`black screen: nudged (seed ${seed})`);
+      return;
+    }
+    if (this.p < d.next) return;
+    d.next = this.p + 2.5;
+    if (d.nudgeAt >= 0 || s - d.last < 8 || s > sc.track.durationSec - 15 || s < 5) return;
+    if (sampleEnvelope(sc.envelopes.mix, s) < 0.3) return;
+    if ((sc.moments ?? []).some(m => m.kind === 'stop' && s >= m.t - 0.5 && s <= m.t + (m.dur ?? 1) + 0.5)) return;
+    try {
+      this.darkCtx ??= Object.assign(document.createElement('canvas'), { width: 32, height: 18 }).getContext('2d', { willReadFrequently: true });
+      const ctx = this.darkCtx!;
+      ctx.clearRect(0, 0, 32, 18);
+      ctx.drawImage(this.canvas, 0, 0, 32, 18);
+      const px = ctx.getImageData(0, 0, 32, 18).data;
+      let lit = 0, seen = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] === 0) continue;
+        seen++;
+        if (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2] > 28) lit++;
+      }
+      // (A canvas the browser won't let us read comes back fully transparent: stop looking.)
+      if (seen === 0) { d.off = true; return; }
+      if (lit / seen < 0.04) {
+        const g = gridAt(sc, s);
+        d.nudgeAt = g ? g.nextDownbeat : s;
+      }
+    } catch { d.off = true; }
   }
 
   /** The dynamometer while it runs: stopped (with what it has measured) as soon as a song is chosen. */
@@ -979,6 +1025,7 @@ class App {
       this.cullSides();
       if (perf.on) this.markChanges(s);
       if (!this.tuner?.isOpen) this.world.render(); // the tuning screen covers the view
+      this.checkBlack(s);
       // The page opens on a plain picture of the board (index.html); lift it once the 3D station has
       // drawn a few frames with its shaders built (or after two seconds, whichever comes first).
       if (this.boot && ++this.drawn > 3 && (this.world.warmPending === 0 || this.drawn > 120 || this.p > 2)) {
