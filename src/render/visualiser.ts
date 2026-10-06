@@ -410,6 +410,8 @@ export class Visualiser implements ShowDriver {
     /** Slow copies for shapes: bass loudness and other loudness eased over a third of a second, and
      * a turn that steps on each beat but never swings back (the rotozoomer). */
     soft: uniform(new THREE.Vector3()),
+    /** The twister's spin: forward only, faster with the bass. */
+    twPhase: uniform(0),
     /** The horizon's lean (radians), the turn of the axis it leans about, and floor-to-ceiling mirror (0..1). */
     tilt: uniform(new THREE.Vector3()),
     /** The glitterball: spin speed (radians/s), flash, and its tint. */
@@ -1572,6 +1574,7 @@ export class Visualiser implements ShowDriver {
     }
     const S = this.V.soft.value, ks = 1 - Math.exp(-dt / 0.35), B = this.V.bands.value;
     S.x += (B.y - S.x) * ks; S.y += (B.z - S.y) * ks;
+    this.V.twPhase.value = (this.V.twPhase.value + dt * (1.2 + S.x * 3.0)) % (Math.PI * 200);
     if (g && g.beat !== this.spinBeat) { this.spinBeat = g.beat; this.spinTarget += 0.15; }
     S.z += (this.spinTarget - S.z) * (1 - Math.exp(-dt / 0.12));
     const F = this.V.figure.value, kf = 1 - Math.exp(-dt / 0.25);

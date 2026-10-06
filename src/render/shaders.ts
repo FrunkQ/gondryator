@@ -1134,7 +1134,10 @@ function moreElementsBody(V: any, g: any) {
   on(47, () => {
     const acc = vec3(0.0).toVar();
     const y = q.y;
-    const a = T.mul(1.2).add(y.mul(float(1.5).add(sin(T.mul(0.4)).mul(2.0)).add(V.soft.x.mul(2.5))));
+    // The bass spins it faster (twPhase only ever moves forward); the twist along the bar changes
+    // only slowly. (The bass used to change the twist itself, which slid the faces up and down the
+    // bar and back again: under the tunnel look those faces became rings rocking in and out.)
+    const a = V.twPhase.add(y.mul(float(2.0).add(sin(T.mul(0.13)).mul(0.6))));
     const x = q.x.sub(sin(y.mul(2.0).add(T)).mul(0.22));
     const w = float(0.34).mul(float(1.0).add(U.kick.mul(0.15)));
     for (let k = 0; k < 4; k++) {

@@ -1400,6 +1400,7 @@ class App {
         `objects ${this.driver?.activeCount ?? 0}`,
         m ? `refocus ${m.total ? Math.round((m.hits / m.total) * 100) : 0}% (${m.hits}/${m.total}, last64 ${recent}%)` : '',
         `look ${(this.look.yaw * 57.3).toFixed(0)}°${this.look.wander ? ' wander' : ''}`,
+        `fx ${this.fx.locked ?? this.fx.look}`,
         sc ? `${sc.analysis.mode} · bpm ${sc.tempo[sc.tempo.length - 1]?.bpm ?? '?'}` : '',
         this.driver instanceof Visualiser ? this.driver.status : '',
         this.deep ? this.deep.status : '',
