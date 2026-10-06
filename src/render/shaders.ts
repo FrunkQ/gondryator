@@ -1150,7 +1150,9 @@ function moreElementsBody(V: any, g: any) {
       const tt = x.sub(x1).div(max(x2.sub(x1), 0.0001));
       acc.addAssign(paletteAt(float(k * 0.25).add(U.hue)).mul(k % 2 ? 0.55 : 1.0).mul(inside).mul(float(0.2).add(shade.mul(0.9))).mul(float(0.8).add(sin(tt.mul(3.14159)).mul(0.3))));
     }
-    return acc.mul(smoothstep(1.3, 1.1, abs(y))).mul(front).mul(1.2);
+    // Longer than the turn it wraps through, with long soft fades at both ends: where the ends meet
+    // they overlap, faded, instead of butting together in a hard seam.
+    return acc.mul(smoothstep(2.4, 0.9, abs(y))).mul(front).mul(1.2);
   });
   // 48 Kefrens bars: one shaded bar drawn on every line without clearing the screen, each line a
   // little further along a sine, so the bars stack into a snaking ribbon. The melody bends it.

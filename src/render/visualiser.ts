@@ -105,8 +105,8 @@ export const ELEMENTS: { name: string; group: Group }[] = [
   { name: 'unlimited bobs', group: 'melody' }, // 50 a shaded ball whose trail never clears, tracing figures
 ];
 const NE = ELEMENTS.length;
-/** Never picked at random: the glitterball (41) is kept for its own showpiece; the twister (47) is retired. */
-const RETIRED = [41, 47];
+/** Never picked at random: the glitterball (41) is kept for its own showpiece. */
+const RETIRED = [41];
 /**
  * Outros: how the show winds down over the song's last seconds (seeded per song). Each is one or
  * two calm elements with a look; then everything fades to black, the trails dry up and no new
@@ -207,10 +207,8 @@ function randomBassMode(r: () => number): [number, number] {
 const OUTRUN = [24, 7, 8];
 /** The Amiga megademo: copper bars, a rotozoomer, a starfield and the song's name on a sine scroller. */
 const MEGADEMO = [42, 23, 36, 3];
-/** The other Amiga classics the megademo draws two of, so no two demos are the same. (The twister,
- * 47, is retired: the way it twisted drew a seam and rocked back and forth; the checker tunnel
- * stands in.) */
-const DEMO_PARTS = [23, 36, 3, 22, 48, 49, 50];
+/** The other Amiga classics the megademo draws two of, so no two demos are the same. */
+const DEMO_PARTS = [23, 36, 3, 47, 48, 49, 50];
 /** The 50s: an atom, atomic starbursts, all on flickering old film. */
 const ATOMIC = [43, 18, 3];
 /** The 60s: an oil-wheel light show, op-art moire, blobs. */
