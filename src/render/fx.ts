@@ -343,8 +343,11 @@ export class FxDirector {
       while (this.ptr < ev.length && ev[this.ptr].t <= s) {
         const e = ev[this.ptr++];
         if (s - e.t > 0.3) continue;
+        // Each pulse is set to where it would be had it struck exactly on its note, not on this
+        // frame (which comes a little after).
+        const late = s - e.t;
         if (e.kind === 'kick') {
-          this.kick = Math.max(this.kick, 0.5 + 0.5 * e.vel); this.hue += 0.015;
+          this.kick = Math.max(this.kick, (0.5 + 0.5 * e.vel) * Math.exp(-late / 0.14)); this.hue += 0.015;
           // The CRT plays along: every couple of bars of kicks it may switch off or back on, or
           // change its scanline pitch.
           if (++this.kicks % 8 === 0) {
@@ -356,8 +359,8 @@ export class FxDirector {
             else W.crtMode.value = r < 0.85 ? 0 : r < 0.93 ? 1 : 2;
           }
         }
-        else if (e.kind === 'snare') this.snare = Math.max(this.snare, 0.4 + 0.6 * e.vel);
-        else if (e.kind === 'hat') this.hat = Math.max(this.hat, e.vel);
+        else if (e.kind === 'snare') this.snare = Math.max(this.snare, (0.4 + 0.6 * e.vel) * Math.exp(-late / 0.18));
+        else if (e.kind === 'hat') this.hat = Math.max(this.hat, e.vel * Math.exp(-late / 0.06));
       }
     }
     // Section look.
@@ -367,7 +370,7 @@ export class FxDirector {
       const sec = sc.sections[idx];
       if (sec) { energy = sec.energy; label = sec.label; }
       if (idx !== this.secIdx) {
-        if (this.secIdx >= 0) { this.glitch = 1; this.warp = 1; }
+        if (this.secIdx >= 0 && sec) { const late = s - sec.t; this.glitch = Math.exp(-late / 0.12); this.warp = Math.exp(-late / 0.55); }
         this.secIdx = idx;
         this.subIdx = 0;
         this.look = this.lookFor(sc.sections, idx);
@@ -389,7 +392,8 @@ export class FxDirector {
     if (this.override && running) this.look = this.override;
     const target = { film: 0, dmosh: 0, crt: 0, fold: 0, rain: 0, hyper: 0, tunnel: 0, ...LOOKS[this.locked ?? this.look] };
     if (label === 'breakdown') target.rain = 1;
-    const k = 1 - Math.exp(-dt / 0.8);
+    // (A new look snaps in under the section's warp and glitch, so it is there on the beat.)
+    const k = 1 - Math.exp(-dt / (this.warp > 0.4 || this.glitch > 0.4 ? 0.2 : 0.8));
     for (const key of Object.keys(target) as (keyof Weights)[]) this.cur[key] += (target[key] - this.cur[key]) * k;
     this.glitch *= Math.exp(-dt / 0.12);
     this.warp *= Math.exp(-dt / 0.55);

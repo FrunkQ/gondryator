@@ -129,15 +129,18 @@ export class OtherSide {
   update(s: number, dt: number, gaze: GazeSource, frontier: number, running: boolean, trainX: number) {
     this.gaze ??= new MirroredGaze(gaze, THREE.MathUtils.degToRad(this.pack.rig.maxYaw));
     this.spawner.update(s, dt, this.gaze, frontier, running);
-    const cosmos = running && this.spawner.themeAt(s) === 'cosmos';
-    const k = 1 - Math.exp(-dt / 1.2);
+    // Both fade in over the second before their section starts (looking 1.2 s ahead, quick
+    // ease), so they are full on its first beat.
+    const cosmos = running && this.spawner.themeAt(s + 1.2) === 'cosmos';
+    const k = 1 - Math.exp(-dt / 0.45);
     this.reveal.value += ((cosmos ? 1.05 : -0.05) - this.reveal.value) * k;
     // The disco paints the passing scenery too: the trippy surfaces, in the show's colours.
     this.trip.value = Math.max(U.trip.value, U.tripFar.value, this.reveal.value * 0.3, this.discoReveal.value * 0.6, this.minTrip);
     this.space.visible = this.floor.visible = this.reveal.value > 0.01;
     this.space.position.x = this.floor.position.x = trainX;
     // The disco fades in and out with its parts of the song; it only runs while it shows.
-    const disco = running && this.discoAt(s);
+    // It fades in over the second before the break or drop, so it is full on the beat.
+    const disco = running && this.discoAt(s + 1.2);
     this.discoReveal.value += ((disco ? 1.05 : -0.05) - this.discoReveal.value) * k;
     this.discoReveal.value = Math.max(0, Math.min(1, this.discoReveal.value));
     const on = this.discoReveal.value > 0.01;

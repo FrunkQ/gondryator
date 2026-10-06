@@ -50,6 +50,8 @@ function savedTuning(): Tuning {
   try { return { ...DEFAULT_TUNING, ...JSON.parse(localStorage.getItem('gondryator.tuning') ?? '{}') }; } catch { return { ...DEFAULT_TUNING }; }
 }
 
+/** Seconds the screen shows a frame after it is drawn (about a frame and a half at 60 Hz). */
+const DISPLAY_LEAD = 0.025;
 const params = new URLSearchParams(location.search);
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -779,7 +781,10 @@ class App {
       if (ready) this.go();
     }
     if (this.phase === 'run' || this.phase === 'ended') {
-      s = this.player.time;
+      // The picture is drawn for a moment a little ahead of what is playing now: this frame
+      // reaches the screen a frame or so after it is drawn (the player already allows for the
+      // sound card's own delay).
+      s = this.player.time + (this.player.virtual === null ? DISPLAY_LEAD : 0);
       // After the last note the show clock keeps running so the train can roll into the terminus.
       if (score && !this.player.playing && this.endedAt !== null) s = score.track.durationSec + (this.p - this.endedAt);
       if (score && !score.final) {

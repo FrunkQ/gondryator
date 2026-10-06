@@ -225,7 +225,8 @@ export class Spawner {
         continue;
       }
       if (o.vx !== 0) o.x = l.baseX + o.vx * (s - o.t0);
-      if (o.grow < 1) o.grow = Math.min(1, o.grow + dt / 0.6);
+      // (A late arrival grows in, finishing by its beat where there is time.)
+      if (o.grow < 1) o.grow = Math.min(1, o.grow + dt / THREE.MathUtils.clamp(l.t - s, 0.15, 0.6));
       if (l.tier === 1 && this.steering && s < l.t) {
         const target = this.rig.travel(l.t) + l.depth * Math.tan(this.hitYaw(clampAbs(gaze.yaw, yawMax))) + (l.xOff ?? 0);
         const onScreen = this.ndcX(o.x, l.focusY, o.z);

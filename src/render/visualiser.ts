@@ -301,6 +301,9 @@ const R_SPRITE = 60;
  * (vAz, vEl) radians a second, pops open over `pop` seconds, grows by `grow` per second and fades
  * out over its last `fadeOut` seconds. Hue and saturation colour it; vel scales its brightness.
  */
+/** How far ahead of a note its sprite may start opening, so it is full on the beat (s). */
+const PREROLL = 0.35;
+
 interface Sprite { t0: number; life: number; az: number; el: number; size: number; vAz: number; vEl: number; spin: number; hue: number; sat: number; vel: number; pop: number; grow: number; fadeOut: number; wobble: number }
 
 /** An instanced mesh plus a ring buffer of sprites: the flowers, bubbles, starbursts... all use one. */
@@ -330,7 +333,11 @@ class SpritePool {
   /** Off: the far-side backdrop has no sprites (they would hang still while the world travels). */
   off = false;
 
-  add(sp: Sprite) { if (this.off || (QUALITY.particles < 1 && Math.random() > QUALITY.particles)) return; this.items[this.next] = sp; this.next = (this.next + 1) % this.count; }
+  /**
+   * Adds a sprite timed so its pop finishes, full size, at `sp.t0` (its sound): it starts opening
+   * up to PREROLL seconds early. (The visualiser hands sprites over that far ahead of the music.)
+   */
+  add(sp: Sprite) { if (this.off || (QUALITY.particles < 1 && Math.random() > QUALITY.particles)) return; sp.t0 -= Math.min(sp.pop, PREROLL); sp.life += Math.min(sp.pop, PREROLL); this.items[this.next] = sp; this.next = (this.next + 1) % this.count; }
 
   clear() {
     this.items.fill(null);
@@ -439,6 +446,8 @@ export class Visualiser implements ShowDriver {
   private bassTimes = [-99, -99, -99, -99];
   private bassPtr = 0;
   private ptr = 0;
+  /** The sprites' own place in the events, up to PREROLL seconds ahead of `ptr`. */
+  private sptr = 0;
   private lastS = -Infinity;
   private seed: number;
   private rand: () => number;
@@ -542,7 +551,7 @@ export class Visualiser implements ShowDriver {
     const ev = this.score.events;
     let lo = 0, hi = ev.length;
     while (lo < hi) { const m = (lo + hi) >> 1; if (ev[m].t <= s) lo = m + 1; else hi = m; }
-    this.ptr = lo;
+    this.ptr = this.sptr = lo;
     this.lastS = s;
     this.phraseIdx = -1;
     this.lastChange = Math.min(this.lastChange, s);
@@ -846,7 +855,7 @@ export class Visualiser implements ShowDriver {
         if (s - this.lastLeadT > 1.5 && s - this.lastSceneAt > 6 && sec && !this.outroOn) this.newScene(s, sec.label, sectionKey(sec) + ':phrase', false);
         this.lastLeadT = s;
       }
-      // Events as they sound.
+      // Events as they sound: the pulses, rings and lightning, timed from the note itself.
       const ev = sc.events;
       while (this.ptr < ev.length && ev[this.ptr].t <= s && ev[this.ptr].t < frontier) {
         const e = ev[this.ptr++];
@@ -854,17 +863,27 @@ export class Visualiser implements ShowDriver {
         if (e.kind === 'kick') this.lastKick = e.t;
         else if (e.kind === 'snare') {
           this.V.boltAz.value = gazeAz + (this.rand() - 0.5) * 1.6;
-          this.V.boltT.value = 0;
+          this.V.boltT.value = s - e.t;
           this.V.boltSeed.value = this.rand() * 100;
+        } else if (e.stem === 'bass' && e.kind === 'note') this.bassTimes[this.bassPtr++ % 4] = e.t;
+        else if (e.kind === 'note' && e.pitch !== null && (e.stem === 'other' || e.stem === 'vocals')) {
+          this.noteAct[((e.pitch % 12) + 12) % 12] = Math.max(this.noteAct[((e.pitch % 12) + 12) % 12], 0.5 + e.vel * 0.5);
+        }
+      }
+      // ...and the sprites a moment ahead, so each one has finished opening as its note sounds
+      // (SpritePool.add starts it early). The song is read ahead, so the future is known.
+      if (this.sptr < this.ptr - 64 || this.sptr > ev.length) this.sptr = this.ptr;
+      while (this.sptr < ev.length && ev[this.sptr].t <= s + PREROLL && ev[this.sptr].t < frontier) {
+        const e = ev[this.sptr++];
+        if (s - e.t > 0.3 || fade > 0) continue;
+        if (e.kind === 'snare') {
           if (this.target[18] > 0) this.burst(e.t, e.vel, gazeAz);
         } else if (e.kind === 'hat') {
           if (this.target[19] > 0) this.sprinkle(e.t, e.vel, gazeAz);
           if (this.target[39] > 0) this.firefly(e.t, e.vel, gazeAz);
         } else if (e.stem === 'bass' && e.kind === 'note') {
-          this.bassTimes[this.bassPtr++ % 4] = e.t;
           if (this.target[17] > 0) this.bubble(e.t, e.pitch ?? 40, e.vel, e.dur, gazeAz);
         } else if (e.kind === 'note' && e.pitch !== null && (e.stem === 'other' || e.stem === 'vocals')) {
-          this.noteAct[((e.pitch % 12) + 12) % 12] = Math.max(this.noteAct[((e.pitch % 12) + 12) % 12], 0.5 + e.vel * 0.5);
           if (this.target[12] > 0) this.bloom(e.t, e.pitch, e.vel, e.dur, gazeAz);
           if (this.target[20] > 0 && e.dur >= 1.2) this.flake(e.t, e.pitch, e.vel, gazeAz);
           if (this.target[38] > 0 && e.dur < 1.2) this.comet(e.t, e.pitch, e.vel, gazeAz);
@@ -885,7 +904,8 @@ export class Visualiser implements ShowDriver {
     for (let i = 0; i < 12; i++) { this.noteAct[i] *= Math.exp(-dt / 0.5); this.noteData[i * 4] = Math.round(this.noteAct[i] * 255); this.noteData[i * 4 + 3] = 255; }
     this.V.notes.needsUpdate = true;
     // Element weights ease towards the scene's choice.
-    const kw = 1 - Math.exp(-dt / 0.6);
+    // (Under a crash the new scene snaps in, hidden by the flash, so it is there on the beat.)
+    const kw = 1 - Math.exp(-dt / (this.V.crash.value > 0.3 ? 0.12 : 0.6));
     for (let i = 0; i < NE; i++) this.weights[i] += (this.target[i] * (1 - fade) - this.weights[i]) * kw;
     // Sprites are added light, so on a bright backdrop they vanish: dim it while any are on.
     this.V.dim.value = this.far ? 0 : 0.55 * Math.max(...SPRITE_ELEMENTS.map(i => this.weights[i]));
@@ -1109,7 +1129,7 @@ export class Visualiser implements ShowDriver {
       while (this.liftPtr < this.lifts.length && this.lifts[this.liftPtr].t <= s) {
         // The lift lands: let go, with a shockwave out of your gaze.
         const l = this.lifts[this.liftPtr++];
-        if (s - l.t < 0.5) { this.V.release.value = Math.max(this.V.release.value, 0.5 + l.size * 0.5); this.releaseT = 0; }
+        if (s - l.t < 0.5) { this.V.release.value = Math.max(this.V.release.value, 0.5 + l.size * 0.5); this.releaseT = s - l.t; }
       }
       const next = this.lifts[this.liftPtr];
       if (next) { const ahead = next.t - s; if (ahead < 8) tension = next.size * (1 - ahead / 8) ** 1.5; }
