@@ -97,6 +97,8 @@ export class Analyzer {
   private sectionDrums: boolean[] = [];
   private groups = 0;
   private lastSectionBar = -999;
+  /** The song's last sections are held back until the end is known, so a fade or a closing break can be named an outro. */
+  private sectionsFinal = false;
   private deferTo = -1; // a section boundary moved on to the next phrase start
   private prevBlockActive: Set<Stem> = new Set();
   private padEvents: ScoreEvent[] = [];
@@ -747,6 +749,49 @@ export class Analyzer {
       this.emitPhrase(this.phraseStart, F.length);
       this.phraseStart = F.length + 1;
     }
+    if (final && this.barsDecided === F.length && !this.sectionsFinal) { this.findOutro(); this.sectionsFinal = true; }
+  }
+
+  /**
+   * Name the ending. Most songs close on an outro, and the fast labeller can't call one until it
+   * has heard the end, so the last minute's sections wait for this. A fade (the same material
+   * getting steadily quieter over the last bars) becomes an outro from where the fade starts; a
+   * closing break with no fade becomes the outro. A song that stops dead keeps its last section.
+   */
+  private findOutro() {
+    const F = this.barFeatures as any[], S = this.sectionsOut;
+    if (F.length < 12 || S.length < 2) return;
+    let L = F.length;
+    while (L > 1 && F[L - 1].midDb < -55) L--; // the silence after the end
+    const db = (b: number) => avgOf(F.slice(Math.max(0, b - 2), Math.min(L, b + 1)), x => x.midDb); // 3-bar smoothed, bar b 1-based
+    // Walk back from the last bar while it keeps getting louder (allowing a little wobble).
+    let k = L, peak = db(L);
+    for (let b = L - 1; b >= Math.max(2, L - 32); b--) {
+      const v = db(b);
+      if (v < peak - 1.5) break;
+      if (v > peak) { peak = v; k = b; }
+    }
+    const drop = db(k) - db(L), bars = L - k + 1;
+    // Repetitive-ish: the fading bars carry the harmony of what came just before.
+    const before = F.slice(Math.max(0, k - 9), k - 1), during = F.slice(k - 1, L);
+    const same = before.length >= 4 && cosine(meanVec(during.map(x => x.chroma)), meanVec(before.map(x => x.chroma))) > 0.8;
+    const last = S[S.length - 1];
+    const open = S.length - 1 >= this.sentSections; // (one already sent can't be renamed)
+    const songEnd = this.barTime(L) + 4 * 60 / Math.max(60, this.tempoOut[this.tempoOut.length - 1]?.bpm ?? 120);
+    if (drop >= 9 && bars >= 4 && same) {
+      // Start the outro on a phrase line from the last section, if one is close.
+      const off = (k - last.bar) % 4;
+      if (k - last.bar >= 4 && off !== 0) k += off <= 2 ? -off : 4 - off;
+      if (k - last.bar < 4) { if (last.bar > 1 && open) last.label = 'outro'; }
+      else {
+        const next = F.slice(k - 1, k + 3);
+        S.push({ t: round3(this.barTime(k)), label: 'outro', energy: Math.round(clamp((avgOf(next, x => x.midDb) + 34) / 26, 0, 1) * 100) / 100, bar: k, group: this.groups++ });
+        this.sectionVecs.push(new Float32Array(0)); this.sectionStems.push(this.activeStems(next).size); this.sectionDrums.push(this.activeStems(next).has('drums'));
+      }
+      return;
+    }
+    // No fade: a closing breakdown (the drums gone for the last stretch) is the outro.
+    if (open && last.label === 'breakdown' && last.bar > 1 && songEnd - last.t < Math.max(45, 0.2 * this.duration)) last.label = 'outro';
   }
 
   /** The biggest moment landing on bar b's downbeat (a build where it starts), if already decided. */
@@ -1084,7 +1129,10 @@ export class Analyzer {
     const beats: Beat[] = [];
     const allBeats = this.beatsOut();
     for (; this.sentBeats < allBeats.length && allBeats[this.sentBeats].t < frontier; this.sentBeats++) beats.push(allBeats[this.sentBeats]);
-    const sections = this.sectionsOut.slice(this.sentSections).filter(s => s.t < frontier);
+    const hold = this.sectionsFinal ? Infinity : this.duration - 60;
+    let nSec = this.sentSections;
+    while (nSec < this.sectionsOut.length && this.sectionsOut[nSec].t < Math.min(frontier, hold)) nSec++;
+    const sections = this.sectionsOut.slice(this.sentSections, nSec);
     this.sentSections += sections.length;
     const phrases = this.phrasesOut.slice(this.sentPhrases).filter(p => p.t < frontier);
     this.sentPhrases += phrases.length;

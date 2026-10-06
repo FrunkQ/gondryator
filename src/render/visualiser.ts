@@ -1173,7 +1173,7 @@ export class Visualiser implements ShowDriver {
     const sc = this.score;
     if (!sc.final) return Infinity;
     const D = sc.track.durationSec, last = sc.sections[sc.sections.length - 1];
-    const own = last?.label === 'outro' && last.t > D - 40 ? last.t : Infinity;
+    const own = last?.label === 'outro' && last.t > D - 75 ? last.t : Infinity;
     return Math.max(0, Math.min(D - OUTRO_LEN, own));
   }
 
