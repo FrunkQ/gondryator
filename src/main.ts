@@ -60,6 +60,8 @@ type Phase = 'landing' | 'title' | 'run' | 'ended';
 
 const MIN_LOOKAHEAD = 10; // seconds the score must be ahead of the playhead before the music starts (at most)
 const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
+/** Extra seconds at the station, at most, for deep listen to get a head start on the GPU. */
+const DEEP_HEAD = 4;
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
 /** Where you look when the ride starts (?yaw=150 overrides it, for testing the far window). */
@@ -93,6 +95,8 @@ class App {
   /** What the sign on the landing board says while the dynamometer runs, and how far it has got. */
   private dynoSign: { text: string; p: number | null } | null = null;
   signalStop = false;
+  /** When everything but deep listen's head start was ready at the station. */
+  private readyAt: number | null = null;
   worker: Worker | null = null;
   analysedSec = 0;
   analysisWall = 0;
@@ -459,6 +463,7 @@ class App {
     $('#drop').classList.add('hidden');
     void this.player.ctx.resume();
     this.phase = 'title';
+    this.readyAt = null;
     if (this.dynoRun) this.dynoRun.aborted = true; // the rider's song comes first
     this.dropAt = this.p;
     this.rig.depart(this.p);
@@ -842,6 +847,7 @@ class App {
       this.toast(`Deep listen finished: ${deep.notes} notes transcribed. Next ride on this song uses them all.`, 5000);
     });
     this.deep = deep;
+    deep.riding = this.phase === 'run';
     deep.onSplice = a => { if (hash === this.trackHash) this.resyncFrom(a); };
     deep.force = tryAnyway;
     deep.onChange = () => {
@@ -933,8 +939,17 @@ class App {
       // The sound pass gets a few seconds' grace to read the intro too (it loads a model first).
       const snd = this.sounds;
       const heard = !snd || snd.state === 'skipped' || snd.state === 'done' || (score.soundsFrontier ?? 0) >= need || this.p > this.titleCross + 5;
-      const ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm && heard));
-      const dep = ready ? 'Departing' : this.departureText(ahead, need, warm);
+      let ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm && heard));
+      // Deep listen's head start: once everything else is ready, up to DEEP_HEAD more seconds at
+      // the station with the GPU to itself, so it is well ahead before the frames need it.
+      let dep: string | null = null;
+      if (ready && !params.has('quick')) {
+        this.readyAt ??= this.p;
+        const d = this.deep, left = this.readyAt + DEEP_HEAD - this.p;
+        const busy = d && (d.state === 'checking' || (d.state === 'running' && d.progress < 0.25));
+        if (busy && left > 0) { ready = false; dep = `Tuning in · Departs in ${Math.ceil(left)}s`; }
+      }
+      dep ??= ready ? 'Departing' : this.departureText(ahead, need, warm);
       // While the line ahead is being read, the strip fills as a progress bar.
       this.world.setDeparture(dep, ready || ahead >= need ? null : Math.min(1, ahead / need));
       if (this.driver instanceof Visualiser) this.driver.setWaiting(dep, ready || ahead >= need ? null : Math.min(1, ahead / need));
@@ -1112,6 +1127,7 @@ class App {
 
   private go() {
     this.phase = 'run';
+    if (this.deep) this.deep.riding = true;
     this.rig.go(this.p, RUN_IN);
     this.player.play(-RUN_IN);
     this.driver?.reset(-RUN_IN);
@@ -1126,6 +1142,7 @@ class App {
 
   private end() {
     this.phase = 'ended';
+    if (this.deep) this.deep.riding = false; // (free to finish the cached copy now)
     $('#endcard .lead').textContent = this.world.mode === 'train' ? 'Terminus.' : 'Curtain.';
     // At the end of a train ride, invite people to hear the same song again with no train at all.
     $('#tonon').classList.toggle('hidden', this.pack.id === 'non-gondry');

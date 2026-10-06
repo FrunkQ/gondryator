@@ -21,10 +21,13 @@ self.addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
 });
 
 const SR = 22050;
+/** Held between windows while comfortably ahead of the music (the main thread decides; see DeepListen.pace). */
+let hold = false;
 const PRE = 1, POST = 2;
 
 self.onmessage = async (ev: MessageEvent<DeepStart>) => {
-  const m = ev.data;
+  const m = ev.data as any;
+  if (m.type === 'pace') { hold = m.hold; return; }
   if (m.type !== 'start') return;
   try {
     // The GPU if this worker can have one, else plain JavaScript (slower than real time, but it
@@ -48,6 +51,7 @@ self.onmessage = async (ev: MessageEvent<DeepStart>) => {
     if (speed < m.minSpeed) return;
     const t0 = performance.now();
     for (const [a, b] of m.windows) {
+      while (hold) await new Promise(r => setTimeout(r, 250));
       const from = Math.max(0, Math.round((a - PRE) * SR)), to = Math.min(m.pcm.length, Math.round((b + POST) * SR));
       if (to - from < SR / 2) { (self as any).postMessage({ type: 'window', a, b, notes: [] }); continue; }
       const audio = m.pcm.subarray(from, to);

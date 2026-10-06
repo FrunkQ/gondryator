@@ -17,6 +17,8 @@ import type { DeepNote } from './deep.worker';
 
 const WINDOW = 20;
 const MARGIN = 20;
+/** Once riding, deep listen rests while it is this many seconds ahead of the music. */
+const HOLD = 35;
 const BASS_TOP = 52;
 const PAD_DUR = 1.2;
 /** Deep listen only runs if the system check transcribes at least this many times faster than real time. */
@@ -54,6 +56,32 @@ export class DeepListen {
   private serial = 0;
   /** Skip the speed check (?deep=force, for tests on slow machines). */
   force = false;
+  /**
+   * Whether the ride has pulled away. Before that nothing is scheduled, so every window can be
+   * spliced in, and deep listen gets the GPU to itself; once riding, it eases off whenever it is
+   * comfortably ahead of the music, so the frames come first, and runs flat out if the music
+   * catches up.
+   */
+  riding = false;
+  /** Seconds of song transcribed ahead of the playhead without a gap. */
+  lead = 0;
+  private held = false;
+  private pacer = 0;
+
+  /**
+   * Keep just ahead: once riding, hold the worker between windows while it is more than HOLD
+   * seconds ahead of the music, and let it run flat out when the music closes in. Checked every
+   * second, so it ramps up and down with plenty of room to spare.
+   */
+  private pace() {
+    const t = Math.max(0, this.now());
+    let k = Math.floor(t / WINDOW);
+    while (this.windows.has(k * WINDOW)) k++;
+    this.lead = Math.min(this.audio.duration, k * WINDOW) - t;
+    // (Ahead all the way to the end: what is left only improves the cached copy, so it waits for the ride to finish.)
+    const hold = this.riding && (this.lead > HOLD || k * WINDOW >= this.audio.duration);
+    if (hold !== this.held) { this.held = hold; this.worker?.postMessage({ type: 'pace', hold }); }
+  }
 
   constructor(
     private audio: AudioBuffer,
@@ -68,7 +96,8 @@ export class DeepListen {
     // From the first window comfortably ahead of the playhead to the end, then back round from
     // the start (those only make the cached copy better).
     const n = Math.ceil(dur / WINDOW);
-    const first = Math.min(n, Math.ceil((this.now() + MARGIN) / WINDOW));
+    // (At the station, from the very first note: nothing has been scheduled yet.)
+    const first = this.riding ? Math.min(n, Math.ceil((this.now() + MARGIN) / WINDOW)) : 0;
     const order = [...Array(n - first).keys()].map(i => first + i).concat([...Array(first).keys()]);
     const windows = order.map(i => [i * WINDOW, Math.min(dur, (i + 1) * WINDOW)] as [number, number]);
     this.total = windows.length;
@@ -80,10 +109,11 @@ export class DeepListen {
     // gives up if it has not finished within a minute and a half.
     setTimeout(() => { if (this.state === 'checking' && this.worker === w) this.giveUp('the system check did not finish'); }, 90_000);
     const modelUrl = new URL('models/basic-pitch/model.json', document.baseURI).href;
+    this.pacer = window.setInterval(() => this.pace(), 1000);
     w.postMessage({ type: 'start', pcm, modelUrl, windows, minSpeed: this.force ? 0 : MIN_SPEED }, [pcm.buffer]);
   }
 
-  stop() { this.worker?.terminate(); this.worker = null; }
+  stop() { this.worker?.terminate(); this.worker = null; clearInterval(this.pacer); }
 
   /** The stretches of the song transcribed so far (for the debug overlay's song strip). */
   get spans(): [number, number][] { return [...this.windows.keys()].map(a => [a, Math.min(this.audio.duration, a + WINDOW)] as [number, number]); }
@@ -119,7 +149,8 @@ export class DeepListen {
       this.progress = this.windows.size / this.total;
       this.onChange();
       // Live upgrade, only where nothing has been scheduled yet.
-      if (m.a >= this.now() + MARGIN) { splice(this.score, m.a, m.b, evs); this.onSplice?.(m.a); }
+      if (!this.riding || m.a >= this.now() + MARGIN) { splice(this.score, m.a, m.b, evs); this.onSplice?.(m.a); }
+      this.pace();
     } else if (m.type === 'done') {
       this.done = true;
       this.state = 'done';
