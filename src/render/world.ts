@@ -79,7 +79,7 @@ export class World {
     this.renderer = renderer ?? new THREE.WebGPURenderer({ canvas, antialias: true, forceWebGL, powerPreference: 'high-performance' } as any);
     if (!renderer) await this.renderer.init();
     this.backend = (this.renderer.backend as any).isWebGPUBackend ? 'WebGPU' : 'WebGL2';
-    this.renderer.setPixelRatio(this.pixelRatio = Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(this.pixelRatio = Math.min(window.devicePixelRatio, this.mode === 'stage' ? 1 : 1.5));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = this.mode === 'train' ? 0.72 : 0.95;
     this.renderer.shadowMap.enabled = FLAGS.shadows;
@@ -1185,9 +1185,12 @@ export class World {
   /** Dynamic resolution: trade pixels for frame rate on slower machines (never below 0.5x). */
   adaptQuality(fps: number, dt: number) {
     if (fps < 45) { this.slowFor += dt; this.fastFor = 0; } else if (fps > 58) { this.fastFor += dt; this.slowFor = 0; } else { this.slowFor = this.fastFor = 0; }
-    const max = Math.min(window.devicePixelRatio, 1.5);
+    // The stage (the non-Gondry view) is one big shader over the whole sky: soft patterns that need
+    // no more than one pixel per CSS pixel, so it never goes above 1.
+    const max = Math.min(window.devicePixelRatio, this.mode === 'stage' ? 1 : 1.5);
     let next = this.pixelRatio;
-    if (this.slowFor > 2) { next = Math.max(0.5, this.pixelRatio - 0.15); this.slowFor = 0; }
+    if (this.slowFor > 1.5) { next = Math.max(0.5, this.pixelRatio - 0.15); this.slowFor = 0; }
+    if (next > max) next = max;
     if (this.fastFor > 6) { next = Math.min(max, this.pixelRatio + 0.1); this.fastFor = 0; }
     if (next !== this.pixelRatio) { this.pixelRatio = next; this.renderer.setPixelRatio(next); }
   }

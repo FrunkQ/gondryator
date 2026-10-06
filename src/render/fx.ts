@@ -98,7 +98,7 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     // (The angle runs -1..1 round the circle: the mirrored wrap below folds it so -1 and 1 land on
     // the same column, where 0..1 left a seam from the centre to the left edge.)
     const ut = vec2(atan(tc.y, tc.x).div(3.14159).add(U.showTime.mul(0.02)), float(0.22).div(tr.add(0.04)).add(U.showTime.mul(0.45)));
-    u = mix(u, ut, W.tunnel.mul(smoothstep(0.0, 0.08, tr)));
+    u = mix(u, ut, W.tunnel.mul(smoothstep(0.02, 0.2, tr))); // (the tunnel's far end is all aliasing: left plain)
     // Kaleidoscope: fold the angle into mirrored wedges around the centre.
     const c = u.sub(0.5).mul(vec2(W.aspect, 1));
     const r = length(c);

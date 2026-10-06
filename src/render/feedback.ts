@@ -5,7 +5,7 @@
 // Built like three's AfterImageNode (two render targets, swapped each frame), plus a transform.
 
 import { RenderTarget, Vector2, QuadMesh, NodeMaterial, RendererUtils, TempNode, NodeUpdateType } from 'three/webgpu';
-import { Fn, vec2, vec3, vec4, select, clamp, uv, texture, passTexture, max, cos, sin, mix, nodeObject, abs, fract, convertToTexture } from 'three/tsl';
+import { Fn, float, smoothstep, length, vec2, vec3, vec4, select, clamp, uv, texture, passTexture, max, cos, sin, mix, nodeObject, abs, fract, convertToTexture } from 'three/tsl';
 
 const _size = new Vector2();
 
@@ -85,7 +85,11 @@ class FeedbackNode extends TempNode {
       const prev = clean(old.sample(uo).rgb);
       // A little is taken off every frame as well as the fraction, so dim trails die out to black
       // instead of piling up into a pastel wash.
-      const kept = max(mix(prev, prev.gbr, p.hue).mul(p.amount).sub(0.012), 0.0);
+      // Trails sucked into the centre pile up into fine noise there (a grey mush of moire), so
+      // they fade out over the last stretch before the middle; with no zoom or turn, nothing fades.
+      const sink = abs(p.zoom.sub(1.0)).mul(120.0).add(abs(p.turn).mul(60.0)).min(1.0);
+      const core = mix(float(1.0), smoothstep(0.03, 0.16, length(c)), sink);
+      const kept = max(mix(prev, prev.gbr, p.hue).mul(p.amount).sub(0.012), 0.0).mul(core);
       const now = clean(src.sample(u0).rgb);
       // Off means off: the old frame is not read at all, so the buffer flushes clean.
       return vec4(select(p.amount.greaterThan(0.001), max(now, kept), now), 1.0);

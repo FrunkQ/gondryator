@@ -810,14 +810,15 @@ class App {
 
   /**
    * How far the score must be read before departing, learned from this machine: the parser's
-   * speed (measured now, or remembered from earlier rides) sets it between 6 and 15 seconds, and
+   * speed (measured now, or remembered from earlier rides) sets it between 8 and 17 seconds (a
+   * longer wait at the station leaves the background listeners less to do while the show runs), and
    * every signal stop (the music catching up with the parser) adds a little for next time.
    */
   private leadNeeded() {
     const now = this.analysisWall > 1 ? this.analysedSec / this.analysisWall : 0;
     const rate = now || learned('rate', 0);
-    const base = rate > 0 ? 4 + 12 / rate : MIN_LOOKAHEAD;
-    return THREE.MathUtils.clamp(base + learned('extra', 0), 6, 15);
+    const base = rate > 0 ? 6 + 12 / rate : MIN_LOOKAHEAD + 2;
+    return THREE.MathUtils.clamp(base + learned('extra', 0), 8, 17);
   }
 
   private departureText(ahead: number, need: number, warm: boolean): string {
@@ -935,7 +936,7 @@ class App {
     const look = this.fx.cycleLock();
     const names: Record<string, string> = { auto: 'Effects follow the music', clean: 'Clean (photographic)', prism: 'Prism', trip: 'Trip', kaleido: 'Kaleidoscope', liquid: 'Liquid', thermal: 'Thermal', echo: 'Echo', fold: 'Fold' };
     this.toast(names[look] ?? look);
-    $('#fx').title = `Effects: ${look}. Click or press X to pick a look`;
+
   }
 
   private onResize = () => {
@@ -953,8 +954,12 @@ class App {
     (t as any)._h = setTimeout(() => t.classList.remove('show'), ms);
   }
 
+  private quietTimer = 0;
   private pokeUI() {
-    document.body.classList.remove('idle');
+    document.body.classList.remove('idle', 'quiet');
+    // The top-left links fade after ten seconds without a touch, whatever is showing.
+    clearTimeout(this.quietTimer);
+    this.quietTimer = window.setTimeout(() => document.body.classList.add('quiet'), 10000);
     clearTimeout(this.uiTimer);
     this.uiTimer = window.setTimeout(() => { if (this.phase === 'run') document.body.classList.add('idle'); }, 3500);
   }
@@ -963,7 +968,8 @@ class App {
     // Embedded viewers (iframes) usually block downloads: hide the export buttons there.
     if (window.self !== window.top) { $('#json').hidden = true; $('#mid').hidden = true; }
     window.addEventListener('resize', this.onResize);
-    window.addEventListener('pointermove', () => this.pokeUI());
+    for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel'] as const) window.addEventListener(ev, () => this.pokeUI());
+    this.pokeUI();
     const input = $<HTMLInputElement>('#file');
     $('#choose').addEventListener('click', () => input.click());
     input.addEventListener('change', () => { if (input.files?.length) void this.loadFiles([...input.files]); });
@@ -1038,7 +1044,7 @@ class App {
     for (const p of PACKS) { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o); }
     if (!PACKS.includes(this.pack)) { const o = document.createElement('option'); o.value = this.pack.id; o.textContent = this.pack.name; sel.appendChild(o); }
     sel.value = this.pack.id;
-    $('#fx').addEventListener('click', () => this.cycleFx());
+
     sel.addEventListener('change', () => void this.switchPack(sel.value));
     $('#center').addEventListener('click', () => this.look.center());
     $('#gyro').addEventListener('click', async () => this.toast((await this.look.enableGyro()) ? 'Gyroscope on: move your phone to look around' : 'No gyroscope available'));

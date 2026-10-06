@@ -126,7 +126,10 @@ export class SkyLife {
       const until = Math.min(s + (this.stage ? 0.05 : RISE), frontier);
       if (this.plannedUntil < s - 0.05) this.plannedUntil = s;
       if (until > this.plannedUntil) {
-        for (const c of fireworkCues(score, this.plannedUntil, until, 0.25 + 0.3 * energy)) this.launch(c.t, c.shells, s, viewer);
+        // On a ride, fireworks are a rare treat (a drop, a cheering crowd), or they look staged.
+        for (const c of fireworkCues(score, this.plannedUntil, until, this.stage ? 0.25 + 0.3 * energy : 0)) {
+          if (this.stage || c.why === 'drop' || c.why === 'crowd') this.launch(c.t, this.stage ? c.shells : Math.min(2, c.shells), s, viewer);
+        }
         this.plannedUntil = until;
       }
       // Recognised sounds (score.sounds), as they arrive: animals startle the flock.

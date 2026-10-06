@@ -653,7 +653,8 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   const lanes = qa.mul(90.0 / 6.28318), lane = floor(lanes), lh = hash(lane);
   const head = fract(lh.mul(13.7).add(U.showTime.mul(float(0.15).add(lh.mul(0.3)).mul(float(0.6).add(U.energy).add(V.rise))))).mul(2.4);
   const streak = smoothstep(head.sub(float(0.04).add(U.kick.mul(0.08))), head, qr).mul(float(1).sub(smoothstep(head, head.add(0.01), qr)))
-    .mul(step(0.6, hash(lane.add(3.0)))).mul(smoothstep(0.5, 0.1, abs(fract(lanes).sub(0.5)))).mul(step(0.0, dot(d, V.gaze)));
+    .mul(step(0.6, hash(lane.add(3.0)))).mul(smoothstep(0.5, 0.1, abs(fract(lanes).sub(0.5)))).mul(step(0.0, dot(d, V.gaze)))
+    .mul(smoothstep(0.03, 0.15, qr)); // (the lanes crowd into noise at the very centre)
   const stars = mix(vec3(0.8, 0.9, 1.0), paletteAt(lh), 0.4).mul(streak).mul(1.6);
   // Kick tunnel (4): a polygon ring flung outwards from your gaze on every kick.
   const kx = qr.sub(V.kickT.mul(1.8).mul(pMul)).div(0.03);
@@ -715,12 +716,20 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   const fractCol = paletteAt(fract3.y.mul(0.9).add(V.mixes.w)).mul(kFil.mul(0.75).add(kDot.mul(0.25)))
     .mul(float(0.4).add(U.kick.mul(0.3)).add(V.rise.mul(0.25))).mul(kCentre.mul(0.85).add(0.15));
   // The mix: each element times its weight (E0..E3 hold the 16 weights; see visualiser.ts ELEMENTS).
+  // The costly elements (the fractal's nine folds, the bass's circles and waveforms, the noise
+  // clouds) are only worked out while they show: each sits behind its weight in a branch. What
+  // they share with the rest (d, az, el, the pulse outline...) is built above, outside any branch.
+  const gated = (wt: any, node: () => any) => Fn(() => {
+    const o = vec3(0.0).toVar();
+    If(wt.greaterThan(0.001), () => { o.assign(node().mul(wt)); });
+    return o;
+  })();
   const col = base.mul(V.E0.x).add(shapeCol.mul(V.E0.y)).add(ribbons.mul(V.E0.z)).add(stars.mul(V.E0.w))
-    .add(kickCol.mul(V.E1.x)).add(vec3(0.85, 0.9, 1.0).mul(bolt).mul(V.E1.y)).add(vec3(sparks).mul(V.E1.z)).add(floorCol.mul(V.E1.w))
-    .add(bassCol.mul(V.E2.x)).add(mountains.mul(V.E2.y))
+    .add(kickCol.mul(V.E1.x)).add(gated(V.E1.y, () => vec3(0.85, 0.9, 1.0).mul(bolt))).add(vec3(sparks).mul(V.E1.z)).add(floorCol.mul(V.E1.w))
+    .add(gated(V.E2.x, () => bassCol)).add(gated(V.E2.y, () => mountains))
     .add(waveCol.mul(V.E2.w)).add(circle.mul(V.E3.y))
-    .add(aurora.mul(V.E3.z)).add(nebula.mul(V.E3.w))
-    .add(fractCol.mul(V.E4.x))
+    .add(gated(V.E3.z, () => aurora)).add(gated(V.E3.w, () => nebula))
+    .add(gated(V.E4.x, () => fractCol))
     .add(moreElements(V, { d, az, azP, el, q, qa, qr, paletteAt, front: step(0.0, dot(d, V.gaze)) }));
   // The song's arc (visualiser.ts updateArc): muted and dim early on, full colour at the climax;
   // greyer and darker while it holds its breath before a drop, then a burst of light as it lets go.

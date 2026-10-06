@@ -39,7 +39,7 @@ export const STAR_GUITAR: Pack = {
       tints: { industrial: ['#ffffff', '#e6e2da'], town: ['#ffffff', '#ffe0c0', '#ffd0c0', '#fff2c8', '#e8f0ff'], country: ['#ffffff', '#fff0d0'] } },
     { id: 'far', depth: 170, depthJitter: 30, scale: 0.85, scaleByVel: 0.3,
       models: { industrial: ['cooling-tower', 'silo', 'chimney', 'pylon', 'water-tower'], town: ['church-tower', 'water-tower', 'silo', 'pylon'], country: ['hill', 'church-tower', 'water-tower'] },
-      rare: { chance: 0.08, models: { industrial: ['radio-mast', 'big-wheel'], town: ['observatory', 'big-wheel'], country: ['windmill', 'observatory'] } } },
+      rare: { chance: 0.08, models: { industrial: ['radio-mast', 'observatory'], town: ['observatory', 'folly'], country: ['windmill', 'observatory'] } } },
   ],
   mapping: [
     { match: { stem: 'drums', kind: 'kick' }, layer: 'trackside', tier: 1 },
