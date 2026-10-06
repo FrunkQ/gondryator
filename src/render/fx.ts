@@ -10,7 +10,6 @@ import {
   mx_noise_float, select, mrt, output, emissive, normalView, directionToColor, colorToDirection, sample, luminance, hash, dot, clamp, smoothstep, convertToTexture, max, pow, time, interleavedGradientNoise, screenCoordinate,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
-import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { U, palette, PALETTES, DEFAULT_PALETTES } from './shaders';
 import { clean, feedback } from './feedback';
@@ -181,7 +180,11 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
   const warpedTex = convertToTexture(warped);
   const glow = bloom(emissiveTex, 1.0, 0.5, 0.0);
   const bloomed = warpedTex.add(glow.mul(mix(float(LOOKS.clean.bloom), W.bloom, farSide()).mul(float(0.6).add(U.kick.mul(1.4)))));
-  const trails = feedback(afterImage(vec4(clean(bloomed.rgb), 1), W.echo.mul(0.8).mul(farSide())), { amount: W.fbAmount.mul(farSide()), zoom: W.fbZoom, turn: W.fbTurn, hue: W.fbHue, aspect: W.aspect });
+  // Echo trails are our own feedback with no zoom or turn: three's AfterImageNode kept any NaN
+  // that got into its buffer for good (NaN times its damping stays NaN), which showed as a blob
+  // stuck in the middle of the screen on WebGPU. Ours cleans what it keeps every frame.
+  const echo = feedback(vec4(clean(bloomed.rgb), 1), { amount: W.echo.mul(0.8).mul(farSide()), zoom: float(1), turn: float(0), hue: float(0), aspect: W.aspect });
+  const trails = feedback(echo, { amount: W.fbAmount.mul(farSide()), zoom: W.fbZoom, turn: W.fbTurn, hue: W.fbHue, aspect: W.aspect });
 
   const graded = Fn(() => {
     let c = trails.rgb;
