@@ -60,8 +60,8 @@ type Phase = 'landing' | 'title' | 'run' | 'ended';
 
 const MIN_LOOKAHEAD = 10; // seconds the score must be ahead of the playhead before the music starts (at most)
 const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
-/** Extra seconds at the station, at most, for deep listen to get a head start on the GPU. */
-const DEEP_HEAD = 4;
+/** Seconds into deep listen's station wait before "Depart now" is offered. */
+const DEPART_OFFER = 2;
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
 /** Where you look when the ride starts (?yaw=150 overrides it, for testing the far window). */
@@ -97,6 +97,8 @@ class App {
   signalStop = false;
   /** When everything but deep listen's head start was ready at the station. */
   private readyAt: number | null = null;
+  /** The rider pressed "Depart now" rather than wait for deep listen. */
+  private departNow = false;
   worker: Worker | null = null;
   analysedSec = 0;
   analysisWall = 0;
@@ -464,6 +466,7 @@ class App {
     void this.player.ctx.resume();
     this.phase = 'title';
     this.readyAt = null;
+    this.departNow = false;
     if (this.dynoRun) this.dynoRun.aborted = true; // the rider's song comes first
     this.dropAt = this.p;
     this.rig.depart(this.p);
@@ -940,19 +943,32 @@ class App {
       const snd = this.sounds;
       const heard = !snd || snd.state === 'skipped' || snd.state === 'done' || (score.soundsFrontier ?? 0) >= need || this.p > this.titleCross + 5;
       let ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm && heard));
-      // Deep listen's head start: once everything else is ready, up to DEEP_HEAD more seconds at
-      // the station with the GPU to itself, so it is well ahead before the frames need it.
-      let dep: string | null = null;
-      if (ready && !params.has('quick')) {
+      // Deep listen at the station: once everything else is ready, the train waits for it to read
+      // the whole song with the GPU to itself (so the ride's frames never share it), saying how
+      // far it has got and how long is left; DEPART_OFFER seconds in, "Depart now" lets the rider
+      // go at once instead (it then keeps just ahead of the music).
+      let dep: string | null = null, deepBar: number | null = null;
+      const departBtn = $<HTMLButtonElement>('#depart');
+      if (ready && !params.has('quick') && !this.departNow) {
         this.readyAt ??= this.p;
-        const d = this.deep, left = this.readyAt + DEEP_HEAD - this.p;
-        const busy = d && (d.state === 'checking' || (d.state === 'running' && d.progress < 0.25));
-        if (busy && left > 0) { ready = false; dep = `Tuning in · Departs in ${Math.ceil(left)}s`; }
+        const d = this.deep;
+        if (d && (d.state === 'checking' || d.state === 'running')) {
+          ready = false;
+          if (d.state === 'checking') dep = 'Tuning in · deep listen warming up';
+          else {
+            const left = Math.ceil((1 - d.progress) * score.track.durationSec / Math.max(0.5, d.speed));
+            deepBar = d.progress;
+            dep = `Deep listen ${Math.round(d.progress * 100)}% · ` + (left > 60 ? `Departs in about ${Math.round(left / 60)} min` : `Departs in ${Math.max(1, left)}s`);
+          }
+          departBtn.hidden = this.p < this.readyAt + DEPART_OFFER;
+        }
       }
+      if (ready) departBtn.hidden = true;
       dep ??= ready ? 'Departing' : this.departureText(ahead, need, warm);
       // While the line ahead is being read, the strip fills as a progress bar.
-      this.world.setDeparture(dep, ready || ahead >= need ? null : Math.min(1, ahead / need));
-      if (this.driver instanceof Visualiser) this.driver.setWaiting(dep, ready || ahead >= need ? null : Math.min(1, ahead / need));
+      const bar = deepBar ?? (ready || ahead >= need ? null : Math.min(1, ahead / need));
+      this.world.setDeparture(dep, bar);
+      if (this.driver instanceof Visualiser) this.driver.setWaiting(dep, bar);
       if (ready) this.go();
     }
     if (this.phase === 'run' || this.phase === 'ended') {
@@ -1127,6 +1143,7 @@ class App {
 
   private go() {
     this.phase = 'run';
+    $<HTMLButtonElement>('#depart').hidden = true;
     if (this.deep) this.deep.riding = true;
     this.rig.go(this.p, RUN_IN);
     this.player.play(-RUN_IN);
@@ -1334,6 +1351,7 @@ class App {
     $('#play').addEventListener('click', () => this.togglePause());
     $('#again').addEventListener('click', () => this.seek(0));
     $('#deep').addEventListener('click', () => this.toggleDeep());
+    $('#depart').addEventListener('click', () => { this.departNow = true; $<HTMLButtonElement>('#depart').hidden = true; });
     $('#tonon').addEventListener('click', async () => {
       await this.switchPack('non-gondry');
       $<HTMLSelectElement>('#pack').value = 'non-gondry';

@@ -171,6 +171,8 @@ body.quiet #fork { opacity: 0; pointer-events: none; transition: opacity 1.2s; }
 
 /* Full screen is for the big screen at a club: no interface at all, ever, apart from one tiny,
    faint way out in the corner (Esc and F work too). */
+#depart { position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 20; }
+#depart[hidden] { display: none; }
 #fsx { display: none; }
 body.fullscreen #fsx {
   display: block; position: absolute; top: 6px; right: 6px; z-index: 50; width: 22px; height: 22px; padding: 0;
