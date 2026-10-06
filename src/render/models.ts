@@ -613,11 +613,21 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     parts.push(heap(10, 5.5, -20, 4, 0xbdb3a2, 1), heap(8, 4.2, 18, 3, 0xc9bfae, 2), heap(6, 3, 30, -4, 0xa99f8f, 3), heap(4, 2, -8, 7, 0xb3a894, 4));
     return merge(parts);
   },
-  'overpass': () => merge([
-    T1(SURF.concrete, box(7, 1.4, 70, 0, 8.2, -20, 0xbdb7aa)),
-    box(7.2, 1.0, 0.3, 0, 9.4, 15, 0x9d978a), box(7.2, 1.0, 0.3, 0, 9.4, -55, 0x9d978a),
-    ...T(SURF.concrete, box(5, 7.6, 1.6, 0, 3.8, -6.5, 0xb0a998), box(5, 7.6, 1.6, 0, 3.8, 6.5, 0xb0a998)),
-  ]),
+  // A road bridge over the line that comes down to earth on the far side: the deck runs onto a
+  // grassy embankment that ramps down to the fields (it used to stop dead in mid-air).
+  'overpass': () => {
+    const run = 42, drop = 8.9, a = Math.atan2(drop, run), len = Math.hypot(run, drop);
+    const zEnd = -42, zMid = zEnd - run / 2;
+    return merge([
+      T1(SURF.concrete, box(7, 1.4, 57, 0, 8.2, -13.5, 0xbdb7aa)),
+      box(7.2, 1.0, 0.3, 0, 9.4, 15, 0x9d978a),
+      ...T(SURF.concrete, box(5, 7.6, 1.6, 0, 3.8, -6.5, 0xb0a998), box(5, 7.6, 1.6, 0, 3.8, 6.5, 0xb0a998)),
+      // The abutment the deck lands on, then the bank and its road, sloping down away from the train.
+      T1(SURF.concrete, box(8, 8.2, 2, 0, 4.1, zEnd, 0xa9a292)),
+      T1(SURF.grass, box(16, 9, len, 0, drop / 2 - 4.4, zMid, 0x6f8a47, [-a, 0, 0])),
+      T1(SURF.concrete, box(7, 0.3, len, 0, drop / 2 + 0.15, zMid, 0x9c968a, [-a, 0, 0])),
+    ]);
+  },
   'train-car': () => merge([
     ...T(SURF.paint, box(24, 3.4, 2.9, 0, 2.6, 0, 0xc9cdd0)), T1(SURF.glass, box(24.05, 0.8, 2.95, 0, 3.0, 0, 0x2e3a45)),
     ...T(SURF.paint, box(24.1, 0.35, 2.96, 0, 1.6, 0, 0xc0582f)), T1(SURF.metal, box(23, 0.8, 2.4, 0, 0.6, 0, 0x34383b)),

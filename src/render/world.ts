@@ -4,6 +4,8 @@
 
 import { QUALITY, setQualityLevel } from './quality';
 import * as THREE from 'three/webgpu';
+import { BranchLines } from './branches';
+import type { Score } from '../score/types';
 import type { Pack } from '../packs/types';
 import type { CameraRig } from './rig';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -364,6 +366,9 @@ export class World {
     const bed = new THREE.Mesh(new THREE.PlaneGeometry(800, 4).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x6e675d }));
     bed.position.set(0, 0.05, 0);
     this.scene.add(bed);
+    // Branch lines beside ours: more of them in towns and yards than in the country (render/branches.ts).
+    this.branches = new BranchLines(x => this.themeForX(x));
+    this.scene.add(this.branches.group);
     const railMat = new THREE.MeshStandardMaterial({ color: 0xb8b9bb, metalness: 0.9, roughness: 0.3 });
     for (const z of [-3.6, -5.0]) {
       const r = new THREE.Mesh(new THREE.BoxGeometry(800, 0.16, 0.08), railMat);
@@ -1100,6 +1105,7 @@ export class World {
     if (this.mode !== 'train') return;
     this.updateCoaster(rig, trainX);
     for (const f of this.followers) f.position.x = trainX;
+    this.branches?.update(trainX, rig);
     if (this.ballast) this.ballast.position.x = trainX;
     if (this.ballastTex) this.ballastTex.offset.x = (((trainX - 400) / 800) * this.ballastTex.repeat.x) % 1;
     const g0 = Math.floor(trainX / 60) - 1;
@@ -1184,6 +1190,9 @@ export class World {
 
   /** Re-theme ground tiles (after a seek or when sections arrive). */
   invalidateGround() { for (const t of this.tiles) t.index = -999; }
+  /** The song the branch lines follow (null at the station before any song). */
+  setScore(score: Score | null) { if (this.branches) this.branches.score = score; }
+  private branches: BranchLines | null = null;
 
   /** Renders through the effects pipeline; falls back to a plain render if it cannot be built. */
   render() {

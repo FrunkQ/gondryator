@@ -544,6 +544,7 @@ class App {
       this.other.spawner.refreshLeads();
     }
     this.fx.setScore(placeholder ? null : s);
+    this.world.setScore(placeholder ? null : s);
     this.driver.refreshLeads();
     if (this.lastCard) this.driver.card?.(this.lastCard.kind, this.lastCard.info);
     this.world.invalidateGround();
