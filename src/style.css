@@ -34,6 +34,15 @@ button, select {
 }
 button:hover, select:hover { background: rgba(255, 255, 255, 0.24); }
 button.ghost { background: transparent; }
+/* The start card fits small and short screens: it sheds its small print and some padding where
+   room is tight (the door to the discothèque sits above it, so it can't scroll). */
+@media (max-width: 640px), (max-height: 560px) {
+  .card { padding: 12px 14px; }
+  .card .lead { font-size: 16px; }
+  #drop .small { display: none; }
+  #drop .row { gap: 6px; }
+  #drop button { padding: 6px 11px; min-height: 30px; font-size: 13px; }
+}
 #choose { background: var(--accent); color: #1d1d1b; border-color: transparent; font-weight: 600; }
 select option { background: #2a2e33; }
 
@@ -82,9 +91,20 @@ body.paused #drop { bottom: max(84px, env(safe-area-inset-bottom)); }
   display: none; border-radius: 10px; pointer-events: none;
 }
 #endcard { bottom: auto; top: 18px; }
+/* The ⋯ menu: the bar's less used buttons, stacked above it on the right. */
+#menu {
+  position: absolute; right: 8px; bottom: calc(100% + 8px); display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  min-width: 230px; border-radius: 14px; background: rgba(18, 20, 24, 0.94); border: 1px solid var(--line);
+}
+#menu.hidden { display: none; }
+#bar #menu button { border-radius: 8px; text-align: left; border: 0; padding: 8px 10px; white-space: nowrap; }
+#menu kbd { float: right; margin-left: 12px; font: 11px ui-monospace, monospace; opacity: 0.6; }
 @media (max-width: 640px) {
-  #bar #json, #bar #mid, #bar #dbg { display: none; }
-  #time { min-width: 0; }
+  #bar { gap: 4px; padding: 6px; }
+  #bar button, #bar select { padding: 4px 8px; }
+  #bar #center { display: none; }
+  #pack { max-width: 34vw; }
+  #time { min-width: 0; font-size: 12px; }
   #credits { max-width: 70%; }
 }
 /* Narrow screens: the credits drop below the fork invitation instead of running into it. */
@@ -217,3 +237,9 @@ body.disco #door .glow { background: linear-gradient(#9fb6cf, #ecdccb 60%, #a8aa
 #meter .mwarn { font-size: 12px; color: #ffb27a; margin-top: 8px; min-height: 0; }
 #meter .mwarn:empty { display: none; }
 body.fullscreen #meter { display: none !important; }
+/* Phones: the fork invitation stays on one line and the credits sit clear below it. */
+@media (max-width: 480px) {
+  #fork { font-size: 11px; white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden; }
+  #fork .long { display: none; }
+  #credits { top: 46px; max-width: calc(100% - 24px); }
+}

@@ -212,13 +212,14 @@ export class Dyno {
       level = 'none';
       advice.push('No 3D acceleration: the browser is drawing in software. Turn on hardware acceleration in the browser\'s settings, or try another machine.');
     } else {
-      if (spec.backend !== 'WebGPU') { level = 'slow'; advice.push('This browser has no WebGPU, so the ride falls back to WebGL, which is far slower. A recent Chrome or Edge has WebGPU.'); }
+      // (WebGL alone is no verdict: a phone on WebGL rode at 60 fps. The frames decide.)
       if (ride && ride < 24) { level = 'slow'; advice.push(`The start screen is drawing at about ${live!.fps} fps in this window, so the ride is likely to be jerky. A smaller window helps; the resolution also drops by itself.`); }
       else if (ride && ride < 40 && level === 'ok') { level = 'tricky'; advice.push(`The start screen is drawing at about ${live!.fps} fps in this window: the busiest moments may stutter. The resolution drops by itself when they do.`); }
     }
     // Deep listen runs a neural network beside the ride: it wants a reasonable processor and memory.
     const weakCpu = cpu.msFor10M > 700 || (cpu.cores && cpu.cores <= 2) || (spec.memoryGB && spec.memoryGB <= 4);
     const light = level === 'none' || level === 'slow' || !!weakCpu;
+    if (spec.backend === 'WebGL2' && level !== 'none' && level !== 'ok') advice.push('This browser is drawing with WebGL; one with WebGPU (a recent Chrome or Edge) is usually faster.');
     if (light && level !== 'none') advice.push('Running light: deep listen (the neural note transcriber) stays off, so the notes come from the fast parser alone.');
     const headline = level === 'none' ? 'Needs 3D acceleration' : level === 'slow' ? 'Slow machine: running light' : level === 'tricky' ? (light ? 'Frames may stutter; running light' : 'Frames may stutter') : light ? 'Running light' : 'All clear';
     return {

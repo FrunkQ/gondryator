@@ -1154,6 +1154,12 @@ class App {
 
     sel.addEventListener('change', () => void this.switchPack(sel.value));
     $('#center').addEventListener('click', () => this.look.center());
+    // The ⋯ menu: opens above the bar, closes on a pick or a tap anywhere else.
+    const menu = $('#menu'), more = $('#more');
+    const showMenu = (on: boolean) => { menu.classList.toggle('hidden', !on); more.setAttribute('aria-expanded', String(on)); };
+    more.addEventListener('click', e => { e.stopPropagation(); showMenu(menu.classList.contains('hidden')); });
+    menu.addEventListener('click', () => showMenu(false));
+    document.addEventListener('pointerdown', e => { if (!menu.contains(e.target as Node) && e.target !== more) showMenu(false); });
     $('#gyro').addEventListener('click', async () => this.toast((await this.look.enableGyro()) ? 'Gyroscope on: move your phone to look around' : 'No gyroscope available'));
     $('#dbg').addEventListener('click', () => this.debug.toggle());
     $('#json').addEventListener('click', () => this.score && download(new Blob([JSON.stringify(this.score)], { type: 'application/json' }), slug(this.trackInfo.title) + '.score.json'));
