@@ -1186,11 +1186,13 @@ class App {
   }
 
   private quietTimer = 0;
+  private quietOnce = false;
   private pokeUI() {
     document.body.classList.remove('idle', 'quiet');
-    // The top-left links fade after ten seconds without a touch, whatever is showing.
+    // The top-left links fade after ten seconds without a touch, whatever is showing; once they have
+    // faded once, they come and go with the rest of the controls.
     clearTimeout(this.quietTimer);
-    this.quietTimer = window.setTimeout(() => document.body.classList.add('quiet'), 10000);
+    this.quietTimer = window.setTimeout(() => { document.body.classList.add('quiet'); this.quietOnce = true; }, this.quietOnce ? 3500 : 10000);
     clearTimeout(this.uiTimer);
     this.uiTimer = window.setTimeout(() => { if (this.phase === 'run') document.body.classList.add('idle'); }, 3500);
   }
