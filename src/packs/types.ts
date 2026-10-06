@@ -26,6 +26,12 @@ export interface PackLayer {
    * passage still shows every beat without a wall of big buildings.
    */
   crowd?: { gap: number; models: Partial<Record<ThemeName, string[]>>; scale?: number };
+  /**
+   * Variety along the line: every `bars` bars the layer re-deals which of its models each sound
+   * gets (still the same object for the same sound within that stretch), and with chance `borrow`
+   * a stretch takes its models from another theme, so the kits cross over.
+   */
+  vary?: { bars: number; borrow?: number };
   /** Base scale; velocity adds up to +scaleByVel. */
   scale?: number;
   scaleByVel?: number;

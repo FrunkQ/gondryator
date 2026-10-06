@@ -16,10 +16,17 @@ export const STAR_GUITAR: Pack = {
   rig: { ...VIEW.window, type: 'lateral-rail', speed: 24, speedByEnergy: 0.25, eyeHeight: 2.7, maxYaw: 70, lookYaw: 180, maxPitch: 28, fov: 52 },
   spawnMode: 'pass-by',
   layers: [
-    { id: 'fence', depth: 4.6, depthJitter: 0.1, scale: 0.9, scaleByVel: 0.3,
+    { id: 'fence', depth: 4.6, depthJitter: 0.1, scale: 0.9, scaleByVel: 0.3, vary: { bars: 8, borrow: 0.25 },
       models: { industrial: ['fence-post'], town: ['marker-post', 'fence-post'], country: ['vine-stake', 'fence-post'] } },
-    { id: 'trackside', depth: 7.2, scale: 0.92, scaleByVel: 0.12,
-      models: { industrial: ['catenary-pole'], town: ['catenary-pole'], country: ['catenary-pole'] } },
+    { id: 'trackside', depth: 7.2, scale: 0.92, scaleByVel: 0.12, vary: { bars: 4, borrow: 0.3 },
+      // The pole on every kick, but each stretch of line its own kit: wires and colour lights in the
+      // yards, lamps and wires through town, telegraph poles and semaphores out in the country
+      // (with the odd wire pole still holding the overhead line up).
+      models: {
+        industrial: ['catenary-pole', 'colour-signal', 'catenary-pole', 'catenary-pole', 'relay-cabinet', 'catenary-pole', 'colour-signal'],
+        town: ['lamp-post', 'catenary-pole', 'lamp-post', 'colour-signal', 'catenary-pole', 'lamp-post'],
+        country: ['telegraph-pole', 'catenary-pole', 'semaphore', 'telegraph-pole', 'telegraph-pole', 'catenary-pole', 'semaphore'],
+      } },
     // Busy passages: a note close behind the last big object gets a small one (`crowd`), so every
     // beat still shows without a wall of buildings.
     { id: 'near', depth: 19, depthJitter: 3, scale: 0.62, scaleByVel: 0.3,

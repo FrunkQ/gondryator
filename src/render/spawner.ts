@@ -361,9 +361,18 @@ export class Spawner {
     if (tier === 2 && QUALITY.density < 0.6 && !keep(hash32(Math.round(e.t * 1000), 29) + 500)) return;
     const L = ls.layer;
     const theme = this.themeAt(e.t);
-    const models = L.models[theme] ?? Object.values(L.models)[0];
+    let models = L.models[theme] ?? Object.values(L.models)[0];
     // Same musical content -> same object: hash pitch, kind and position in the bar.
-    const h = hash32(e.kind.length, e.pitch ?? 0, e.step ?? 0, Math.round(e.vel * 4));
+    let h = hash32(e.kind.length, e.pitch ?? 0, e.step ?? 0, Math.round(e.vel * 4));
+    if (L.vary && e.bar !== undefined) {
+      // A new deal every few bars, now and then from another theme's kit (pack layer `vary`).
+      const stretch = Math.floor(e.bar / L.vary.bars), d = hash32(stretch, 53);
+      h = hash32(h, stretch);
+      if ((d % 1000) / 1000 < (L.vary.borrow ?? 0)) {
+        const others = Object.entries(L.models).filter(([k, v]) => k !== theme && v?.length).map(([, v]) => v!);
+        if (others.length) models = others[(d >>> 10) % others.length];
+      }
+    }
     let model = models[h % models.length];
     const rare = L.rare?.models[theme];
     if (rare?.length) {

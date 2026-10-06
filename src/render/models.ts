@@ -19,6 +19,42 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     cyl(0.07, 0.07, 0.5, 0, 6.65, 2.6, 0x9a6b4a, 6),
     box(0.7, 0.4, 0.7, 0, 0.2, 0, 0x8c8a84),
   ]),
+  // --- the rest of the lineside kit, so each stretch of line has its own poles ------------------
+  // A lower-quadrant semaphore signal (country lines): a white mast with a ladder, the red arm with
+  // its white band lowered at a slant (line clear), the lamp and its coloured spectacle glass.
+  'semaphore': () => merge([
+    ...T(SURF.paint, box(0.24, 6.4, 0.24, 0, 3.2, 0, 0xe8e4da), cyl(0.05, 0.16, 0.5, 0, 6.65, 0, 0x2d2f33, 6)),
+    ...T(SURF.metal, box(0.06, 5.2, 0.05, 0.26, 2.6, 0.12, 0x55595e), box(0.06, 5.2, 0.05, 0.5, 2.6, 0.12, 0x55595e)),
+    ...[0.6, 1.2, 1.8, 2.4, 3.0, 3.6, 4.2, 4.8].map(y => box(0.3, 0.04, 0.05, 0.38, y, 0.12, 0x55595e)),
+    ...T(SURF.paint, box(1.7, 0.32, 0.06, -0.95, 5.55, 0.16, 0xb3342a, [0, 0, -0.55]), box(0.22, 0.34, 0.07, -1.4, 5.8, 0.17, 0xf2efe6, [0, 0, -0.55])),
+    T1(SURF.glow, cyl(0.1, 0.1, 0.05, 0, 0, 0, 0x6fe08a, 10).rotateX(Math.PI / 2).translate(0.05, 5.6, 0.22)),
+    box(0.2, 0.26, 0.2, 0.05, 5.6, 0.05, 0x2d2f33),
+    box(0.8, 0.3, 0.8, 0, 0.15, 0, 0x8c8a84),
+  ]),
+  // A colour-light signal (busy lines): a slim post, a black head with its hood, one green aspect lit.
+  'colour-signal': () => merge([
+    ...T(SURF.metal, box(0.2, 4.4, 0.2, 0, 2.2, 0, 0x6f7377), box(0.6, 0.06, 0.7, 0, 3.9, 0.25, 0x6f7377)),
+    box(0.5, 1.5, 0.34, 0, 4.9, 0.1, 0x1c1d20), box(0.62, 1.62, 0.04, 0, 4.9, 0.28, 0x2a2b2f),
+    ...[[5.35, 0x3a1412], [4.9, 0x3a3212], [4.45, 0x6fffa0]].map(([y, c]) => T1(y === 4.45 ? SURF.glow : SURF.paint, cyl(0.13, 0.13, 0.05, 0, 0, 0, c, 10).rotateX(Math.PI / 2).translate(0, y, 0.3))),
+    box(0.7, 0.3, 0.7, 0, 0.15, 0, 0x8c8a84),
+  ]),
+  // A wooden telegraph pole with two crossarms of insulators: the old country line beside the track.
+  'telegraph-pole': () => merge([
+    ...T(SURF.wood, cyl(0.12, 0.17, 7.4, 0, 3.7, 0, 0x6e5a44, 8), box(0.14, 0.14, 1.9, 0, 6.9, 0, 0x5f4c38), box(0.14, 0.14, 1.5, 0, 6.3, 0, 0x5f4c38)),
+    ...[-0.8, -0.3, 0.3, 0.8].map(z => cyl(0.05, 0.06, 0.16, 0, 7.05, z, 0xe9ece6, 6)),
+    ...[-0.6, -0.2, 0.2, 0.6].map(z => cyl(0.05, 0.06, 0.16, 0, 6.45, z, 0xe9ece6, 6)),
+  ]),
+  // A station-approach lamp: a slim green post, a swan-neck arm and a lit lantern facing the line.
+  'lamp-post': () => merge([
+    ...T(SURF.metal, cyl(0.07, 0.11, 5.2, 0, 2.6, 0, 0x2f4a3a, 8), box(0.08, 0.08, 0.9, 0, 5.15, 0.42, 0x2f4a3a), cyl(0.2, 0.14, 0.1, 0, 5.0, 0.0, 0x2f4a3a, 8)),
+    box(0.34, 0.12, 0.34, 0, 5.1, 0.85, 0x2f4a3a),
+    T1(SURF.glow, box(0.26, 0.32, 0.26, 0, 4.88, 0.85, 0xffe2a0)),
+  ]),
+  // A grey-green lineside relay cabinet on a plinth, with a cable trough running off.
+  'relay-cabinet': () => merge([
+    ...T(SURF.metal, box(1.3, 1.5, 0.6, 0, 0.95, 0, 0x7b8a78), box(1.4, 0.1, 0.7, 0, 1.75, 0, 0x6a7768)),
+    box(1.5, 0.2, 0.8, 0, 0.1, 0, 0x8c8a84), box(0.4, 0.2, 2.4, 0.4, 0.1, 1.4, 0x9a968c),
+  ]),
   'fence-post': () => merge(T(SURF.wood, box(0.12, 1.25, 0.12, 0, 0.62, 0, 0xb9b2a3), box(0.14, 0.12, 0.14, 0, 1.3, 0, 0x8b8476))),
   'marker-post': () => merge([box(0.14, 1.1, 0.14, 0, 0.55, 0, 0xe9e5dc), box(0.16, 0.22, 0.16, 0, 1.1, 0, 0xb3453a)]),
   'vine-stake': () => merge([box(0.08, 1.1, 0.08, 0, 0.55, 0, 0x7a5a3c), sphere(0.45, 0, 0.9, 0, 0x5f7a3a, 1, 0.6, 1, 6)]),
