@@ -320,13 +320,15 @@ export class World {
 
   /** Grass tufts beside the line in tiles of 60 m that leapfrog as the train moves. */
   private grassTiles: THREE.InstancedMesh[] = [];
+  /** Tufts per 60 m tile at a standstill; at speed only some are drawn (they only smear). */
+  private static readonly GRASS = 700;
   private buildGrass() {
     const card = (rot: number) => new THREE.PlaneGeometry(0.9, 0.5, 1, 1).translate(0, 0.25, 0).rotateY(rot);
     const geo = mergeGeometries([card(0), card(Math.PI / 3), card(-Math.PI / 3)], false)!;
     const mat = makeGrassMaterial(this.cart ? 0.4 : 1);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
     for (let t = 0; t < 3; t++) {
-      const N = 1400;
+      const N = World.GRASS;
       const mesh = new THREE.InstancedMesh(geo, mat, N);
       let seed = 1234 + t * 77;
       const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -1112,6 +1114,10 @@ export class World {
     if (this.ballast) this.ballast.position.x = trainX;
     if (this.ballastTex) this.ballastTex.offset.x = (((trainX - 400) / 800) * this.ballastTex.repeat.x) % 1;
     const g0 = Math.floor(trainX / 60) - 1;
+    // Grass thins as the train speeds up: full at the station, about a third at cruising speed,
+    // where it only blurs (the instances are in random order, so any first n are an even spread).
+    const v = Math.abs(rig.speedAt(s)), keep = THREE.MathUtils.clamp(1 - (v - 6) / 14 * 0.65, 0.35, 1);
+    for (const t of this.grassTiles) t.count = Math.round(World.GRASS * keep * QUALITY.density);
     for (let k = 0; k < this.grassTiles.length; k++) {
       const idx = g0 + k, tile = this.grassTiles[((idx % 3) + 3) % 3];
       if (tile.userData.tile !== idx) { tile.userData.tile = idx; tile.position.x = idx * 60; }
