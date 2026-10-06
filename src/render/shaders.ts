@@ -83,7 +83,10 @@ export const PALETTES: Record<string, [Vec3, Vec3, Vec3, Vec3]> = {
 export const DEFAULT_PALETTES = Object.keys(PALETTES).filter(k => !['pumpkin', 'blood', 'toxic', 'moonlight'].includes(k));
 
 /** The palette everything in the world paints with; the FX director sets it per section. */
-export const palette = Fn(([t]: [any]) => U.pa.add(U.pb.mul(cos(U.pc.mul(t).add(U.pd).mul(6.28318)))));
+// Never below zero: some two-colour palettes dip under it, and a negative colour put through
+// pow() is NaN on WebGPU. A NaN pixel, even on a mesh faded to nothing, sticks to the screen (it
+// showed as a magenta, later black, blob that followed the view).
+export const palette = Fn(([t]: [any]) => max(U.pa.add(U.pb.mul(cos(U.pc.mul(t).add(U.pd).mul(6.28318)))), 0.0));
 
 /** 2D coordinates on whichever axis-aligned plane the surface mostly faces. */
 const planar = (p: any, n: any) => {
@@ -355,7 +358,7 @@ export function makeSpaceMaterial(reveal: any, floor_ = false): THREE.MeshBasicN
   const field = stars(400, 0.985).mul(twinkle).add(stars(160, 0.992).mul(1.6)).add(stars(60, 0.996).mul(3.0));
   const neb = mx_noise_float(d.mul(2.2).add(vec3(0, U.showTime.mul(0.01), 0))).mul(0.5).add(0.5);
   const neb2 = mx_noise_float(d.mul(5.0).add(7.0)).mul(0.5).add(0.5);
-  const cloud = pow(neb.mul(neb2), 2.2).mul(1.6);
+  const cloud = pow(max(neb.mul(neb2), 0.0), 2.2).mul(1.6);
   const tint = pow(palette(neb.mul(0.6).add(U.hue).add(0.55)), vec3(2.0));
   const col = vec3(0.004, 0.006, 0.015).add(tint.mul(cloud).mul(float(0.5).add(U.kick.mul(0.4)))).add(vec3(field));
   // Dissolve: noise threshold sweeps with `reveal`, with a hot glowing edge.
@@ -400,7 +403,7 @@ export function makeShipSkyMaterial(): THREE.MeshBasicNodeMaterial {
   const n1 = mx_noise_float(d.mul(1.7).add(vec3(3.1, 0, U.showTime.mul(0.004)))).mul(0.5).add(0.5);
   const n2 = mx_noise_float(d.mul(4.3).add(9.0)).mul(0.5).add(0.5);
   const lanes = smoothstep(0.42, 0.62, mx_noise_float(d.mul(7.0).add(2.0)).mul(0.5).add(0.5));
-  const glowA = pow(n1.mul(n2), 2.4).mul(2.2);
+  const glowA = pow(max(n1.mul(n2), 0.0), 2.4).mul(2.2);
   const glowB = pow(smoothstep(0.35, 0.9, mx_noise_float(d.mul(2.6).add(5.0)).mul(0.5).add(0.5)), 2.0).mul(0.9);
   const neb = vec3(0.12, 0.55, 0.7).mul(glowA).add(vec3(0.75, 0.22, 0.45).mul(glowB)).mul(float(1).sub(lanes.mul(0.7)));
   const real = vec3(0.003, 0.004, 0.012).add(neb.mul(float(0.55).add(U.kick.mul(0.12)))).add(vec3(field));
@@ -550,7 +553,7 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   const v = plasma.mul(V.mixes.x).add(rings.mul(V.mixes.y)).add(tunnel.mul(V.mixes.z))
     .add(V.mixes.w).add(U.hue.mul(0.5)).add(mx_noise_float(d.mul(2.0).add(t.mul(0.1))).mul(0.25));
   // Every element colours itself from the scene's palette, so a scene reads as one colour story.
-  const paletteAt = (x: any) => V.pa.add(V.pb.mul(cos(V.pc.mul(x).add(V.pd).mul(6.28318))));
+  const paletteAt = (x: any) => max(V.pa.add(V.pb.mul(cos(V.pc.mul(x).add(V.pd).mul(6.28318)))), 0.0);
   const pal = paletteAt(v);
   const glow = float(0.1).add(U.energy.mul(0.12)).add(U.kick.mul(0.28)).add(V.rise.mul(0.25)).add(V.bright.mul(0.08));
   // Contrast: thin bright filaments over darkness, and drifting black voids, so it reads as a
@@ -602,7 +605,7 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   const inMode = (lo: number, hi: number) => step(float(lo), bm).mul(step(bm, float(hi)));
   const bass = rings4.mul(inMode(-1, 0.5)).add(horizon.mul(inMode(0.5, 1.5))).add(multi.mul(inMode(1.5, 2.5)))
     .add(road.mul(inMode(2.5, 3.5))).add(swell.mul(inMode(3.5, 9)));
-  const bassCol = V.pa.add(V.pb.mul(cos(V.pc.mul(v.add(0.5)).add(V.pd).mul(6.28318)))).mul(bass).mul(1.4);
+  const bassCol = max(V.pa.add(V.pb.mul(cos(V.pc.mul(v.add(0.5)).add(V.pd).mul(6.28318)))), 0.0).mul(bass).mul(1.4);
   // Melody: a wave of light round the horizon. Ahead of your gaze is what is coming, behind it what has played.
   const rel = atan(sin(az.sub(V.gazeAz)), cos(az.sub(V.gazeAz)));
   const w = texture(V.wave, vec2(rel.div(6.28318).add(0.5), 0.5));
@@ -643,7 +646,7 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   const ribbon = (y: number, lvl: any, freq: number, colShift: number) => {
     const yy = float(y).add(sin(az.mul(freq).add(U.showTime.mul(1.3 + freq * 0.2))).mul(lvl.mul(0.12)));
     const a = smoothstep(lvl.mul(0.05).add(0.004), 0.0, abs(el.sub(yy)));
-    return V.pa.add(V.pb.mul(cos(V.pc.mul(float(colShift).add(azP.div(6.28318))).add(V.pd).mul(6.28318)))).mul(a).mul(lvl);
+    return max(V.pa.add(V.pb.mul(cos(V.pc.mul(float(colShift).add(azP.div(6.28318))).add(V.pd).mul(6.28318)))), 0.0).mul(a).mul(lvl);
   };
   const ribbons = ribbon(-0.35, V.bands.x, 6.0, 0.0).add(ribbon(-0.05, V.bands.y, 3.0, 0.33)).add(ribbon(0.3, V.bands.z, 9.0, 0.66)).mul(1.4);
   // Starfield (3): stars streaming out of your gaze, faster with the energy.
@@ -886,7 +889,7 @@ function moreElementsBody(V: any, g: any) {
     const z = vec2(q.x.mul(ca).sub(q.y.mul(sa)), q.x.mul(sa).add(q.y.mul(ca))).mul(1.5).toVar();
     const n = float(0.0).toVar();
     Loop(28, () => {
-      z.assign(vec2(z.x.mul(z.x).sub(z.y.mul(z.y)), z.x.mul(z.y).mul(2.0)).add(c));
+      z.assign(clamp(vec2(z.x.mul(z.x).sub(z.y.mul(z.y)), z.x.mul(z.y).mul(2.0)).add(c), -100.0, 100.0)); // (escaped: kept finite)
       n.addAssign(step(dot(z, z), 4.0));
     });
     const f = n.div(28.0);
@@ -981,7 +984,7 @@ function moreElementsBody(V: any, g: any) {
       ii.assign(p.add(vec2(cos(tt.sub(ii.x)).add(sin(tt.add(ii.y))), sin(tt.sub(ii.y)).add(cos(tt.add(ii.x))))));
       c.addAssign(float(1.0).div(length(vec2(p.x.div(sin(ii.x.add(tt)).div(0.005)), p.y.div(cos(ii.y.add(tt)).div(0.005))))));
     }
-    const cc = pow(abs(float(1.17).sub(pow(c.div(4.0), 1.4))), 8.0);
+    const cc = pow(abs(float(1.17).sub(pow(clamp(c.div(4.0), 0.0, 3.0), 1.4))), 8.0); // (c can reach infinity)
     return mix(vec3(0.1, 0.5, 0.7), paletteAt(cc.add(U.hue)), 0.5).mul(clamp(cc, 0.0, 2.0)).mul(V.pad.mul(0.8).add(0.3)).mul(smoothstep(-0.2, 0.3, el));
   });
   // 36 Rotozoomer: a plaid that spins and zooms in front of you, kicked round on the beat.
