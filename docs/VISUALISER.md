@@ -205,6 +205,8 @@ The far window of the train and the starship stays recognisably the ride. On a b
 
 On the rides, every note's object is placed ahead of time so that it reaches a chosen spot on the screen exactly as the note sounds. Which spot feels "on the beat" depends on where you are looking, so the rides follow your gaze with a **note aligner**: a small curve from where you look to where on screen the hit happens.
 
+![Four ways of looking out of the train's window, seen from above, with where a note's object is as it sounds: at the entry edge looking back or at rest, in the middle obliquely up the line, at the leaving edge right up the line; and the curve from gaze angle to place on screen](img/note-aligner.svg)
+
 | You are looking | What the eye catches | The hit is |
 |---|---|---|
 | Back down the line, or square out of the window | things sweeping into view | the **entry edge**, as it comes into view; what slides away is what has already played |
@@ -214,7 +216,7 @@ On the rides, every note's object is placed ahead of time so that it reaches a c
 
 Between those, the spot drifts smoothly as you turn your head, and objects already in view ease across with it rather than jumping. A long note keeps its whole length: on the entry edge its front arrives on the beat and it streams in for as long as it lasts; on the leaving edge its tail leaves on the beat.
 
-The curve is plain data on each viewing profile (`hitCurve` in `src/packs/views.ts`): pairs of *gaze angle in degrees* (negative looks back down the line, positive ahead, 0 square out of the window) and *place on screen* (1 the entry edge, 0 the middle, -1 the leaving edge). The side windows (train, starship) use `[[-90, 1], [-5, 1], [30, 0], [50, 0], [75, -0.85]]`; the forward-facing ghost train lands things in the middle of its resting view, 50° ahead, and uses `[[-90, 1], [0, 1], [35, 0], [60, 0], [85, -0.85]]`. A ride can set its own `rig.hitCurve`. The aligner lives in `hitPlace` (`src/render/rig.ts`) and `hitYaw` (`src/render/spawner.ts`); the far window uses the same curve, mirrored. The debug overlay (D) shows a hit rate: the share of notes that reached their spot on their beat.
+The curve is plain data on each viewing profile (`hitCurve` in `src/packs/views.ts`): pairs of *gaze angle in degrees* (negative looks back down the line, positive ahead, 0 square out of the window) and *place on screen* (1 the entry edge, 0 the middle, -1 the leaving edge). The side windows (train, starship) use `[[-90, 1], [-5, 1], [30, 0], [50, 0], [75, -0.85]]`; the forward-facing ghost train lands things in the middle of its resting view, 50° ahead, and uses `[[-90, 1], [0, 1], [35, 0], [60, 0], [85, -0.85]]`. A ride can set its own `rig.hitCurve`; after changing the window's, `node tools/note-aligner-svg.mjs` redraws the diagram above from it. The aligner lives in `hitPlace` (`src/render/rig.ts`) and `hitYaw` (`src/render/spawner.ts`); the far window uses the same curve, mirrored. The debug overlay (D) shows a hit rate: the share of notes that reached their spot on their beat.
 
 It is a judgement call, and it may well feel different to you. If the timing feels off where you like to look, ask your coding agent to explain the aligner and move the curve.
 
