@@ -93,7 +93,7 @@ Four analysers build the score in layers, all in the browser, and each swaps its
 | **Sound pass** (`analysis/sounds.ts`) | from the first second, alongside the fast parser | `sounds`: cues for what isn't the music (speech, shout, laugh, sing, crowd, animal, nature, siren, engine, impact, whoosh, tick, beep), each with `t`, `dur`, the classifier's `label` and `score`; and `envelopes.voice` (someone singing or talking, 0..1) |
 | **Deep listen** (`analysis/deep.ts`) | after the fast parse, on machines that can take it | sharper melody, bass and pad notes from a neural transcriber |
 
-A MIDI file of the same song, dropped alongside it, beats all three for the parts it covers. The friendly tour with diagrams is [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md); the non-Gondry view's own guide is [docs/VISUALISER.md](docs/VISUALISER.md). The full field-by-field table is in [Build a visualiser](#build-a-visualiser-reading-the-score) below.
+A MIDI file of the same song, dropped alongside it, beats all three for the parts it covers. The friendly tour with diagrams is [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md); the guide to visualising the music (the non-Gondry view, note timing on the rides) is [docs/VISUALISER.md](docs/VISUALISER.md). The full field-by-field table is in [Build a visualiser](#build-a-visualiser-reading-the-score) below.
 
 ## Your first remix in ten minutes
 

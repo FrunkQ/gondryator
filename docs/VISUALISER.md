@@ -1,8 +1,8 @@
-# The non-Gondry view, explained
+# Visualising the music, explained
 
-*"The non-Gondry view :("* is the ride with no vehicle. You sit still at the centre of a sphere of light, and the world around you plays the song. This is a human guide to how it thinks: what it listens to, how it decides what to show, and how a song becomes a journey. For the general architecture see [TECHNOLOGY.md](TECHNOLOGY.md); for the code, `src/render/visualiser.ts` and `src/render/shaders.ts`.
+This is the human guide to how the Gondryator turns a song into pictures, on every ride: what it listens to, how a note becomes something you see at the right moment, how a song becomes a journey, and how to change any of it by asking. Most of it is told through *"The non-Gondry view :("*, the ride with no vehicle, where you sit still at the centre of a sphere of light and the world around you plays the song, because there the music drives everything. The rides (the train, the starship, the ghost train) follow the same rules with real scenery, and the later sections cover them: [On the rides, out of the other window](#on-the-rides-out-of-the-other-window), [When does a note hit?](#when-does-a-note-hit) (which follows your gaze, and could one day follow your eyes in a headset) and [Ask for it, don't hunt for a setting](#ask-for-it-dont-hunt-for-a-setting). For the general architecture see [TECHNOLOGY.md](TECHNOLOGY.md); for the code, `src/render/visualiser.ts`, `src/render/spawner.ts` and `src/render/shaders.ts`.
 
-Try it: <https://gondryator.starsystemx.com/?pack=non-gondry>, or `?pack=non-gondry&demo` locally.
+Try the non-Gondry view: <https://gondryator.starsystemx.com/?pack=non-gondry>, or `?pack=non-gondry&demo` locally.
 
 ## One instrument, one kind of reaction
 
@@ -219,6 +219,8 @@ Between those, the spot drifts smoothly as you turn your head, and objects alrea
 The curve is plain data on each viewing profile (`hitCurve` in `src/packs/views.ts`): pairs of *gaze angle in degrees* (negative looks back down the line, positive ahead, 0 square out of the window) and *place on screen* (1 the entry edge, 0 the middle, -1 the leaving edge). The side windows (train, starship) use `[[-90, 1], [-5, 1], [30, 0], [50, 0], [75, -0.85]]`; the forward-facing ghost train lands things in the middle of its resting view, 50° ahead, and uses `[[-90, 1], [0, 1], [35, 0], [60, 0], [85, -0.85]]`. A ride can set its own `rig.hitCurve`; after changing the window's, `node tools/note-aligner-svg.mjs` redraws the diagram above from it. The aligner lives in `hitPlace` (`src/render/rig.ts`) and `hitYaw` (`src/render/spawner.ts`); the far window uses the same curve, mirrored. The debug overlay (D) shows a hit rate: the share of notes that reached their spot on their beat.
 
 It is a judgement call, and it may well feel different to you. If the timing feels off where you like to look, ask your coding agent to explain the aligner and move the curve.
+
+The aligner only needs to know where you are looking, so it is ready for more than a mouse, a finger or a turning head. In a headset with eye tracking (the future native VR version), the gaze it follows could be your eyes themselves: the hit would land wherever you glance, not just where your head points.
 
 ## Ask for it, don't hunt for a setting
 

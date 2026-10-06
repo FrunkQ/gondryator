@@ -32,4 +32,4 @@ It stands on the shoulders of [three.js](https://threejs.org), the MaterialX noi
 
 ---
 
-How it works, with diagrams: [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md), and the non-Gondry view explained: [docs/VISUALISER.md](docs/VISUALISER.md). How to build and run it: [docs/BUILD.md](docs/BUILD.md)
+How it works, with diagrams: [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md), and how the music becomes pictures: [docs/VISUALISER.md](docs/VISUALISER.md). How to build and run it: [docs/BUILD.md](docs/BUILD.md)

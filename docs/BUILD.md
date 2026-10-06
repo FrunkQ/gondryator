@@ -1,6 +1,6 @@
 # Gondryator
 
-For a friendlier tour with diagrams, start with [TECHNOLOGY.md](TECHNOLOGY.md) (the architecture) and [VISUALISER.md](VISUALISER.md) (the non-Gondry view).
+For a friendlier tour with diagrams, start with [TECHNOLOGY.md](TECHNOLOGY.md) (the architecture) and [VISUALISER.md](VISUALISER.md) (how the music becomes pictures, on every ride).
 
 A browser music visualiser after Michel Gondry's *Star Guitar*: drop in a track and ride a train past scenery where every beat and note becomes an object that comes into view exactly when it sounds.
 
