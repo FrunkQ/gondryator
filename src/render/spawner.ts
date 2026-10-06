@@ -3,6 +3,7 @@
 // Top-tier objects are placed into where the viewer is (predicted to be) looking, and gently
 // steered while in flight. The section-7 metric is measured here.
 
+import { QUALITY, keep } from './quality';
 import * as THREE from 'three/webgpu';
 import type { Pack, PackLayer, MappingRule, RidgeLayer } from '../packs/types';
 import { sampleEnvelope, type Envelope, type Score, type ScoreEvent } from '../score/types';
@@ -351,6 +352,10 @@ export class Spawner {
   }
 
   private spawnEvent(ls: LayerState, e: ScoreEvent, tier: 1 | 2 | 3, s: number, gaze: GazeSource, yawMax: number) {
+    // The detail governor (render/quality.ts) thins the background tiers on a struggling machine;
+    // the notes you are watching (tier 1) always come.
+    if (tier === 3 && !keep(hash32(Math.round(e.t * 1000), 17))) return;
+    if (tier === 2 && QUALITY.density < 0.6 && !keep(hash32(Math.round(e.t * 1000), 29) + 500)) return;
     const L = ls.layer;
     const theme = this.themeAt(e.t);
     const models = L.models[theme] ?? Object.values(L.models)[0];
@@ -458,7 +463,7 @@ export class Spawner {
         const items: Live[] = [];
         let r = hash32(c, ai, 99);
         const rnd = () => ((r = Math.imul(r ^ (r >>> 15), 2246822507) >>> 0), (r & 0xffff) / 0x10000);
-        const count = Math.floor(dens + rnd());
+        const count = Math.floor(dens * QUALITY.density + rnd()); // (the detail governor thins it)
         const models = a.models[theme] ?? Object.values(a.models)[0];
         for (let k = 0; k < count; k++) {
           const o = this.pools.acquire(models[Math.floor(rnd() * models.length)]);

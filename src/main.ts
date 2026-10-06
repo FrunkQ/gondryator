@@ -34,6 +34,7 @@ import type { AutoTuneResult } from './analysis/autotune';
 import { TuningScreen } from './ui/tuning';
 import { FrameAnalyser, perf } from './ui/frames';
 import { Dyno, type DynoResult } from './ui/dyno';
+import { QUALITY, setQualityLevel } from './render/quality';
 import { ListenAlong, canListenAlong } from './audio/listen';
 import { Playlist, isAudio, canPickFolder, pickFolder, rememberFolder, lastFolder, regainAccess, type Track } from './ui/playlist';
 
@@ -132,6 +133,8 @@ class App {
 
   async start() {
     if (params.has('virtual')) this.player.virtual = 0;
+    // ?detail=0..3 pins the detail level (render/quality.ts) for testing.
+    if (params.has('detail')) setQualityLevel(Number(params.get('detail')));
     await this.buildWorld(this.pack);
     this.bindUI();
     this.player.onEnded = () => { this.endedAt = this.p; };
@@ -160,7 +163,7 @@ class App {
    * leaves deep listen off.
    */
   private async runDyno() {
-    const dyno = new Dyno(this.world.renderer);
+    const dyno = new Dyno(this.world.renderer, () => this.world.pixelRatio);
     const at = performance.now();
     try {
       this.dyno = await dyno.run(p => { this.dynoSign = { text: this.dynoWords(), p }; });
@@ -183,8 +186,14 @@ class App {
       gate.classList.remove('hidden');
       $('#gate-ok').onclick = () => gate.classList.add('hidden');
     }
-    // A slow machine starts at a lower resolution; the frame rate lifts it again if it can.
+    // A slow machine starts at a lower resolution; the frame rate lifts it again if it can. Running
+    // light also tones the detail down (fewer particles; render/quality.ts), and the governor in
+    // World.adaptQuality only climbs back part of the way.
     if (r.level === 'slow' && this.world.pixelRatio > 0.75) { this.world.pixelRatio = 0.75; this.world.renderer.setPixelRatio(0.75); }
+    if (r.light && !params.has('detail')) {
+      setQualityLevel(r.level === 'slow' || r.level === 'none' ? 1 : 2);
+      this.world.detailCap = 2;
+    }
   }
 
   private async buildWorld(pack: Pack) {
@@ -195,6 +204,7 @@ class App {
     const sign = document.querySelector('#door .sign');
     if (sign) sign.textContent = pack.id === 'non-gondry' ? 'To the trains' : 'Discothèque';
     this.world = new World(pack);
+    if (prev) this.world.detailCap = prev.detailCap;
     await this.world.init(this.canvas, params.has('webgl'), prev?.renderer);
     this.world.fxEnabled = params.get('fx') !== 'off';
     const locked = this.fx?.locked ?? (FX_LOOKS.includes(params.get('fx') as FxLook) ? params.get('fx') as FxLook : null);
@@ -904,7 +914,7 @@ class App {
         deviceGB: (navigator as any).deviceMemory ?? null,
         gpu: (this.world?.renderer as any)?.info?.memory ?? null,
       },
-      view: { pack: this.pack.id, phase: this.phase, mode: this.world?.mode, pixelRatio: this.world?.pixelRatio, size: `${this.stage.clientWidth}x${this.stage.clientHeight}`, dpr: devicePixelRatio, fpsNow: Math.round(this.fps) },
+      view: { detail: { ...QUALITY, cap: this.world?.detailCap }, pack: this.pack.id, phase: this.phase, mode: this.world?.mode, pixelRatio: this.world?.pixelRatio, size: `${this.stage.clientWidth}x${this.stage.clientHeight}`, dpr: devicePixelRatio, fpsNow: Math.round(this.fps) },
       analysis: sc ? { duration: Math.round(sc.track.durationSec), frontier: Math.round(sc.frontierSec), final: sc.final, speed: this.analysisWall > 0 ? +(this.analysedSec / this.analysisWall).toFixed(1) : null, deepListen: this.deep?.state ?? 'off', sounds: this.sounds?.state ?? null } : null,
     };
   }
@@ -1235,7 +1245,7 @@ class App {
       const recent = m && m.recent.length ? Math.round((m.recent.filter(Boolean).length / m.recent.length) * 100) : 0;
       this.debug.lines = [
         `${this.world.backend}`,
-        `${this.fps.toFixed(0)} fps`,
+        `${this.fps.toFixed(0)} fps · res ${this.world.pixelRatio.toFixed(2)} · detail ${QUALITY.level}/${this.world.detailCap}`,
         `t ${s.toFixed(2)}`,
         sc ? `frontier +${sc.final ? '∞ (final)' : (sc.frontierSec - Math.max(0, s)).toFixed(1) + 's'}` : '',
         this.analysisWall ? `analysis ${(this.analysedSec / this.analysisWall).toFixed(0)}× rt` : '',

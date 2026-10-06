@@ -8,6 +8,7 @@
 //   flock, an impact or a cheering crowd sends up a shell, a drop a volley.
 // Both are single instanced meshes updated on the CPU; cheap enough for any GPU.
 
+import { fewer } from './quality';
 import * as THREE from 'three/webgpu';
 import type { Score, ScoreEvent } from '../score/types';
 import { instanceColor, vec3 } from 'three/tsl';
@@ -90,6 +91,7 @@ export class SkyLife {
 
   /** Burst `n` sparks at `at`, `speed` m/s, in one colour (plus some white). */
   private burst(at: THREE.Vector3, n: number, speed: number, color: THREE.Color, kind = 0) {
+    n = fewer(n);
     // kind 0: a peony (a ball of stars), 1: a ring, 2: a golden willow (slow, long, drooping).
     const willow = kind === 2, ring = kind === 1;
     const tilt = Math.random() * Math.PI;

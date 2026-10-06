@@ -6,9 +6,12 @@
 //   scenery  layered procedural noise, like the surfaces of the train's world
 //   sky      a nine-fold fractal and noise, like the non-Gondry view's sky
 //   post     many texture reads, like the effects passes (blur, trails, bloom)
-// From the frame times at this screen's size it says whether the ride will be smooth, tricky or
-// slow, or whether there is no 3D acceleration at all, and whether deep listen (the neural note
-// transcriber) can run alongside. The whole profile can be saved from the frame analyser (P).
+// The verdict comes from what is real: the landing screen's own frame times, at this window's size
+// and resolution (the ride is heavier, so it allows some headroom), plus whether there is 3D
+// acceleration at all and whether the processor can take deep listen (the neural note transcriber)
+// alongside. The synthetic scenes are recorded for comparing machines (a "horsepower" figure per
+// scene), not trusted on their own: on a fast desktop card they once predicted 3 fps for a ride
+// that ran at 52. The whole profile can be saved from the frame analyser (P).
 
 import * as THREE from 'three/webgpu';
 import { Fn, uv, vec2, vec3, float, sin, cos, abs, dot, max, min, length, Loop, mx_noise_float, texture } from 'three/tsl';
@@ -16,6 +19,9 @@ import { Fn, uv, vec2, vec3, float, sin, cos, abs, dot, max, min, length, Loop, 
 export type DynoLevel = 'ok' | 'tricky' | 'slow' | 'none';
 
 export interface DynoTest { name: string; what: string; msPerFrame: number; frames: number; pixels: number }
+
+/** The landing screen's own frames, timed while nothing else runs. */
+export interface DynoLive { medianMs: number; p90Ms: number; fps: number; frames: number; pixelRatio: number; size: string }
 
 export interface DynoResult {
   when: string;
@@ -27,9 +33,13 @@ export interface DynoResult {
   advice: string[];
   spec: Record<string, unknown>;
   cpu: { msFor10M: number; cores: number };
+  live: DynoLive | null;
+  /** The synthetic scenes, with the cost of waiting for the graphics card taken out. */
   tests: DynoTest[];
-  /** Frames per second these tests suggest for each kind of view, at this screen's size. */
+  /** Frames per second expected for the ride and the disco, from the landing's own frames. */
   estimate: { ride: number; disco: number; screenPixels: number };
+  /** Synthetic frames per second at 1280x720 for each test scene, for comparing machines. */
+  horsepower: Record<string, number>;
   /** What a comfortable machine has, for comparison. */
   recommended: Record<string, string>;
 }
@@ -37,9 +47,9 @@ export interface DynoResult {
 const W = 1280, H = 720;
 
 /** One synthetic scene: a full-screen quad with a shader standing in for one kind of load. */
-function scene(kind: 'scenery' | 'sky' | 'post', tex: THREE.Texture) {
+function scene(kind: 'blank' | 'scenery' | 'sky' | 'post', tex: THREE.Texture) {
   const mat = new THREE.MeshBasicNodeMaterial();
-  mat.colorNode = Fn(() => {
+  mat.colorNode = kind === 'blank' ? vec3(0.2, 0.3, 0.4) : Fn(() => {
     const p = uv().mul(vec2(8.0, 4.5));
     if (kind === 'scenery') {
       const acc = float(0.0).toVar();
@@ -71,7 +81,20 @@ export class Dyno {
   result: DynoResult | null = null;
   aborted = false;
 
-  constructor(private renderer: THREE.WebGPURenderer) {}
+  constructor(private renderer: THREE.WebGPURenderer, private pixelRatio: () => number = () => 1) {}
+
+  /** Times the real frames for a moment (median and 90th percentile; startup hitches don't count). */
+  private async live(n = 90): Promise<DynoLive> {
+    const dts: number[] = [];
+    let last = await frame() as number;
+    for (let i = 0; i < n && !this.aborted; i++) {
+      const t = await frame() as number;
+      dts.push(t - last); last = t;
+    }
+    dts.sort((a, b) => a - b);
+    const med = dts[dts.length >> 1] ?? 16.7, p90 = dts[Math.floor(dts.length * 0.9)] ?? med;
+    return { medianMs: +med.toFixed(2), p90Ms: +p90.toFixed(2), fps: Math.round(1000 / med), frames: dts.length, pixelRatio: +this.pixelRatio().toFixed(2), size: `${window.innerWidth}x${window.innerHeight}` };
+  }
 
   /** Runs the whole test, a slice per animation frame so the landing stays smooth. */
   async run(onProgress: (p: number) => void): Promise<DynoResult> {
@@ -80,9 +103,13 @@ export class Dyno {
     onProgress(0.05);
     await frame();
     const cpu = this.cpu();
-    onProgress(0.15);
-    const tests: DynoTest[] = [];
+    onProgress(0.1);
     const none = spec.software === true || !spec.backend;
+    // Let the landing settle (its shaders build in the first frames), then time it.
+    for (let i = 0; i < 30 && !none; i++) await frame();
+    const live = none ? null : await this.live();
+    onProgress(0.3);
+    const tests: DynoTest[] = [];
     if (!none) {
       const data = new Uint8Array(256 * 256 * 4).map((_, i) => (i * 2654435761) >>> 24);
       const tex = new THREE.DataTexture(data, 256, 256, THREE.RGBAFormat);
@@ -90,6 +117,7 @@ export class Dyno {
       const rt = new THREE.RenderTarget(W, H, { depthBuffer: false });
       const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       const plan = [
+        ['blank', 'a flat colour (the cost of waiting for the card, taken off the others)'],
         ['scenery', 'layered procedural noise (the ride\'s surfaces)'],
         ['sky', 'nine-fold fractal and noise (the non-Gondry sky)'],
         ['post', '24 texture reads a pixel (the effects passes)'],
@@ -108,16 +136,19 @@ export class Dyno {
           };
           await draw(1);
           await frame();
-          // Enough frames to time, but never long: stop early on a slow machine.
-          let frames = 0, ms = 0;
+          // Enough frames to time, but never long: stop early on a slow machine. The best batch
+          // counts (the others share the card with the landing screen).
+          let frames = 0, ms = 0, best = Infinity;
           for (let b = 0; b < 4 && ms < 600 && !this.aborted; b++) {
             const t0 = performance.now();
-            await draw(4);
-            ms += performance.now() - t0; frames += 4;
-            onProgress(0.15 + 0.8 * (k + (b + 1) / 4) / plan.length);
+            await draw(8);
+            const dt = performance.now() - t0;
+            ms += dt; frames += 8; best = Math.min(best, dt / 8);
+            onProgress(0.3 + 0.65 * (k + (b + 1) / 4) / plan.length);
             await frame();
           }
-          tests.push({ name, what, msPerFrame: frames ? ms / frames : Infinity, frames, pixels: W * H });
+          const blank = tests.find(t => t.name === 'blank')?.msPerFrame ?? 0;
+          tests.push({ name, what, msPerFrame: frames ? +Math.max(0.05, best - (name === 'blank' ? 0 : blank)).toFixed(3) : Infinity, frames, pixels: W * H });
         } catch (e) {
           tests.push({ name, what: `${what}: failed (${(e as Error).message})`, msPerFrame: Infinity, frames: 0, pixels: W * H });
         }
@@ -126,7 +157,7 @@ export class Dyno {
       rt.dispose(); tex.dispose();
     }
     onProgress(1);
-    this.result = this.verdict(spec, cpu, tests);
+    this.result = this.verdict(spec, cpu, live, tests);
     return this.result;
   }
 
@@ -166,37 +197,38 @@ export class Dyno {
     return { msFor10M: Math.round(ms), cores: navigator.hardwareConcurrency ?? 0 };
   }
 
-  private verdict(spec: Record<string, any>, cpu: { msFor10M: number; cores: number }, tests: DynoTest[]): DynoResult {
+  private verdict(spec: Record<string, any>, cpu: { msFor10M: number; cores: number }, live: DynoLive | null, tests: DynoTest[]): DynoResult {
     const ms = (n: string) => tests.find(t => t.name === n)?.msPerFrame ?? Infinity;
-    const px = window.innerWidth * window.innerHeight * Math.min(window.devicePixelRatio, 1.5);
-    const scale = px / (W * H);
-    // A ride is about two scenery loads and two effects passes a frame; the disco about one sky
-    // and three effects passes, at no more than one pixel per screen pixel.
-    const discoScale = window.innerWidth * window.innerHeight / (W * H);
-    const ride = 1000 / Math.max(0.1, (ms('scenery') * 2 + ms('post') * 2) * scale);
-    const disco = 1000 / Math.max(0.1, (ms('sky') + ms('post') * 3) * discoScale);
-    const worst = Math.min(ride, disco);
+    // The ride and the disco draw more than the landing screen does: allow a third more time a frame.
+    // (The landing runs at the display's refresh when it can, so a fast machine reads as the
+    // refresh rate: plenty.)
+    const HEADROOM = 1.35;
+    const ride = live ? 1000 / (live.medianMs * HEADROOM) : 0;
+    // Horsepower: synthetic frames per second at 1280x720, for comparing machines in saved profiles.
+    const hp = (n: string) => Math.round(1000 / Math.max(0.05, ms(n)));
     const advice: string[] = [];
     let level: DynoLevel = 'ok';
     if (spec.software || !spec.backend) {
       level = 'none';
       advice.push('No 3D acceleration: the browser is drawing in software. Turn on hardware acceleration in the browser\'s settings, or try another machine.');
     } else {
-      if (spec.backend !== 'WebGPU') { level = 'slow'; advice.push('This browser has no WebGPU, so the ride falls back to WebGL, which is far slower here. A recent Chrome or Edge has WebGPU.'); }
-      if (worst < 30) { level = 'slow'; advice.push(`The graphics card tested at about ${Math.round(worst)} fps for this window size: expect a jerky ride. A smaller window helps.`); }
-      else if (worst < 55 && level === 'ok') { level = 'tricky'; advice.push(`The graphics card tested at about ${Math.round(worst)} fps for this window size: the busiest moments may stutter. The resolution drops by itself when they do.`); }
+      if (spec.backend !== 'WebGPU') { level = 'slow'; advice.push('This browser has no WebGPU, so the ride falls back to WebGL, which is far slower. A recent Chrome or Edge has WebGPU.'); }
+      if (ride && ride < 24) { level = 'slow'; advice.push(`The start screen is drawing at about ${live!.fps} fps in this window, so the ride is likely to be jerky. A smaller window helps; the resolution also drops by itself.`); }
+      else if (ride && ride < 40 && level === 'ok') { level = 'tricky'; advice.push(`The start screen is drawing at about ${live!.fps} fps in this window: the busiest moments may stutter. The resolution drops by itself when they do.`); }
     }
-    const weakCpu = cpu.msFor10M > 250 || (cpu.cores && cpu.cores <= 2) || (spec.memoryGB && spec.memoryGB <= 4);
+    // Deep listen runs a neural network beside the ride: it wants a reasonable processor and memory.
+    const weakCpu = cpu.msFor10M > 700 || (cpu.cores && cpu.cores <= 2) || (spec.memoryGB && spec.memoryGB <= 4);
     const light = level === 'none' || level === 'slow' || !!weakCpu;
-    if (light) advice.push('Running light: deep listen (the neural note transcriber) stays off, so the notes come from the fast parser alone.');
+    if (light && level !== 'none') advice.push('Running light: deep listen (the neural note transcriber) stays off, so the notes come from the fast parser alone.');
     const headline = level === 'none' ? 'Needs 3D acceleration' : level === 'slow' ? 'Slow machine: running light' : level === 'tricky' ? (light ? 'Frames may stutter; running light' : 'Frames may stutter') : light ? 'Running light' : 'All clear';
     return {
-      when: new Date().toISOString(), level, light, headline, advice, spec, cpu, tests,
-      estimate: { ride: Math.round(ride), disco: Math.round(disco), screenPixels: Math.round(px) },
+      when: new Date().toISOString(), level, light, headline, advice, spec, cpu, live, tests,
+      estimate: { ride: Math.round(ride), disco: Math.round(ride), screenPixels: Math.round(window.innerWidth * window.innerHeight * (live?.pixelRatio ?? 1) ** 2) },
+      horsepower: { scenery: hp('scenery'), sky: hp('sky'), post: hp('post') },
       recommended: {
         browser: 'a recent Chrome or Edge (WebGPU)',
-        gpu: 'any dedicated graphics card, or a recent integrated one, testing at 60 fps or more here',
-        cpu: '4 cores or more, 10M-step test under 120 ms',
+        gpu: 'any dedicated graphics card, or a recent integrated one, holding 60 fps on the start screen',
+        cpu: '4 cores or more, 10M-step test under 400 ms',
         memory: '8 GB or more',
       },
     };

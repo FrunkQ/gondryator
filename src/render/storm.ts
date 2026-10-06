@@ -7,6 +7,7 @@
 //   lightning: 0..1, how many of the big snares strike (section changes, drops and impacts always do).
 //   pulse:     a colour the sky and fog swell towards on every kick (U.kick), more in loud parts.
 
+import { QUALITY } from './quality';
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Pack } from '../packs/types';
@@ -149,7 +150,7 @@ export class Storm {
       if (sec?.label === 'breakdown' || sec?.label === 'drop') want = 1;
     }
     this.amount += (want - this.amount) * (1 - Math.exp(-dt / 1.5));
-    const n = Math.round(N_RAIN * this.amount);
+    const n = Math.round(N_RAIN * this.amount * QUALITY.particles);
     this.rain.count = n;
     const now = performance.now() / 1000;
     const top = trainPos.y + 16;

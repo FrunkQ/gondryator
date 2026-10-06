@@ -2,6 +2,7 @@
 // ground, the neighbouring track and its wires, the carriage interior with its windows,
 // and the station boards used for the title block and the end card.
 
+import { QUALITY, setQualityLevel } from './quality';
 import * as THREE from 'three/webgpu';
 import type { Pack } from '../packs/types';
 import type { CameraRig } from './rig';
@@ -1201,17 +1202,35 @@ export class World {
   private slowFor = 0;
   private fastFor = 0;
   /** Dynamic resolution: trade pixels for frame rate on slower machines (never below 0.5x). */
+  /**
+   * The governor: watches the frame rate and trades resolution and detail for smoothness. Slow
+   * for 1.5 s: the resolution steps down to 0.75, then the detail level (render/quality.ts: fewer
+   * particles, thinner background scenery), then the resolution again down to 0.5. Fast for 6 s:
+   * the same steps back up in reverse, detail before sharpness, no further than `detailCap`.
+   */
   adaptQuality(fps: number, dt: number) {
     if (fps < 45) { this.slowFor += dt; this.fastFor = 0; } else if (fps > 58) { this.fastFor += dt; this.slowFor = 0; } else { this.slowFor = this.fastFor = 0; }
     // The stage (the non-Gondry view) is one big shader over the whole sky: soft patterns that need
     // no more than one pixel per CSS pixel, so it never goes above 1.
     const max = Math.min(window.devicePixelRatio, this.mode === 'stage' ? 1 : 1.5);
     let next = this.pixelRatio;
-    if (this.slowFor > 1.5) { next = Math.max(0.5, this.pixelRatio - 0.15); this.slowFor = 0; }
+    if (this.slowFor > 1.5) {
+      this.slowFor = 0;
+      if (this.pixelRatio > 0.75) next = Math.max(0.75, this.pixelRatio - 0.15);
+      else if (QUALITY.level > 0) { setQualityLevel(QUALITY.level - 1); perf.mark(`detail → ${QUALITY.level}`); }
+      else next = Math.max(0.5, this.pixelRatio - 0.1);
+    }
     if (next > max) next = max;
-    if (this.fastFor > 6) { next = Math.min(max, this.pixelRatio + 0.1); this.fastFor = 0; }
+    if (this.fastFor > 6) {
+      this.fastFor = 0;
+      if (this.pixelRatio < 0.75) next = Math.min(0.75, this.pixelRatio + 0.1);
+      else if (QUALITY.level < this.detailCap) { setQualityLevel(QUALITY.level + 1); perf.mark(`detail → ${QUALITY.level}`); }
+      else next = Math.min(max, this.pixelRatio + 0.1);
+    }
     if (next !== this.pixelRatio) { this.pixelRatio = next; this.renderer.setPixelRatio(next); }
   }
+  /** The most detail the governor will climb back to (lower on a light machine). */
+  detailCap = 3;
   blurScale = 1;
   private baseFov = 50;
   readonly sunDir = new THREE.Vector3(0, 1, 0);

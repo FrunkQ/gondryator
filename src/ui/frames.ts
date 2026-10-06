@@ -50,8 +50,18 @@ export class FrameAnalyser {
       }).observe({ type: 'longtask', buffered: false } as any);
     } catch { /* not supported */ }
     // Estimate the display's refresh rate from the first frames.
-    let n = 0, t0 = 0;
-    const probe = (t: number) => { if (n === 0) t0 = t; if (++n < 30) requestAnimationFrame(probe); else this.refresh = Math.round(29000 / (t - t0)) || 60; };
+    // (The median interval, so the page's loading hitches don't count; anything under 30 Hz is a
+    // hitch, not a display.)
+    const dts: number[] = [];
+    let last = 0;
+    const probe = (t: number) => {
+      if (last) dts.push(t - last);
+      last = t;
+      if (dts.length < 60) { requestAnimationFrame(probe); return; }
+      dts.sort((a, b) => a - b);
+      const hz = Math.round(1000 / dts[dts.length >> 1]);
+      this.refresh = hz >= 30 ? hz : 60;
+    };
     requestAnimationFrame(probe);
   }
 

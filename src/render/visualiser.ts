@@ -35,6 +35,7 @@
 // song gets its own set and the same song looks the same next time. Sections that come back
 // (a second chorus) bring their pattern back with a new palette and phase. R rerolls the seed.
 
+import { QUALITY } from './quality';
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import { makeGlitterMaterial, makeSpriteMaterial, makeVisualiserMaterial, PALETTES as PALETTES_BY_NAME, SHELL_RISE } from './shaders';
@@ -329,7 +330,7 @@ class SpritePool {
   /** Off: the far-side backdrop has no sprites (they would hang still while the world travels). */
   off = false;
 
-  add(sp: Sprite) { if (this.off) return; this.items[this.next] = sp; this.next = (this.next + 1) % this.count; }
+  add(sp: Sprite) { if (this.off || (QUALITY.particles < 1 && Math.random() > QUALITY.particles)) return; this.items[this.next] = sp; this.next = (this.next + 1) % this.count; }
 
   clear() {
     this.items.fill(null);

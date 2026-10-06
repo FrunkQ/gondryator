@@ -253,7 +253,7 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
   'sunflowers': () => merge([
     ...Array.from({ length: 18 }, (_, i) => {
       const x = (i % 6) * 1.6 - 4, z = Math.floor(i / 6) * 1.6 - 1.6, h = 1.6 + ((i * 7) % 5) * 0.12;
-      return [cyl(0.04, 0.05, h, x, h / 2, z, 0x4e6b2a, 4), T1(SURF.glow, cyl(0.32, 0.32, 0.08, x, h, z + 0.1, 0x8a6a10, 10).rotateX(Math.PI / 2.4)), cyl(0.14, 0.14, 0.1, x, h, z + 0.15, 0x3a2410, 8).rotateX(Math.PI / 2.4)];
+      return [cyl(0.04, 0.05, h, x, h / 2, z, 0x4e6b2a, 4), T1(SURF.glow, cyl(0.32, 0.32, 0.08, 0, 0, 0, 0x8a6a10, 10).rotateX(Math.PI / 2.4).translate(x, h, z + 0.1)), cyl(0.14, 0.14, 0.1, 0, 0, 0, 0x3a2410, 8).rotateX(Math.PI / 2.4).translate(x, h, z + 0.15)];
     }).flat(),
   ]),
 
@@ -311,7 +311,7 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
   'cargo-pod': () => merge([
     T1(SURF.paint, box(4.2, 2.2, 2.2, 0, 3.4, 0, 0xd8d2c4)),
     T1(SURF.paint, box(4.25, 0.4, 2.25, 0, 3.4, 0, 0xe0703a)),
-    ...[-1, 1].map(sx => T1(SURF.metal, cyl(0.6, 0.8, 0.5, sx * 2.35, 3.4, 0, 0x6f767e, 10).rotateZ(Math.PI / 2))),
+    ...[-1, 1].map(sx => T1(SURF.metal, cyl(0.6, 0.8, 0.5, 0, 0, 0, 0x6f767e, 10).rotateZ(sx * Math.PI / 2).translate(sx * 2.35, 3.4, 0))),
     T1(SURF.glow, sphere(0.14, 0, 4.6, 1.0, 0x7fff9f, 1, 1, 1, 6)),
   ]),
   'asteroid-big': () => merge([T1(SURF.rock, rockBlob(3.2, 3, 0x7d746a, 0, 6, 0, [1.05, 0.9, 1])), T1(SURF.rock, rockBlob(0.9, 11, 0x8a8076, 4.5, 9.5, 1, [1, 0.9, 1.1]))]),
@@ -324,7 +324,7 @@ export const MODELS: Record<string, () => THREE.BufferGeometry> = {
     T1(SURF.metal, box(4, 3, 4, -7, 9.8, 0, 0x9da2a8)),
     T1(SURF.glow, box(3.4, 0.4, 0.1, -7, 10.4, 2.02, 0xfff0c8)),
     ...[-3, 0, 3, 6].map(x => T1(SURF.paint, box(2.6, 2.4, 6.4, x, 9.5, 0, [0xc0582f, 0x6f8fa8, 0xd8b04a, 0x7a8a5a][(x + 3) / 3]))),
-    ...[-1, 1].map(sy => T1(SURF.glow, cyl(0.9, 1.2, 0.6, -11.3, 6 + sy * 1.2, 0, 0x7fd8ff, 12).rotateZ(Math.PI / 2))),
+    ...[-1, 1].map(sy => T1(SURF.glow, cyl(0.9, 1.2, 0.6, 0, 0, 0, 0x7fd8ff, 12).rotateZ(-Math.PI / 2).translate(-11.3, 6 + sy * 1.2, 0))),
     ...Array.from({ length: 9 }, (_, i) => T1(SURF.glow, box(0.5, 0.25, 0.05, -9 + i * 2.2, 7.2, 3.03, 0xffe7b8))),
   ]),
   'star-dock': () => merge([
