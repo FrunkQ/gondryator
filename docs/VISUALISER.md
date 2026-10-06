@@ -201,6 +201,34 @@ The data table in [AGENTS.md](../AGENTS.md#build-a-visualiser-reading-the-score)
 
 The far window of the train and the starship stays recognisably the ride. On a breakdown or a drop (a section, or a break or drop the parser marked), the show's backdrops take over that whole side, sky and ground, while the scenery keeps passing in trippy paint. They never take over in the intro or the last fifteen seconds, so the ride starts and ends as itself. Only the backdrops come along: sprites such as flowers and confetti would hang still while the vehicle travels. Impacts and whooshes flash the whole sky. The main window never sees any of it. Open `?side=disco&demo` and turn round to see it held on.
 
+## When does a note hit?
+
+On the rides, every note's object is placed ahead of time so that it reaches a chosen spot on the screen exactly as the note sounds. Which spot feels "on the beat" depends on where you are looking, so the rides follow your gaze with a **note aligner**: a small curve from where you look to where on screen the hit happens.
+
+| You are looking | What the eye catches | The hit is |
+|---|---|---|
+| Back down the line, or square out of the window | things sweeping into view | the **entry edge**, as it comes into view; what slides away is what has already played |
+| Obliquely up the line | things coming towards you and crossing the view | the **middle** of the view |
+| Right up the line | things growing out of the distance and whipping past | the **leaving edge**, the moment it goes; it is the only moment to latch on to |
+| Right back down the line | things whooshing in at the edge, then shrinking away | the entry edge still, since nothing ever leaves (it shrinks into the distance) |
+
+Between those, the spot drifts smoothly as you turn your head, and objects already in view ease across with it rather than jumping. A long note keeps its whole length: on the entry edge its front arrives on the beat and it streams in for as long as it lasts; on the leaving edge its tail leaves on the beat.
+
+The curve is plain data on each viewing profile (`hitCurve` in `src/packs/views.ts`): pairs of *gaze angle in degrees* (negative looks back down the line, positive ahead, 0 square out of the window) and *place on screen* (1 the entry edge, 0 the middle, -1 the leaving edge). The side windows (train, starship) use `[[-90, 1], [-5, 1], [30, 0], [50, 0], [75, -0.85]]`; the forward-facing ghost train lands things in the middle of its resting view, 50° ahead, and uses `[[-90, 1], [0, 1], [35, 0], [60, 0], [85, -0.85]]`. A ride can set its own `rig.hitCurve`. The aligner lives in `hitPlace` (`src/render/rig.ts`) and `hitYaw` (`src/render/spawner.ts`); the far window uses the same curve, mirrored. The debug overlay (D) shows a hit rate: the share of notes that reached their spot on their beat.
+
+It is a judgement call, and it may well feel different to you. If the timing feels off where you like to look, ask your coding agent to explain the aligner and move the curve.
+
+## Ask for it, don't hunt for a setting
+
+The Gondryator deliberately has very few settings. There is no slider for building heights, no palette picker, no timing control, because the code is the control panel and your coding agent can open it for you. Say what you want in plain words:
+
+- "The buildings are too big: make them smaller."
+- "I want a different colour palette for the chorus: deep blue and gold."
+- "The note alignment feels off when I look up the line. Explain how it works, then make it hit in the middle there."
+- "Fewer fireworks, more trees." "Make the disco calmer in the verses."
+
+Ask it to explain first if you are curious; it can read the whole thing faster than you can find a menu. Every change is yours to keep, share or throw away.
+
 ## Handy switches for trying things
 
 | URL parameter | Does |

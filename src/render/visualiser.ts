@@ -1417,6 +1417,8 @@ export class Visualiser implements ShowDriver {
   private ball: THREE.Mesh | null = null;
   private lastSparkle = 0;
   private cardText = { name: '', line2: '', status: '' };
+  /** How far the waiting line's task has got (a neon bar under it), or null for none. */
+  private cardProgress: number | null = null;
 
   card(kind: 'landing' | 'title' | 'end', info: CardInfo): boolean {
     if (this.card3d) { this.group.remove(this.card3d); (this.card3d.material as THREE.MeshBasicMaterial).map?.dispose(); }
@@ -1425,6 +1427,7 @@ export class Visualiser implements ShowDriver {
     this.cardCanvas = c;
     const plain = kind === 'landing' && info.name === 'Gondryator';
     this.cardText = { name: plain ? 'The non-Gondry view :(' : info.name, line2: plain ? 'Drop a music file' : info.line2, status: kind === 'title' ? 'Tuning in' : '' };
+    this.cardProgress = null;
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
@@ -1455,10 +1458,12 @@ export class Visualiser implements ShowDriver {
    * While the shaders build, the song's name glows in neon with a line under it: "tuning in",
    * then a countdown. `text` comes from the same estimate as the train's departures board.
    */
-  setWaiting(text: string) {
+  setWaiting(text: string, progress: number | null = null) {
     const status = text === 'Waiting for a clear line' ? 'Tuning in' : text.replace('Departs in', 'Starting in').replace('Departing', 'Here we go');
-    if (status === this.cardText.status) return;
+    const p = progress === null ? null : Math.round(progress * 50) / 50;
+    if (status === this.cardText.status && p === this.cardProgress) return;
     this.cardText.status = status;
+    this.cardProgress = p;
     this.drawCard();
   }
 
@@ -1505,6 +1510,12 @@ export class Visualiser implements ShowDriver {
       g.fillStyle = '#ffd36a'; g.shadowColor = '#ff9a00'; g.shadowBlur = 16;
       g.fillText(status.toUpperCase(), 512, 370, 980);
       g.shadowBlur = 0;
+      if (this.cardProgress !== null) {
+        g.fillStyle = 'rgba(255,211,106,0.2)'; g.fillRect(212, 412, 600, 10);
+        g.fillStyle = grad; g.shadowColor = '#ff9a00'; g.shadowBlur = 14;
+        g.fillRect(212, 412, 600 * Math.min(1, Math.max(0, this.cardProgress)), 10);
+        g.shadowBlur = 0;
+      }
     }
     (card.material as THREE.MeshBasicMaterial).map!.needsUpdate = true;
   }

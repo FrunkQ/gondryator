@@ -68,6 +68,10 @@ body.paused #drop { bottom: max(84px, env(safe-area-inset-bottom)); }
   background: var(--glass); border: 1px solid var(--line); font-size: 13px; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none;
   max-width: calc(100% - 32px); text-align: center;
 }
+#gate { bottom: auto; top: 18px; z-index: 6; background: rgba(18, 18, 22, 0.94); border-color: rgba(255, 196, 90, 0.6); }
+#gate.none { border-color: rgba(255, 90, 90, 0.8); }
+#gate ul { margin: 0 0 14px; padding-left: 18px; }
+#gate li { margin: 0 0 4px; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #credits {
   position: absolute; right: 14px; top: 12px; max-width: min(420px, 60%); font-size: 11px; color: var(--ink-dim);

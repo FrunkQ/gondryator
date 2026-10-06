@@ -32,7 +32,9 @@ export interface CameraRig {
   pose(s: number, pos: THREE.Vector3, quat: THREE.Quaternion): void;
   placeFor(t: number, depth: number, yaw: number, out: THREE.Vector3): void;
   /** View angle (radians, ahead of the gaze) at which an object sits when its sound plays. */
-  hitAngle?(): number;
+  hitAngle?(yaw?: number): number;
+  /** Where on screen a sound lands for a gaze at `yaw`: 1 the entry edge, 0 the middle, -1 the leaving edge. */
+  hitPlaceAt?(yaw: number): number;
   /** Seconds before t that an object at this depth can first come into view. */
   leadTime(depth: number): number;
   /** Show time at which the camera reaches travel position x (for themed ground and ambient). */
@@ -243,8 +245,17 @@ export class LateralRail implements CameraRig {
     out.set(this.travel(t) + depth * Math.tan(yaw), 0, -depth);
   }
 
-  /** Just inside the leading edge of the screen (an object's middle a touch past the edge). */
-  hitAngle() { return this.spec.hitAt === 'centre' ? 0 : this.halfFovH * 0.9; }
+  /**
+   * How far from the middle of the view (radians, towards the entry edge) an object is when its
+   * sound plays, for a gaze at `yaw` (radians). With a `hitCurve` this follows the gaze; otherwise
+   * 'entry' is just inside the leading edge (an object's middle a touch past it) and 'centre' is 0.
+   */
+  hitAngle(yaw = 0) { return this.halfFovH * 0.9 * this.hitPlaceAt(yaw); }
+
+  hitPlaceAt(yaw: number) {
+    const c = this.spec.hitCurve;
+    return c?.length ? hitPlace(c, THREE.MathUtils.radToDeg(yaw)) : this.spec.hitAt === 'centre' ? 0 : 1;
+  }
 
   leadTime(depth: number) {
     const reachAngle = Math.min(THREE.MathUtils.degToRad(80), THREE.MathUtils.degToRad(this.spec.maxYaw) + this.halfFovH);
@@ -341,4 +352,18 @@ export function makeRig(spec: RigSpec): CameraRig {
   if (spec.type === 'orbit') return new OrbitRig(spec);
   if (spec.type === 'static') return new StaticRig(spec);
   return new LateralRail(spec);
+}
+
+/** The note aligner's place on screen (1 entry edge, 0 middle, -1 leaving edge) for a gaze yaw in degrees. */
+export function hitPlace(curve: readonly (readonly [number, number])[], yawDeg: number) {
+  if (yawDeg <= curve[0][0]) return curve[0][1];
+  for (let i = 1; i < curve.length; i++) {
+    const [y1, p1] = curve[i];
+    if (yawDeg <= y1) {
+      const [y0, p0] = curve[i - 1];
+      const k = (yawDeg - y0) / Math.max(1e-6, y1 - y0);
+      return p0 + (p1 - p0) * k * k * (3 - 2 * k); // eased, so the hit point drifts as the head turns
+    }
+  }
+  return curve[curve.length - 1][1];
 }

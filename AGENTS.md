@@ -124,7 +124,7 @@ The smallest change that teaches the whole edit, preview, ride loop: a recoloure
 A ride is a story with a beginning, a middle and an end. When someone asks for a new one ("a Halloween ride!"), work down this list so nothing is left on the defaults by accident. Every line is a field in the pack (see `src/packs/types.ts`); copy the train or the starship and change each one.
 
 **Beginning (while the song is read)**
-- [ ] The viewing profile: spread `VIEW.window` (a side window: objects come into sight at the leading edge as they sound) or `VIEW.ahead` (facing forward in an open car: objects land in the middle of the view as they sound) from `packs/views.ts` into `rig`. It sets `startYaw` / `startPitch` (the view the ride turns to as it pulls up; angle it so the card sits clear of window pillars) and `hitAt`.
+- [ ] The viewing profile: spread `VIEW.window` (a side window: objects come into sight at the leading edge as they sound) or `VIEW.ahead` (facing forward in an open car: objects land in the middle of the view as they sound) from `packs/views.ts` into `rig`. It sets `startYaw` / `startPitch` (the view the ride turns to as it pulls up; angle it so the card sits clear of window pillars) and the note aligner `hitCurve` (where on screen a note lands, by where the viewer looks: [When does a note hit?](docs/VISUALISER.md#when-does-a-note-hit)).
 - [ ] `title.template`: the card waiting in that view. 'station-board' (lineside shed, departures strip, platform clock), 'launch-screen' (floating screen, T-minus strip, countdown dial) or 'ghost-gate' (a fairground sign with chaser bulbs, a skull and two jack-o'-lanterns, "DOORS CLOSE IN 12"). A new one is a branch in `World.stationBoard`, e.g. a gravestone with the song carved on it.
 
 **Middle (the song)**
@@ -153,7 +153,7 @@ A ride is a story with a beginning, a middle and an end. When someone asks for a
 - something that grows across the whole song, so the last chorus looks different from the first;
 - an object that comes back every time a part repeats (`sections[].group`), changed a little each time.
 
-Keep the golden rule: **everything that moves must land on its beat** (by default it appears at the leading edge as it sounds; `rig.hitAt: 'centre'` times it to the middle of the view instead). The spawner handles that for you if your models stand on y=0, centred on x=0, with +z facing the viewer.
+Keep the golden rule: **everything that moves must land on its beat** (where on screen is up to the note aligner, `rig.hitCurve`: the entry edge when looking out of the window, the middle when looking obliquely up the line, the leaving edge when looking right up it; see [When does a note hit?](docs/VISUALISER.md#when-does-a-note-hit)). The spawner handles that for you if your models stand on y=0, centred on x=0, with +z facing the viewer.
 
 ## Build a visualiser (reading the score)
 
@@ -202,6 +202,8 @@ Rules of thumb:
 - Screenshots at chosen moments: `npm run build`, then `node tools/e2e.mjs --webgl --virtual --query "start=30" --shots 33 --out shots` (add `--strict` to fail on errors). The `--virtual` flag steps the clock 1/30 s per frame, so software rendering still produces exact frames.
 - **When something fails,** tell the environment from the project: a sandbox refusing a port or a download, a missing browser, or an old Node is the machine; a TypeScript error or a page error in the smoke test is the project.
 - Debug helpers in the app: D (debug overlay), T (tuning screen), P (frame analyser), X (force an effects look), G (wandering-viewer test).
+- **Few settings, on purpose.** There is no options menu for sizes, palettes or timing: the rider asks you instead ("make the buildings smaller", "a different palette for the chorus"). When they do, explain briefly how it works, then change it. See [Ask for it](docs/VISUALISER.md#ask-for-it-dont-hunt-for-a-setting).
+- **The gatekeeper:** on the landing screen `src/ui/dyno.ts` tests the machine (spec, a CPU burst, three off-screen synthetic scenes) while the sign says so in the ride's words, then warns with a pop-up if there is no 3D acceleration or the frame rate will be poor; a light machine skips deep listen. P, then **Save profile**, downloads it all with the frame log as JSON: ask your human for that file when chasing performance. `?nodyno` skips it; `?dyno` forces it in the `virtual` tests; `?deep` forces deep listen on a light machine.
 - Performance: three builds a shader per InstancedMesh, so a new model costs a shader build the first time it appears. `World.warmup` pre-builds them; keep new models on the shared scenery material.
 - Third-party code keeps its own licence: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). If you add a dependency, add it there.
 

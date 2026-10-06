@@ -33,6 +33,7 @@ import { DEFAULT_TUNING, isDefaultTuning, type Tuning } from './analysis/tuning'
 import type { AutoTuneResult } from './analysis/autotune';
 import { TuningScreen } from './ui/tuning';
 import { FrameAnalyser, perf } from './ui/frames';
+import { Dyno, type DynoResult } from './ui/dyno';
 import { ListenAlong, canListenAlong } from './audio/listen';
 import { Playlist, isAudio, canPickFolder, pickFolder, rememberFolder, lastFolder, regainAccess, type Track } from './ui/playlist';
 
@@ -83,6 +84,10 @@ class App {
   p = 0; // seconds since page load (title clock)
   dropAt = 0;
   titleCross = 0;
+  /** The dynamometer's verdict on this machine (null until it has run). */
+  dyno: DynoResult | null = null;
+  /** What the sign on the landing board says while the dynamometer runs, and how far it has got. */
+  private dynoSign: { text: string; p: number | null } | null = null;
   signalStop = false;
   worker: Worker | null = null;
   analysedSec = 0;
@@ -138,6 +143,48 @@ class App {
     this.vr = new VR(() => this.world.renderer, $<HTMLButtonElement>('#vr'), t => this.toast(t, 4000));
     void this.vr.init();
     if (params.has('demo')) void this.loadDemo();
+    // The gatekeeper: test the machine while the rider looks for a song (not in the stepped-clock tests).
+    if (!params.has('nodyno') && (this.player.virtual === null || params.has('dyno'))) void this.runDyno();
+  }
+
+  /** The words the landing sign uses for the test, in each ride's own language. */
+  private dynoWords() {
+    if (this.pack.id === 'non-gondry') return 'Venue sound test';
+    const tpl = this.pack.title?.template;
+    return tpl === 'launch-screen' ? 'Test firing rockets' : tpl === 'ghost-gate' ? 'Rattling the chains' : 'Train on the dynamometer';
+  }
+
+  /**
+   * Runs the dynamometer (ui/dyno.ts) on the landing screen, with its progress on the sign. A
+   * machine that can't give a good ride is told so, plainly, on the sign and in a pop-up; a light one
+   * leaves deep listen off.
+   */
+  private async runDyno() {
+    const dyno = new Dyno(this.world.renderer);
+    const at = performance.now();
+    try {
+      this.dyno = await dyno.run(p => { this.dynoSign = { text: this.dynoWords(), p }; });
+    } catch (e) {
+      console.warn('Dynamometer failed', e);
+      this.dynoSign = null;
+      return;
+    }
+    const r = this.dyno;
+    console.info(`Dynamometer (${Math.round(performance.now() - at)} ms): ${r.headline}; ride ~${r.estimate.ride} fps, disco ~${r.estimate.disco} fps`, r);
+    this.dynoSign = { text: r.level === 'ok' ? (r.light ? 'All clear · running light' : 'All clear') : r.headline, p: null };
+    if (r.level !== 'ok') {
+      const gate = $('#gate');
+      $('#gate-head').textContent = r.level === 'none' ? 'This needs 3D acceleration' : r.headline;
+      $('#gate-advice').replaceChildren(...[
+        ...r.advice,
+        'The Gondryator reads the whole track and draws everything with shaders, so it is all graphics-card work: a faster machine gives a far better ride.',
+      ].map(a => Object.assign(document.createElement('li'), { textContent: a })));
+      gate.classList.toggle('none', r.level === 'none');
+      gate.classList.remove('hidden');
+      $('#gate-ok').onclick = () => gate.classList.add('hidden');
+    }
+    // A slow machine starts at a lower resolution; the frame rate lifts it again if it can.
+    if (r.level === 'slow' && this.world.pixelRatio > 0.75) { this.world.pixelRatio = 0.75; this.world.renderer.setPixelRatio(0.75); }
   }
 
   private async buildWorld(pack: Pack) {
@@ -383,6 +430,23 @@ class App {
     if (!params.has('nowarm')) this.world.warmup([...(this.other?.hidden ?? []), ...(this.storm?.hidden ?? [])]);
   }
 
+  /**
+   * With two windows, only draw the side the viewer can see: facing the main window, the far
+   * side's scenery (and its disco and space) is not drawn at all, and the other way round. Both
+   * keep scheduling, so either is ready the moment you turn. The margin covers looking up or down,
+   * which widens what the corners of the screen take in.
+   */
+  private cullSides() {
+    if (!this.other || !this.driver) return;
+    const running = this.phase === 'run' || this.phase === 'ended';
+    const half = Math.atan(this.fx.view.tanH), yaw = Math.abs(this.look.yaw), m = THREE.MathUtils.degToRad(15);
+    const mainOn = !running || yaw - half < Math.PI / 2 + m;
+    const otherOn = !running || yaw + half > Math.PI / 2 - m;
+    this.driver.group.visible = mainOn;
+    if (this.storm) this.storm.group.visible = mainOn;
+    this.other.group.visible = otherOn;
+  }
+
   /** Tell the frame analyser about section, scenery and look changes this frame. */
   private markChanges(s: number) {
     const sc = this.score, seen = this.seen;
@@ -578,6 +642,7 @@ class App {
   private startDeepListen() {
     const sc = this.score, audio = this.audioBuf;
     if (import.meta.env.MODE === 'single' || params.has('nodeep') || this.midi || !sc || !audio) return;
+    if (this.dyno?.light && !params.has('deep')) return; // a light machine keeps its breath for the ride
     this.deep?.stop();
     this.deep = null;
     const ABOUT = 'Deep listen runs a small neural network (Spotify\'s Basic Pitch) on your own machine to transcribe the melody and bass note by note, more precisely than the quick parser. Nothing is uploaded.';
@@ -682,6 +747,10 @@ class App {
 
     let s = this.p; // title phase: the rig is driven by the title clock
     const score = this.score;
+    if (this.phase === 'landing' && this.dynoSign) {
+      this.world.setDeparture(this.dynoSign.text, this.dynoSign.p);
+      if (this.driver instanceof Visualiser) this.driver.setWaiting(this.dynoSign.text, this.dynoSign.p);
+    }
     if (this.phase === 'title' && score) {
       const ahead = score.final ? Infinity : score.frontierSec;
       // Pull away from the name board only when the line ahead is read and every shader is built
@@ -694,8 +763,9 @@ class App {
       const heard = !snd || snd.state === 'skipped' || snd.state === 'done' || (score.soundsFrontier ?? 0) >= need || this.p > this.titleCross + 5;
       const ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm && heard));
       const dep = ready ? 'Departing' : this.departureText(ahead, need, warm);
-      this.world.setDeparture(dep);
-      if (this.driver instanceof Visualiser) this.driver.setWaiting(dep);
+      // While the line ahead is being read, the strip fills as a progress bar.
+      this.world.setDeparture(dep, ready || ahead >= need ? null : Math.min(1, ahead / need));
+      if (this.driver instanceof Visualiser) this.driver.setWaiting(dep, ready || ahead >= need ? null : Math.min(1, ahead / need));
       if (ready) this.go();
     }
     if (this.phase === 'run' || this.phase === 'ended') {
@@ -775,6 +845,7 @@ class App {
       this.fx.view.yaw = this.look.yaw;
       this.fx.view.tanH = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * cam.aspect / cam.zoom;
       this.fx.update(s, dt, this.phase === 'run' || this.phase === 'ended', this.world.night, this.world.camera.aspect);
+      this.cullSides();
       if (perf.on) this.markChanges(s);
       if (!this.tuner?.isOpen) this.world.render(); // the tuning screen covers the view
       this.frames?.frame(s);
@@ -821,13 +892,34 @@ class App {
     return THREE.MathUtils.clamp(base + learned('extra', 0), 8, 17);
   }
 
+  /** The rest of a saved performance profile (frame analyser, P): machine, test scenes, song, settings. */
+  private perfProfile(): Record<string, unknown> {
+    const heap = (performance as any).memory;
+    const sc = this.score;
+    return {
+      build: __BUILD__, saved: new Date().toISOString(), url: location.search,
+      dyno: this.dyno ?? 'not run',
+      memory: {
+        jsHeapMB: heap ? { used: Math.round(heap.usedJSHeapSize / 1e6), total: Math.round(heap.totalJSHeapSize / 1e6), limit: Math.round(heap.jsHeapSizeLimit / 1e6) } : 'not reported (Chromium only)',
+        deviceGB: (navigator as any).deviceMemory ?? null,
+        gpu: (this.world?.renderer as any)?.info?.memory ?? null,
+      },
+      view: { pack: this.pack.id, phase: this.phase, mode: this.world?.mode, pixelRatio: this.world?.pixelRatio, size: `${this.stage.clientWidth}x${this.stage.clientHeight}`, dpr: devicePixelRatio, fpsNow: Math.round(this.fps) },
+      analysis: sc ? { duration: Math.round(sc.track.durationSec), frontier: Math.round(sc.frontierSec), final: sc.final, speed: this.analysisWall > 0 ? +(this.analysedSec / this.analysisWall).toFixed(1) : null, deepListen: this.deep?.state ?? 'off', sounds: this.sounds?.state ?? null } : null,
+    };
+  }
+
   private departureText(ahead: number, need: number, warm: boolean): string {
     const rate = this.analysisWall > 0 ? this.analysedSec / this.analysisWall : 0;
     const analysis = ahead >= need ? 0 : rate > 0 ? (need - ahead) / rate : Infinity;
     const shaders = warm ? 0 : this.world.warmPending / Math.max(5, this.fps);
     const arrive = Math.max(0, this.titleCross + 1.2 - this.p);
     const wait = Math.max(analysis, shaders, arrive);
-    if (!isFinite(wait) || wait > 60) return 'Waiting for a clear line';
+    if (!isFinite(wait) || wait > 60) {
+      // No estimate yet: say how far the reading has got (words kept clear of the countdown's "Ns").
+      if (ahead < need && this.analysisWall > 0) return `Reading ahead ${Math.floor(ahead)} of ${Math.ceil(need)} sec${rate > 1 ? ` · ${rate.toFixed(0)}× speed` : ''}`;
+      return 'Waiting for a clear line';
+    }
     const n = Math.ceil(wait);
     return n <= 1 ? 'Departing' : `Departs in ${n}s`;
   }
@@ -1088,7 +1180,7 @@ class App {
     }, this.tuning);
     document.body.appendChild(this.tuner.el);
     // The frame analyser: frame times against the show clock, each stutter labelled with its cause.
-    this.frames = new FrameAnalyser(() => this.world?.renderer);
+    this.frames = new FrameAnalyser(() => this.world?.renderer, () => this.perfProfile());
     this.stage.appendChild(this.frames.el);
     $('#perf').addEventListener('click', () => this.frames.toggle());
     if (params.has('perf')) this.frames.toggle(true);
@@ -1136,10 +1228,8 @@ class App {
     if (sc) ($('#analysed') as HTMLElement).style.width = `${Math.min(100, (sc.final ? 1 : sc.frontierSec / dur) * 100)}%`;
     $('#play').textContent = this.player.playing ? '❚❚' : '▶';
     const status = $('#status');
-    if (this.phase === 'title' && sc) {
-      const rtf = this.analysisWall > 0 ? this.analysedSec / this.analysisWall : 0;
-      status.textContent = sc.final || sc.frontierSec >= this.leadNeeded() ? 'Departing…' : `Reading the line ahead · ${Math.round(sc.frontierSec)}s of ${Math.round(this.leadNeeded())}s${rtf ? ` · ${rtf.toFixed(0)}× real time` : ''}`;
-    } else status.textContent = '';
+    // (The wait at the station is told on the departures strip now, not down here.)
+    status.textContent = '';
     if (this.debug.visible) {
       const m = this.driver?.metric;
       const recent = m && m.recent.length ? Math.round((m.recent.filter(Boolean).length / m.recent.length) * 100) : 0;

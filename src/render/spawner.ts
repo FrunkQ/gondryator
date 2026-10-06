@@ -29,6 +29,8 @@ interface Live {
   measured: boolean;
   /** Entry timing: how far the model's middle sits past its front edge (so the front enters on the beat). */
   xOff?: number;
+  /** Where on screen it lands on its sound (1 entry edge, 0 middle, -1 leaving edge), for the hit metric. */
+  place?: number;
 }
 
 export interface GazeSource {
@@ -244,9 +246,10 @@ export class Spawner {
           this.probe.position.set(this.rig.travel(l.t), this.rig.spec.eyeHeight, 0);
           this.probe.updateMatrixWorld(true);
           tmpV.set(o.x, l.focusY, o.z).project(this.probe);
-          // At its sound: just entering the view (or in the central third, for 'centre' rides).
-          const ax = Math.abs(tmpV.x), entry = (this.rig.hitAngle?.() ?? 0) > 0;
-          const hit = (entry ? ax >= 0.6 && ax <= 1.15 : ax <= 1 / 3) && Math.abs(tmpV.y) <= 1 && tmpV.z < 1;
+          // At its sound: where the note aligner wanted it (just entering the view, in the middle,
+          // or just leaving), give or take a third of the half-screen.
+          const ax = Math.abs(tmpV.x), want = Math.abs(l.place ?? 1) * 0.9;
+          const hit = ax >= want - 0.33 && ax <= want + 0.25 && Math.abs(tmpV.y) <= 1 && tmpV.z < 1;
           this.metric.total++;
           if (hit) this.metric.hits++;
           const bl = (this.metric.byLayer[l.layer?.layer.id ?? '?'] ??= [0, 0]);
@@ -334,11 +337,12 @@ export class Spawner {
   }
 
   /**
-   * The angle an object must be at when its sound plays, for a gaze at `yaw`: the leading edge of
-   * the view, so it comes into sight on the beat and everything behind it is history.
+   * The angle an object must be at when its sound plays, for a gaze at `yaw`: by default the
+   * leading edge of the view, so it comes into sight on the beat and everything behind it is
+   * history; with the rig's `hitCurve`, wherever the note aligner puts it for that gaze.
    */
   private hitYaw(yaw: number) {
-    return Math.min(1.35, yaw + (this.rig.hitAngle?.() ?? 0));
+    return THREE.MathUtils.clamp(yaw + (this.rig.hitAngle?.(yaw) ?? 0), -1.35, 1.35);
   }
 
   private ndcX(x: number, y: number, z: number) {
@@ -393,10 +397,13 @@ export class Spawner {
     const top = bb.max.y * o.sy;
     const focusY = THREE.MathUtils.clamp(this.rig.spec.eyeHeight, 0.3, Math.max(0.3, top * 0.9));
     // Entry timing: the front of the model (its -x end, the first to come into view) is what
-    // arrives on the beat, so a long note streams in for as long as it lasts.
-    const xOff = (this.rig.hitAngle?.() ?? 0) > 0 ? Math.max(0, -bb.min.x) * o.sx : 0;
+    // arrives on the beat, so a long note streams in for as long as it lasts. When the hit is the
+    // leaving edge, it is the tail (the +x end, the last to go) that leaves on the beat; in the
+    // middle, the model's middle.
+    const place = this.rig.hitPlaceAt?.(yaw) ?? 1;
+    const xOff = place > 0 ? Math.max(0, -bb.min.x) * o.sx * place : place < 0 ? -Math.max(0, bb.max.x) * o.sx * -place : 0;
     o.x += xOff;
-    this.live.push({ obj: o, t: e.t, tier, depth, despawnAt: e.t + (xOff || this.rig.hitAngle?.() ? 2 * ls.lead + (2 * xOff) / Math.max(1, this.rig.speedAt(e.t)) : ls.lead) + 0.5, layer: ls, baseX: o.x, focusY, measured: false, xOff });
+    this.live.push({ obj: o, t: e.t, tier, depth, despawnAt: e.t + (place !== 0 ? 2 * ls.lead + (2 * Math.abs(xOff)) / Math.max(1, this.rig.speedAt(e.t)) : ls.lead) + 0.5, layer: ls, baseX: o.x, focusY, measured: false, xOff, place });
     this.pools.write(o);
   }
 

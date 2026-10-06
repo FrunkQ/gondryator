@@ -30,17 +30,19 @@ export class FrameAnalyser {
   private startShow: number | null = null;
   private refresh = 60;
 
-  constructor(private renderer: () => any) {
+  /** `profile` gathers the rest of a saved profile: the machine, the dynamometer, the song, the settings. */
+  constructor(private renderer: () => any, private profile: () => Record<string, unknown> = () => ({})) {
     const el = this.el = document.createElement('div');
     el.id = 'frames';
     el.className = 'ui hidden';
-    el.innerHTML = `<header><b>Frame analyser</b><span class="fa-btns"><button class="ghost fa-reset" title="Start counting again">Reset</button><button class="ghost fa-copy" title="Copy the report to the clipboard">Copy report</button><button class="ghost fa-close" title="Close (P)">✕</button></span></header><canvas></canvas><div class="fa-text"></div>`;
+    el.innerHTML = `<header><b>Frame analyser</b><span class="fa-btns"><button class="ghost fa-reset" title="Start counting again">Reset</button><button class="ghost fa-copy" title="Copy the report to the clipboard">Copy report</button><button class="ghost fa-save" title="Save a performance profile (machine, test scenes, frame times) as a file to share">Save profile</button><button class="ghost fa-close" title="Close (P)">✕</button></span></header><canvas></canvas><div class="fa-text"></div>`;
     this.canvas = el.querySelector('canvas')!;
     this.g = this.canvas.getContext('2d')!;
     this.text = el.querySelector('.fa-text')!;
     el.querySelector('.fa-close')!.addEventListener('click', () => this.toggle(false));
     el.querySelector('.fa-reset')!.addEventListener('click', () => this.reset());
     el.querySelector('.fa-copy')!.addEventListener('click', () => void navigator.clipboard?.writeText(this.report()).catch(() => {}));
+    el.querySelector('.fa-save')!.addEventListener('click', () => this.save());
     // Long main-thread tasks (Chromium): a strong hint the stall was JavaScript, not the GPU.
     try {
       new PerformanceObserver(list => {
@@ -143,6 +145,24 @@ export class FrameAnalyser {
   }
 
   /** A plain-text report: summary, every stutter with its causes, and cause totals. */
+  /**
+   * Saves everything about this machine's performance as one JSON file: what it is, how the
+   * dynamometer's test scenes ran, and the frame times (with their causes) since the last Reset.
+   */
+  save() {
+    const { spikes, ...stats } = this.stats();
+    const data = {
+      kind: 'gondryator-perf-profile', version: 1,
+      ...this.profile(),
+      frames: { stats: { ...stats, spikes: spikes.length }, report: this.report(), refreshHz: this.refresh, log: this.frames.map(f => ({ ms: +f.dt.toFixed(2), s: +f.s.toFixed(3), ...(f.marks.length ? { marks: f.marks } : {}) })) },
+    };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+    a.download = `gondryator-perf-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
   report(): string {
     const st = this.stats();
     const causes = new Map<string, { n: number; ms: number }>();

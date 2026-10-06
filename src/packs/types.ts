@@ -150,6 +150,14 @@ export interface RigSpec {
    */
   hitAt?: 'entry' | 'centre';
   /**
+   * The note aligner: where a sound's object is when it sounds, by where the viewer is looking.
+   * Pairs of [gaze yaw in degrees (negative looks back down the line, positive ahead), place on
+   * screen (1 = the entry edge, where things come into view; 0 = the middle; -1 = the leaving
+   * edge)], in order of yaw; in between it slides smoothly. Overrides `hitAt`. See "When does a
+   * note hit?" in docs/VISUALISER.md.
+   */
+  hitCurve?: readonly (readonly [number, number])[];
+  /**
    * A fairground track that rises and falls (the Halloween ride): each section of the song sets
    * its own height between `low` and `high` metres, the track swoops there across the change, rolls
    * a gentle swell each phrase, plunges on a drop, and in the loudest parts lifts on each downbeat (`bump`, metres).

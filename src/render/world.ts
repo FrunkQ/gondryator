@@ -813,9 +813,10 @@ export class World {
     const back = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.12, bh + 0.12, 0.08), canopyMat);
     back.position.set(0, cy, z - 0.06);
     grp.add(back);
-    // On the title stop: a departures strip above the name board and a platform clock beside it,
-    // so the wait while the line ahead is read has something to watch.
-    if (opts.trackside && !opts.end) {
+    // On the landing and the title stop: a departures strip above the name board and a platform
+    // clock beside it. On the landing the strip shows the machine being tested (the dynamometer),
+    // on the title stop the wait while the line ahead is read.
+    if (!opts.end) {
       const dw = bw, dh = 0.8;
       this.depCanvas = document.createElement('canvas');
       this.depCanvas.width = 1400; this.depCanvas.height = Math.round(1400 * dh / dw);
@@ -882,14 +883,18 @@ export class World {
   private countdown: number | null = null;
   private clockDrawn = '';
 
-  /** The departures strip on the title stop: amber dot-matrix text, redrawn only when it changes. */
-  setDeparture(text: string) {
+  /**
+   * The departures strip: amber dot-matrix text, redrawn only when it changes. With `progress`
+   * (0..1), a completion bar fills it from the left, inverting the text as it passes.
+   */
+  setDeparture(text: string, progress: number | null = null) {
     // The clock counts the same seconds down on its face.
     const n = /(\d+)s$/.exec(text)?.[1];
     this.countdown = n ? Number(n) : text === 'Departing' ? 0 : null;
     const c = this.depCanvas;
-    if (!c || !this.depTex || text === this.depText) return;
-    this.depText = text;
+    const key = progress === null ? text : `${text}|${Math.round(progress * 100)}`;
+    if (!c || !this.depTex || key === this.depText) return;
+    this.depText = key;
     const g = c.getContext('2d')!;
     g.fillStyle = '#111312';
     g.fillRect(0, 0, c.width, c.height);
@@ -903,10 +908,23 @@ export class World {
     const label = this.launch ? 'LAUNCH' : this.spooky ? 'GHOST TRAIN' : 'PLATFORM 1';
     const room = c.width - 120 - g.measureText(label).width;
     const words = this.launch ? launchText(text, this.countdown) : this.spooky ? spookyText(text, this.countdown) : text.toUpperCase();
+    const labelFont = g.font;
     let fs = Math.round(c.height * 0.5);
     while (g.measureText(words).width > room && fs > 16) { fs -= 2; g.font = `700 ${fs}px ui-monospace, "Courier New", monospace`; }
-    g.fillText(this.launch ? launchText(text, this.countdown) : this.spooky ? spookyText(text, this.countdown) : text.toUpperCase(), c.width - 40, c.height / 2);
+    g.fillText(words, c.width - 40, c.height / 2);
     g.shadowBlur = 0;
+    if (progress !== null) {
+      // The bar, lit in the strip's colour, with the words cut out of it in the dark.
+      const ink = g.fillStyle as string;
+      g.save();
+      g.beginPath(); g.rect(0, 0, c.width * Math.min(1, Math.max(0, progress)), c.height); g.clip();
+      g.fillStyle = ink; g.fillRect(0, 0, c.width, c.height);
+      g.fillStyle = '#111312';
+      const wordsFont = g.font;
+      g.font = labelFont; g.textAlign = 'left'; g.fillText(label, 40, c.height / 2);
+      g.font = wordsFont; g.textAlign = 'right'; g.fillText(words, c.width - 40, c.height / 2);
+      g.restore();
+    }
     // The dot-matrix grain.
     g.fillStyle = 'rgba(0,0,0,0.35)';
     for (let x = 0; x < c.width; x += 6) g.fillRect(x, 0, 2, c.height);
