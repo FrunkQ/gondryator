@@ -22,7 +22,7 @@ flowchart LR
 
 **Notes are things; slides are lines.** A note is an object that appears; a pitch that glides is a line that bends.
 
-## The cast: 51 elements in five groups
+## The cast: 54 elements in five groups
 
 Every effect belongs to an instrument group, and only groups that are actually playing get shown.
 
@@ -63,6 +63,8 @@ mindmap
       sine scroller
       Kefrens bars
       unlimited bobs
+      confetti rings
+      stars and frost
     pads
       aurora
       nebula
@@ -78,6 +80,7 @@ mindmap
       starfield
       fractal kaleidoscope
       spectrum
+      camels
       copper bars
       moire
       truchet

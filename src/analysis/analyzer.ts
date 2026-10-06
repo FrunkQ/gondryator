@@ -790,8 +790,11 @@ export class Analyzer {
       }
       return;
     }
-    // No fade: a closing breakdown (the drums gone for the last stretch) is the outro.
-    if (open && last.label === 'breakdown' && last.bar > 1 && songEnd - last.t < Math.max(45, 0.2 * this.duration)) last.label = 'outro';
+    // No fade: a closing breakdown is the outro only if it runs right to the end of the song (the
+    // drums never come back in any 4 bars of it, and the music plays on to the last bar or so).
+    if (!open || last.label !== 'breakdown' || last.bar <= 1 || this.duration - songEnd > 4) return;
+    for (let b = last.bar; b <= L; b += 4) if (this.activeStems(F.slice(b - 1, Math.min(L, b + 3))).has('drums')) return;
+    last.label = 'outro';
   }
 
   /** The biggest moment landing on bar b's downbeat (a build where it starts), if already decided. */

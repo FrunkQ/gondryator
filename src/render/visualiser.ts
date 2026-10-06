@@ -103,6 +103,10 @@ export const ELEMENTS: { name: string; group: Group }[] = [
   { name: 'kefrens bars', group: 'melody' }, // 48 the Kefrens bars: one shaded bar redrawn down the screen, snaking
   { name: 'dot sphere', group: 'mix' },      // 49 a globe of dots in 3D, spinning and morphing into a torus
   { name: 'unlimited bobs', group: 'melody' }, // 50 a shaded ball whose trail never clears, tracing figures
+  // Sprites (no shader slot): the flowers' cousins, and a nod to a legend.
+  { name: 'confetti rings', group: 'melody' }, // 51 a burst of confetti per note, rings within rings flying out
+  { name: 'stars and frost', group: 'melody' }, // 52 a star per note in warm colours, a snowflake in cold ones
+  { name: 'camels', group: 'mix' },          // 53 a caravan of blocky 8-bit camels, stepping on every beat (for Jeff Minter)
 ];
 const NE = ELEMENTS.length;
 /** Never picked at random: the glitterball (41) is kept for its own showpiece. */
@@ -128,7 +132,7 @@ const SOUND_PERIOD: Record<SoundKind, number> = {
 /** The last stretch of a song given to its outro, and the fade to black at its very end. */
 const OUTRO_LEN = 12, OUTRO_FADE = 6;
 /** The elements drawn as sprites (flowers, bubbles, starbursts, confetti, snowflakes). */
-const SPRITE_ELEMENTS = [12, 17, 18, 19, 20, 38, 39, 40];
+const SPRITE_ELEMENTS = [12, 17, 18, 19, 20, 38, 39, 40, 51, 52, 53];
 
 /** How the arc shows itself, one per era (see updateArc and the shader's arc block). */
 export const JOURNEYS = ['colour rise', 'complexity bloom', 'thaw'] as const;
@@ -141,7 +145,7 @@ const LOOKS: FxLookName[] = ['clean', 'clean', 'echo', 'echo', 'liquid', 'kaleid
 /** Never let the picture sit unchanged longer than this (seconds). */
 const MAX_STILL = 14;
 /** ...and don't twist it more often than this, unless a section starts. */
-const MIN_STILL = 6;
+const MIN_STILL = 4;
 
 interface Scene {
   palette: number;
@@ -446,7 +450,17 @@ export class Visualiser implements ShowDriver {
   private fireflies = new SpritePool(polarShape(() => 1, 16), makeSpriteMaterial('spike'), 200);
   /** One petal: a narrow ellipse. */
   private petals = new SpritePool(polarShape(a => 1 / Math.sqrt(Math.cos(a) ** 2 + (2.6 * Math.sin(a)) ** 2), 32), makeSpriteMaterial('petal'), 240);
-  private pools = [this.flowers, this.bubbles, this.bursts, this.confetti, this.flakes, this.comets, this.fireflies, this.petals];
+  private rings = new SpritePool(polarShape(a => 1 / (Math.abs(Math.cos(a)) + Math.abs(Math.sin(a)) * 1.8), 8), makeSpriteMaterial('flat'), 600);
+  private stars = new SpritePool(polarShape(a => 0.4 + 0.6 * ((Math.cos(5 * a) + 1) / 2) ** 4, 160), makeSpriteMaterial('spike'), 200);
+  private frost = new SpritePool(polarShape(a => 0.15 + 0.7 * Math.abs(Math.cos(3 * a)) ** 12 + 0.15 * Math.abs(Math.cos(9 * a)) ** 4, 288), makeSpriteMaterial('petal'), 200);
+  /** The camels: [walking right, walking left] x [legs apart, legs together]. */
+  private camels = [camelGeometry(false, 0), camelGeometry(false, 1), camelGeometry(true, 0), camelGeometry(true, 1)].map(g => new SpritePool(g, makeSpriteMaterial('flat'), 24));
+  private pools = [this.flowers, this.bubbles, this.bursts, this.confetti, this.flakes, this.comets, this.fireflies, this.petals, this.rings, this.stars, this.frost, ...this.camels];
+  /** The beats as they pass (camel steps and the bar-by-bar palette swaps). */
+  private beatPtr = 0;
+  private caravan: { dir: number; az: number; el: number; step: number; steps: number; n: number; hue: number } | null = null;
+  /** In a long section the colours swap every bar, round a ring of three palettes. */
+  private barPal = 0;
   private bassTimes = [-99, -99, -99, -99];
   private bassPtr = 0;
   private ptr = 0;
@@ -556,6 +570,11 @@ export class Visualiser implements ShowDriver {
     let lo = 0, hi = ev.length;
     while (lo < hi) { const m = (lo + hi) >> 1; if (ev[m].t <= s) lo = m + 1; else hi = m; }
     this.ptr = this.sptr = lo;
+    const bt = this.score.beats;
+    lo = 0; hi = bt.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (bt[m].t <= s) lo = m + 1; else hi = m; }
+    this.beatPtr = lo;
+    this.caravan = null;
     this.lastS = s;
     this.phraseIdx = -1;
     this.lastChange = Math.min(this.lastChange, s);
@@ -892,7 +911,17 @@ export class Visualiser implements ShowDriver {
           if (this.target[20] > 0 && e.dur >= 1.2) this.flake(e.t, e.pitch, e.vel, gazeAz);
           if (this.target[38] > 0 && e.dur < 1.2) this.comet(e.t, e.pitch, e.vel, gazeAz);
           if (this.target[40] > 0 && e.dur >= 1.2) this.petalRain(e.t, e.pitch, e.vel, gazeAz);
+          if (this.target[51] > 0 && e.dur < 1.2) this.confettiRing(e.t, e.pitch, e.vel, gazeAz);
+          if (this.target[52] > 0) this.starOrFrost(e.t, e.pitch, e.vel, e.dur, gazeAz);
         }
+      }
+      // The beats: camels step, and a long section swaps its colours on every bar.
+      const bt = sc.beats;
+      while (this.beatPtr < bt.length && bt[this.beatPtr].t <= s && bt[this.beatPtr].t < frontier) {
+        const b = bt[this.beatPtr++], len = (bt[this.beatPtr]?.t ?? b.t + 0.5) - b.t;
+        if (s - b.t > 0.3 || fade > 0 || this.outroOn) continue;
+        this.camelStep(b.t, len, b.downbeat, gazeAz);
+        if (b.downbeat && b.t - this.lastChange > 0.2 && this.current && subPartAt(sc, b.t).subs > 1) this.swapBarPalette();
       }
     }
     if (running && fade === 0) this.hearSounds(s, gazeAz);
@@ -1328,6 +1357,78 @@ export class Visualiser implements ShowDriver {
   // ------------------------------------------------------------------ spawners
   // Each one is a few lines: where it appears, how it moves, how long it lives. Copy one to add more.
 
+  /** Applies one palette's colours (the scene keeps its own; this only repaints). */
+  private paint(i: number) {
+    const [a, b, c, d] = PALETTES[i];
+    this.V.pa.value.set(...a); this.V.pb.value.set(...b); this.V.pc.value.set(...c); this.V.pd.value.set(...d);
+  }
+
+  /** A new bar in a long section: the next colours round the scene's ring of three. */
+  private swapBarPalette() {
+    const p = this.current!.palette, N = PALETTES.length;
+    const alt = (k: number) => { const q = (p * k + k + 2) % N; return q === p ? (q + 1) % N : q; };
+    const ring = [p, alt(5), alt(11)];
+    this.paint(ring[++this.barPal % 3]);
+  }
+
+  /** The palette's colour somewhere along it, as a hue, and whether it is a warm one. */
+  private palHue(): { hue: number; warm: boolean } {
+    const [a, b, c, d] = [this.V.pa.value, this.V.pb.value, this.V.pc.value, this.V.pd.value], t = this.rand();
+    const ch = (k: 'x' | 'y' | 'z') => a[k] + b[k] * Math.cos(Math.PI * 2 * (c[k] * t + d[k]));
+    const col = new THREE.Color(ch('x'), ch('y'), ch('z')), hsl = { h: 0, s: 0, l: 0 };
+    col.getHSL(hsl);
+    return { hue: hsl.h, warm: a.x + 0.02 >= a.z };
+  }
+
+  /** Confetti rings for a melody note: two rings of diamonds flung out from a point, one inside the other. */
+  private confettiRing(t: number, pitch: number, vel: number, gazeAz: number) {
+    const r = this.rand, hue = (((pitch % 12) + 12) % 12) / 12;
+    const az = gazeAz + (r() - 0.5) * 1.6, el = THREE.MathUtils.clamp((pitch - 62) / 30, -0.4, 0.8) + (r() - 0.5) * 0.1;
+    for (let ring = 0; ring < 2; ring++) {
+      const n = ring ? 7 : 10, sp = (ring ? 0.12 : 0.24) * (0.7 + vel * 0.6), turn = r() * 6.28;
+      for (let i = 0; i < n; i++) {
+        const th = turn + (i / n) * Math.PI * 2;
+        this.rings.add({ t0: t, life: 1.8, pop: 0.05, fadeOut: 0.9, grow: 0, wobble: 0,
+          az, vAz: (Math.cos(th) * sp) / Math.max(0.3, Math.cos(el)), el, vEl: Math.sin(th) * sp - 0.03,
+          size: 0.5 + vel * 0.4, spin: (r() - 0.5) * 14, hue: hue + ring * 0.08, sat: 0.9, vel: 0.5 + vel * 0.6 });
+      }
+    }
+  }
+
+  /** A star (warm colours) or a snowflake (cold) for a melody note, twinkling as it drifts down. */
+  private starOrFrost(t: number, pitch: number, vel: number, dur: number, gazeAz: number) {
+    const r = this.rand, { hue, warm } = this.palHue(), long = dur >= 1.2;
+    (warm ? this.stars : this.frost).add({
+      t0: t, life: long ? 5 : 2.8, pop: 0.18, fadeOut: 1.2, grow: 0, wobble: warm ? 0 : 0.05,
+      az: gazeAz + (r() - 0.5) * 2.2, vAz: 0, el: THREE.MathUtils.clamp((pitch - 62) / 30, -0.4, 0.9) + (r() - 0.5) * 0.15, vEl: warm ? -0.05 : -0.1,
+      size: (long ? 5 : 2.6) * (0.7 + vel * 0.6), spin: warm ? (r() - 0.5) * 1.5 : (r() - 0.5) * 0.6,
+      hue, sat: warm ? 0.9 : 0.35, vel: 0.5 + vel * 0.6,
+    });
+  }
+
+  /**
+   * The camels: now and then, on a bar, a caravan of one to three blocky camels sets off along the
+   * bottom of the view, and every beat they take a step (the legs swap). In memory of every
+   * mutant camel that ever marched across a home computer.
+   */
+  private camelStep(t: number, len: number, downbeat: boolean, gazeAz: number) {
+    const r = this.rand;
+    if (!this.caravan && downbeat && this.target[53] > 0 && r() < 0.6) {
+      const dir = r() < 0.5 ? 1 : -1;
+      this.caravan = { dir, az: gazeAz - dir * 1.1, el: -0.32 + r() * 0.12, step: 0, steps: 32, n: 1 + Math.floor(r() * 3), hue: this.palHue().hue };
+    }
+    const c = this.caravan;
+    if (!c) return;
+    const stride = 0.07;
+    for (let i = 0; i < c.n; i++) {
+      const pool = this.camels[(c.dir > 0 ? 0 : 2) + ((c.step + i) % 2)];
+      pool.add({ t0: t, life: len + 0.03, pop: 0.001, fadeOut: 0.001, grow: 0, wobble: 0,
+        az: c.az + c.dir * (c.step * stride - i * 0.3), vAz: c.dir * stride / Math.max(0.15, len), el: c.el + ((c.step + i) % 2) * 0.008, vEl: 0,
+        size: 7 - i * 0.6, spin: 0, hue: c.hue + i * 0.05, sat: 0.85, vel: 0.9 });
+    }
+    if (++c.step >= c.steps) this.caravan = null;
+  }
+
   /** A flower for a note: placed near your gaze, as high as the note, coloured by its name; it slides down. */
   private bloom(t: number, pitch: number, vel: number, dur: number, gazeAz: number) {
     const pad = dur >= 1.2, r = this.rand;
@@ -1641,6 +1742,39 @@ function polarShape(radius: (a: number) => number, N = 96) {
     if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
   }
   return new THREE.ShapeGeometry(shape, 1);
+}
+
+/**
+ * A camel in big pixels, side on and facing +x (or -x), with its legs apart (frame 0) or together
+ * (frame 1): two frames make a walk. Crude on purpose.
+ */
+function camelGeometry(left: boolean, frame: number) {
+  const body = [
+    '.............XX.',
+    '............XXXX',
+    '....XX......XX..',
+    '...XXXX....XX...',
+    '..XXXXXXX.XX....',
+    '.XXXXXXXXXXX....',
+    'XXXXXXXXXXX.....',
+    'X.XXXXXXXX......',
+  ];
+  const legs = frame === 0
+    ? ['..XX.....XX.....', '..X.X....X.X....', '.X...X..X...X...', '.X...X..X...X...']
+    : ['..XX.....XX.....', '..XX.....XX.....', '..XX.....XX.....', '..XX.....XX.....'];
+  const rows = [...body, ...legs], W = 16, H = rows.length, px = 2 / W;
+  const pos: number[] = [];
+  rows.forEach((row, y) => [...row].forEach((ch, x) => {
+    if (ch !== 'X') return;
+    let x0 = (x - W / 2) * px, x1 = x0 + px;
+    const y1 = (H / 2 - y) * px, y0 = y1 - px;
+    if (left) [x0, x1] = [-x1, -x0];
+    pos.push(x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y0, 0, x1, y1, 0, x0, y1, 0);
+  }));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
 }
 
 /** A thin ring (a bubble seen side on). */
