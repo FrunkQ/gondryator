@@ -20,6 +20,12 @@ export interface PackLayer {
    * long ride turns up the odd surprise. Seeded by the song, so a song keeps its own.
    */
   rare?: { chance: number; models: Partial<Record<ThemeName, string[]>> };
+  /**
+   * Decluttering: a note whose object would land within `gap` metres (along the line) of this
+   * layer's last one gets one of these small models instead, at `scale` times the size, so a busy
+   * passage still shows every beat without a wall of big buildings.
+   */
+  crowd?: { gap: number; models: Partial<Record<ThemeName, string[]>>; scale?: number };
   /** Base scale; velocity adds up to +scaleByVel. */
   scale?: number;
   scaleByVel?: number;

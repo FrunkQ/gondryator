@@ -16,6 +16,8 @@ interface LayerState {
   events: { e: ScoreEvent; tier: 1 | 2 | 3 }[];
   ptr: number;
   lead: number;
+  /** Where (x) this layer's last full-size object landed, for `crowd`. */
+  lastX?: number;
 }
 
 interface Live {
@@ -89,7 +91,7 @@ export class Spawner {
     this.pools = pools ?? new Pools(200, material);
     for (const l of pack.layers) this.layers.set(l.id, { layer: l, events: [], ptr: 0, lead: rig.leadTime(l.depth + (l.depthJitter ?? 0)) });
     const models = new Set<string>();
-    for (const l of pack.layers) for (const ms of [...Object.values(l.models), ...Object.values(l.rare?.models ?? {})]) ms!.forEach(m => models.add(m));
+    for (const l of pack.layers) for (const ms of [...Object.values(l.models), ...Object.values(l.rare?.models ?? {}), ...Object.values(l.crowd?.models ?? {})]) ms!.forEach(m => models.add(m));
     for (const a of pack.ambient) for (const ms of Object.values(a.models)) ms.forEach(m => models.add(m));
     if (pack.sectionEvents?.onNewSection) models.add(pack.sectionEvents.onNewSection);
     if (pack.sectionEvents?.onBreakdown) models.add(pack.sectionEvents.onBreakdown);
@@ -369,6 +371,14 @@ export class Spawner {
       const r = hash32(Math.round(e.t * 8), h, 31);
       if ((r % 10000) / 10000 < (ALL_RARE ? 1 : L.rare!.chance)) model = rare[(r >>> 14) % rare.length];
     }
+    // Decluttering: in a busy passage, a note landing close behind the layer's last big object
+    // gets a small one, so every beat still shows but the window isn't a wall of buildings.
+    let crowdScale = 1;
+    const at = this.rig.travel(e.t), crowd = L.crowd?.models[theme];
+    if (crowd?.length && ls.lastX !== undefined && Math.abs(at - ls.lastX) < L.crowd!.gap) {
+      model = crowd[h % crowd.length];
+      crowdScale = L.crowd!.scale ?? 1;
+    } else ls.lastX = at;
     const o = this.pools.acquire(model);
     if (!o) return;
     const jitter = L.depthJitter ? ((hash32(h, 7) % 1000) / 1000 - 0.5) * 2 * L.depthJitter : 0;
@@ -383,7 +393,7 @@ export class Spawner {
     this.rig.placeFor(e.t, depth, this.hitYaw(yaw), tmpV);
     o.x = tmpV.x; o.y = L.y ?? 0; o.z = tmpV.z;
     const vel = Math.round(e.vel * 10) / 10;
-    const sc = (L.scale ?? 1) * (1 + (L.scaleByVel ?? 0) * (vel - 0.5));
+    const sc = (L.scale ?? 1) * (1 + (L.scaleByVel ?? 0) * (vel - 0.5)) * crowdScale;
     o.sx = sc; o.sy = sc; o.sz = sc;
     if (L.pitchCenter !== undefined && e.pitch !== null) o.sy *= THREE.MathUtils.clamp(1 + (e.pitch - L.pitchCenter) * (L.heightPerSemitone ?? 0.05), 0.35, 2.6);
     if (L.lengthByDur && (!L.stretch || L.stretch.includes(model))) {
@@ -391,8 +401,8 @@ export class Spawner {
       // the train covers in d seconds, so consecutive notes make a continuous row.
       const bbw = getModel(model).boundingBox!;
       const width = bbw.max.x - bbw.min.x;
-      const len = THREE.MathUtils.clamp(e.dur * this.rig.speedAt(e.t) * L.lengthByDur, 3, 60);
-      o.sx = THREE.MathUtils.clamp(len / width, 0.75 * sc, 2 * sc);
+      const len = THREE.MathUtils.clamp(e.dur * this.rig.speedAt(e.t) * L.lengthByDur, 3, 40);
+      o.sx = THREE.MathUtils.clamp(len / width, 0.75 * sc, 1.5 * sc);
     }
     o.rotY = L.depth > 100 ? ((h % 100) / 100 - 0.5) * 0.6 : 0;
     const tints = L.tints?.[theme];
