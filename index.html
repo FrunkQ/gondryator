@@ -33,6 +33,11 @@
       </button>
       <input id="file" type="file" accept="audio/*,.mid,.midi,.flac,.m4a" multiple hidden />
     </div>
+    <script>
+      // Decide before the first paint whether "Listen along" shows (same test as audio/listen.ts),
+      // so the card does not grow under the rider's first click once the scripts arrive.
+      if (typeof navigator.mediaDevices?.getDisplayMedia === 'function' && !/Android|iPhone|iPad/i.test(navigator.userAgent)) document.getElementById('listen').hidden = false;
+    </script>
 
     <div id="fork" class="ui">
       <a href="https://github.com/FrunkQ/gondryator" target="_blank" rel="noopener" title="Free and open source on GitHub: fork it and make your own ride">⑂ <span class="long">Remaster it in your favourite AI · </span>GitHub</a>

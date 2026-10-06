@@ -1233,6 +1233,17 @@ class App {
     $('#next').addEventListener('click', () => void this.playNext());
     // Listen along to another tab (desktop Chrome and Edge share tab audio).
     $('#listen').hidden = !canListenAlong();
+    // If the landing card changes size (a button appears late, such as "Shuffle again"), the row
+    // shifts under the pointer: ignore button clicks on it for half a second after, so a click aimed
+    // at one button never lands on its neighbour.
+    {
+      const drop = $('#drop');
+      let first = true, settleUntil = 0;
+      new ResizeObserver(() => { if (first) { first = false; return; } settleUntil = performance.now() + 500; }).observe(drop);
+      drop.addEventListener('click', e => {
+        if (performance.now() < settleUntil && (e.target as HTMLElement).closest('button')) { e.stopPropagation(); e.preventDefault(); }
+      }, true);
+    }
     $('#listen').addEventListener('click', async () => {
       const l = await ListenAlong.start(this.player.ctx);
       if (typeof l === 'string') { this.toast(l, 4500); return; }
