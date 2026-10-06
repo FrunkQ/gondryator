@@ -848,10 +848,12 @@ function moreElementsBody(V: any, g: any) {
     const seg = step(0.3, fract(ae.mul(60.0)));
     return paletteAt(sbi.div(48.0).add(U.hue.mul(0.5))).mul(bar).mul(seg).mul(mix(float(0.3), float(1.0), smoothstep(-0.08, 0.08, el))).mul(ae.div(h).add(0.4));
   });
-  // 22 Checker tunnel: falling down a chequered tube round your gaze; the kick shoves you on.
+  // 22 Checker tunnel: falling down a chequered tube round your gaze; the bass speeds the fall.
   on(22, () => {
     const tu = qa.div(6.28318).mul(10.0).add(T.mul(0.08));
-    const tv = float(0.6).div(qr.add(0.04)).add(T.mul(1.6)).add(V.kickT.mul(-0.0)).add(U.kick.mul(0.4));
+    // (Depth runs on a clock that only moves forward, faster with the bass: a kick added straight
+    // to it shoved the tube on and let it slide back, a rocking that looked janky.)
+    const tv = float(0.6).div(qr.add(0.04)).add(V.twPhase.mul(1.3));
     const chk = abs(step(0.5, fract(tu)).sub(step(0.5, fract(tv))));
     return paletteAt(floor(tv).mul(0.07).add(U.hue)).mul(chk.mul(0.75).add(0.12)).mul(smoothstep(0.0, 0.5, qr)).mul(front).mul(0.8);
   });
