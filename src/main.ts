@@ -33,7 +33,8 @@ import { DEFAULT_TUNING, isDefaultTuning, type Tuning } from './analysis/tuning'
 import type { AutoTuneResult } from './analysis/autotune';
 import { TuningScreen } from './ui/tuning';
 import { FrameAnalyser, perf } from './ui/frames';
-import { Dyno, type DynoResult } from './ui/dyno';
+import { Dyno, type DynoResult, type Rehearsal } from './ui/dyno';
+import { synthScore, SYNTH_DROP } from './score/synth';
 import { QUALITY, setQualityLevel } from './render/quality';
 import { ListenAlong, canListenAlong } from './audio/listen';
 import { Playlist, isAudio, canPickFolder, pickFolder, rememberFolder, lastFolder, regainAccess, type Track } from './ui/playlist';
@@ -152,6 +153,28 @@ class App {
     if (!params.has('nodyno') && (this.player.virtual === null || params.has('dyno'))) void this.runDyno();
   }
 
+  /** The dynamometer while it runs: stopped (with what it has measured) as soon as a song is chosen. */
+  private dynoRun: Dyno | null = null;
+  /** The plain board shown before the 3D station is up, and frames drawn so far. */
+  private boot = document.querySelector<HTMLElement>('#boot');
+  private drawn = 0;
+
+  /**
+   * Fetch the listening passes' model files into the browser's cache while the rider is still
+   * choosing a song, so deep listen and the sound pass start at once when it arrives. Low priority:
+   * nothing waits on it.
+   */
+  private prefetchModels() {
+    if (import.meta.env.MODE === 'single' || this.player.virtual !== null) return;
+    const get = (u: string) => fetch(new URL(u, document.baseURI), { priority: 'low' } as RequestInit).then(r => r.blob()).catch(() => null);
+    for (const u of ['models/yamnet/yamnet.tflite', 'models/mediapipe/audio_wasm_module_internal.js', 'models/mediapipe/audio_wasm_module_internal.wasm']) void get(u);
+    if (!params.has('nodeep') && !(this.dyno?.light && deepPref() !== 'try')) {
+      void fetch(new URL('models/basic-pitch/model.json', document.baseURI)).then(r => r.json()).then(m => {
+        for (const g of m.weightsManifest ?? []) for (const path of g.paths ?? []) void get(`models/basic-pitch/${path}`);
+      }).catch(() => {});
+    }
+  }
+
   /** The words the landing sign uses for the test, in each ride's own language. */
   private dynoWords() {
     if (this.pack.id === 'non-gondry') return 'Venue sound test';
@@ -165,25 +188,48 @@ class App {
    * leaves deep listen off.
    */
   private async runDyno() {
-    const dyno = new Dyno(this.world.renderer, () => this.world.pixelRatio);
+    const dyno = new Dyno(this.world.renderer, () => this.world.pixelRatio, () => this.rehearsal());
+    this.dynoRun = dyno;
+    // First let the station build its shaders (the ride needs them anyway), so the frames timed
+    // are the station's own and not the builder's.
+    const w0 = this.world.warmPending, b0 = performance.now();
+    while (this.world.warmPending > 0 && performance.now() - b0 < 20000 && !dyno.aborted) {
+      this.dynoSign = { text: `Building the line · ${this.world.warmPending} to go`, p: w0 ? 1 - this.world.warmPending / w0 : null };
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    if (dyno.aborted) { this.dynoRun = null; this.dynoSign = null; return; }
     const at = performance.now();
     try {
-      this.dyno = await dyno.run(p => { this.dynoSign = { text: this.dynoWords(), p }; });
+      // The sign says how long is left (from how fast it has gone so far), never just "wait".
+      this.dyno = await dyno.run(p => {
+        const el = (performance.now() - at) / 1000, left = p > 0.08 ? Math.ceil(el * (1 - p) / p) : 0;
+        this.dynoSign = { text: left > 0 ? `${this.dynoWords()} · ${left}s` : this.dynoWords(), p };
+      });
     } catch (e) {
       console.warn('Dynamometer failed', e);
       this.dynoSign = null;
       return;
     }
+    this.dynoRun = null;
     const r = this.dyno;
-    console.info(`Dynamometer (${Math.round(performance.now() - at)} ms): ${r.headline}; ride ~${r.estimate.ride} fps, disco ~${r.estimate.disco} fps`, r);
+    // Then make hay while the rider looks for a song: fetch the listening passes' models now.
+    this.prefetchModels();
+    console.info(`Dynamometer (${Math.round(performance.now() - at)} ms): ${r.headline}; ride ~${r.estimate.fps} fps`, r);
     this.dynoSign = { text: r.level === 'ok' ? (r.light ? 'All clear · running light' : 'All clear') : r.headline, p: null };
-    if (r.level !== 'ok') {
+    // Once the ride has started, a toast instead: never stop the rider for a pop-up mid-departure.
+    if (r.level !== 'ok' && this.phase !== 'landing') this.toast(`${r.headline}: the resolution and detail adjust by themselves`, 5000);
+    else if (r.level !== 'ok') {
       const gate = $('#gate');
       $('#gate-head').textContent = r.level === 'none' ? 'This needs 3D acceleration' : r.headline;
       $('#gate-advice').replaceChildren(...[
         ...r.advice,
         'The Gondryator reads the whole track and draws everything with shaders, so it is all graphics-card work: a faster machine gives a far better ride.',
       ].map(a => Object.assign(document.createElement('li'), { textContent: a })));
+      // Deep listen is not run by default on a light machine, but the rider is welcome to start it:
+      // it then stays on for every ride on this machine, and the song it reads is cached.
+      const deepBtn = $<HTMLButtonElement>('#gate-deep');
+      deepBtn.hidden = !r.light || r.level === 'none' || deepPref() === 'try';
+      deepBtn.onclick = () => { setDeepPref('try'); deepBtn.hidden = true; this.toast('Deep listen on: it reads each song in the background, ready for next time'); this.startDeepListen(); };
       gate.classList.toggle('none', r.level === 'none');
       gate.classList.remove('hidden');
       $('#gate-ok').onclick = () => gate.classList.add('hidden');
@@ -367,6 +413,7 @@ class App {
     $('#drop').classList.add('hidden');
     void this.player.ctx.resume();
     this.phase = 'title';
+    if (this.dynoRun) this.dynoRun.aborted = true; // the rider's song comes first
     this.dropAt = this.p;
     this.rig.depart(this.p);
     const tags = readTags(buf, name);
@@ -408,6 +455,65 @@ class App {
     this.startAnalysis(audioBuf);
   }
 
+  /** The far window: invented worlds across the aisle, on the same beat. */
+  private makeOther(rig: CameraRig, s: Score) {
+    // The train and the starship look out on invented worlds (packs/other-side.ts, packs/ship-other-side.ts).
+    const trippy = this.pack.otherSide === 'trippy';
+    // The starship's worlds keep their own colours under a lighter trip than the old mirror's.
+    const named = [OTHER_SIDE, HALLOWEEN_OTHER].find(p => p.id === this.pack.otherSide) ?? OTHER_SIDE;
+    const otherPack = trippy ? (this.pack.id === 'starship' ? SHIP_OTHER_SIDE : { ...this.pack, id: `${this.pack.id}-mirror`, sectionEvents: undefined }) : named;
+    return new OtherSide(otherPack, rig, s, this.world.camera, trippy ? (this.pack.id === 'starship' ? 0.35 : 0.9) : 0);
+  }
+
+  /**
+   * The dynamometer's rehearsal (ui/dyno.ts): this ride's own shows, both windows, on a made-up busy
+   * song (score/synth.ts), placed round the real camera and drawn only off screen. While it is
+   * shown, the landing's own show is hidden, so the test draws the ride in place of the station's
+   * idle scenery.
+   */
+  private rehearsal(): Rehearsal {
+    const score = synthScore();
+    const rig = makeRig(this.pack.rig);
+    rig.attachScore(score);
+    const cam = this.world.camera;
+    const drivers: ShowDriver[] = [this.pack.spawnMode === 'perform'
+      ? new Performer(this.pack, rig, score, cam)
+      : this.pack.spawnMode === 'visualise' ? new Visualiser(this.pack, score, cam) : new Spawner(this.pack, rig, score, cam)];
+    const other = this.pack.rig.lookYaw && this.pack.spawnMode !== 'perform' ? this.makeOther(rig, score) : null;
+    // Everything sits where it would be with the train at this song time, so shift it to the real train.
+    const group = new THREE.Group();
+    for (const d of drivers) { group.add(d.group); d.reset(SYNTH_DROP - 2); d.refreshLeads(); }
+    if (other) { group.add(other.group); other.reset(SYNTH_DROP - 2); other.spawner.refreshLeads(); }
+    group.visible = false;
+    this.world.scene.add(group);
+    const gaze = new ClampedGaze(this.look, THREE.MathUtils.degToRad(this.pack.rig.maxYaw));
+    const hidden: THREE.Object3D[] = [];
+    const at = new THREE.Vector3(), turn = new THREE.Quaternion();
+    return {
+      scene: this.world.scene, camera: cam, from: SYNTH_DROP - 2,
+      step: (s, dt) => {
+        if (this.pack.spawnMode !== 'visualise') { rig.pose(s, at, turn); group.position.copy(this.world.train.position).sub(at); }
+        for (const d of drivers) d.update(s, dt, gaze, Infinity, true);
+        other?.update(s, dt, this.look, Infinity, true, rig.travel(s));
+      },
+      show: on => {
+        group.visible = on;
+        if (on) { for (const o of [this.driver?.group, this.other?.group]) if (o?.visible) { o.visible = false; hidden.push(o); } }
+        else { for (const o of hidden) o.visible = true; hidden.length = 0; }
+      },
+      objects: () => {
+        let n = 0;
+        group.traverse(o => { if ((o as THREE.InstancedMesh).isInstancedMesh) n += (o as THREE.InstancedMesh).count; });
+        return n;
+      },
+      dispose: () => {
+        this.world.scene.remove(group);
+        // Only the instance buffers are the rehearsal's own: models and materials are shared with the ride.
+        group.traverse(o => { if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose(); });
+      },
+    };
+  }
+
   private attachScore(placeholder?: Score) {
     const s = placeholder ?? this.score!;
     if (!placeholder) this.rig.attachScore(s);
@@ -425,12 +531,7 @@ class App {
       this.other.reset(-1e9);
       this.other.setScore(s, this.world.camera);
     } else if (this.pack.rig.lookYaw && this.pack.spawnMode !== 'perform' && !params.has('noother')) {
-      // The train and the starship look out on invented worlds (packs/other-side.ts, packs/ship-other-side.ts).
-      const trippy = this.pack.otherSide === 'trippy';
-      // The starship's worlds keep their own colours under a lighter trip than the old mirror's.
-      const named = [OTHER_SIDE, HALLOWEEN_OTHER].find(p => p.id === this.pack.otherSide) ?? OTHER_SIDE;
-      const otherPack = trippy ? (this.pack.id === 'starship' ? SHIP_OTHER_SIDE : { ...this.pack, id: `${this.pack.id}-mirror`, sectionEvents: undefined }) : named;
-      this.other = new OtherSide(otherPack, this.rig, s, this.world.camera, trippy ? (this.pack.id === 'starship' ? 0.35 : 0.9) : 0);
+      this.other = this.makeOther(this.rig, s);
       this.world.scene.add(this.other.group);
       this.other.spawner.refreshLeads();
     }
@@ -654,10 +755,14 @@ class App {
   private startDeepListen() {
     const sc = this.score, audio = this.audioBuf;
     if (import.meta.env.MODE === 'single' || params.has('nodeep') || this.midi || !sc || !audio) return;
-    if (this.dyno?.light && !params.has('deep')) return; // a light machine keeps its breath for the ride
+    const ABOUT = 'Deep listen runs a small neural network (Spotify\'s Basic Pitch) on your own machine to transcribe the melody and bass note by note, more precisely than the quick parser. Nothing is uploaded.';
+    if (this.dyno?.light && !params.has('deep') && deepPref() !== 'try') {
+      // A light machine keeps its breath for the ride, but the rider can start it from the 🎧 button.
+      this.deepNote('quick listen', `${ABOUT}\n\nNot run by default on this machine, to keep the ride smooth. You are welcome to kick it off: click to start it (it stays on for future rides, and each song it reads is cached for next time).`);
+      return;
+    }
     this.deep?.stop();
     this.deep = null;
-    const ABOUT = 'Deep listen runs a small neural network (Spotify\'s Basic Pitch) on your own machine to transcribe the melody and bass note by note, more precisely than the quick parser. Nothing is uploaded.';
     if (sc.analysis.engine.includes('basic-pitch')) {
       this.deepNote('deep listen', `${ABOUT}\n\nThis song already has its deep-listened notes (cached from an earlier ride).`);
       return;
@@ -795,7 +900,9 @@ class App {
           this.player.pause();
           learn('extra', Math.min(9, learned('extra', 0) + 2));
           this.stoppedThisRide = true;
-          this.toast('Signal stop: waiting for the line ahead to clear', 3000);
+          const rate = this.analysisWall > 0 ? this.analysedSec / this.analysisWall : learned('rate', 0);
+          const wait = rate > 0 ? Math.ceil((8 - ahead) / Math.max(0.1, rate - 1)) : 0;
+          this.toast(wait > 0 && wait < 120 ? `Signal stop: about ${wait}s while the line ahead is read` : 'Signal stop: the line ahead is being read', Math.max(3000, wait * 1000));
         }
         if (this.signalStop && ahead > 8) { this.signalStop = false; this.player.play(this.player.time); }
       }
@@ -863,6 +970,12 @@ class App {
       this.cullSides();
       if (perf.on) this.markChanges(s);
       if (!this.tuner?.isOpen) this.world.render(); // the tuning screen covers the view
+      // The page opens on a plain picture of the board (index.html); lift it once the 3D station has
+      // drawn a few frames with its shaders built (or after two seconds, whichever comes first).
+      if (this.boot && ++this.drawn > 3 && (this.world.warmPending === 0 || this.drawn > 120 || this.p > 2)) {
+        const b = this.boot; this.boot = null;
+        b.classList.add('gone'); setTimeout(() => b.remove(), 900);
+      }
       this.frames?.frame(s);
     } catch (e) {
       // Some browsers expose WebGPU but lack features three.js needs: fall back to WebGL2.
@@ -925,12 +1038,14 @@ class App {
   }
 
   private departureText(ahead: number, need: number, warm: boolean): string {
-    const rate = this.analysisWall > 0 ? this.analysedSec / this.analysisWall : 0;
+    // Before the parser reports, its speed on this machine last time stands in.
+    const rate = this.analysisWall > 0 ? this.analysedSec / this.analysisWall : learned('rate', 0);
     const analysis = ahead >= need ? 0 : rate > 0 ? (need - ahead) / rate : Infinity;
     const shaders = warm ? 0 : this.world.warmPending / Math.max(5, this.fps);
     const arrive = Math.max(0, this.titleCross + 1.2 - this.p);
     const wait = Math.max(analysis, shaders, arrive);
-    if (!isFinite(wait) || wait > 60) {
+    if (isFinite(wait) && wait > 60) return `Departs in about ${Math.round(wait / 60)} min`;
+    if (!isFinite(wait)) {
       // No estimate yet: say how far the reading has got (words kept clear of the countdown's "Ns").
       if (ahead < need && this.analysisWall > 0) return `Reading ahead ${Math.floor(ahead)} of ${Math.ceil(need)} sec${rate > 1 ? ` · ${rate.toFixed(0)}× speed` : ''}`;
       return 'Waiting for a clear line';

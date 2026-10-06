@@ -243,3 +243,13 @@ body.fullscreen #meter { display: none !important; }
   #fork .long { display: none; }
   #credits { top: 46px; max-width: calc(100% - 24px); }
 }
+
+/* The board shown the instant the page opens, before any script runs (main.ts lifts it once the 3D station is drawn). */
+#boot { position: absolute; inset: 0; z-index: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: radial-gradient(ellipse at 50% 40%, #3a3f47, #16161d 75%); transition: opacity 0.8s; pointer-events: none; }
+#boot.gone { opacity: 0; }
+#boot .strip { font: 700 13px/1 ui-monospace, monospace; letter-spacing: 0.08em; color: #ffb02e; background: #0b0b0c; padding: 8px 14px; border-radius: 3px; box-shadow: 0 0 0 2px #3a3a3a; }
+#boot .strip span { font-weight: 400; animation: boot-blink 1.2s steps(2) infinite; }
+#boot .board { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 34px; background: #14284a; border: 4px solid #c9ced6; box-shadow: 0 0 0 3px #26324a, 0 10px 30px rgba(0,0,0,0.5); color: #fff; font-family: system-ui, sans-serif; }
+#boot .board b { font-size: clamp(28px, 7vw, 46px); letter-spacing: 0.02em; }
+#boot .board small { font-size: 14px; opacity: 0.9; }
+@keyframes boot-blink { 50% { opacity: 0.4; } }

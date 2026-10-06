@@ -12,6 +12,8 @@
 <body>
   <div id="stage">
     <canvas id="view"></canvas>
+    <!-- Shown the instant the page opens, before any script: the station board, until the 3D one is up. -->
+    <div id="boot" aria-hidden="true"><div class="strip">PLATFORM 1 · <span>Opening the station</span></div><div class="board"><b>GONDRYATOR</b><small>Drop a music file to depart</small></div></div>
     <div class="grain"></div>
 
     <div id="drop" class="ui card">
@@ -45,7 +47,7 @@
     <div id="gate" class="ui card hidden" role="alertdialog" aria-labelledby="gate-head">
       <p id="gate-head" class="lead"></p>
       <ul id="gate-advice" class="small"></ul>
-      <div class="row"><button id="gate-ok">Ride anyway</button></div>
+      <div class="row"><button id="gate-ok">Ride anyway</button><button id="gate-deep" class="ghost" hidden title="Deep listen (a neural note transcriber) is not run by default on this machine. Start it: it reads each song in the background and caches it for next time.">Run deep listen anyway</button></div>
     </div>
 
     <div id="status" class="ui"></div>

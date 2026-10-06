@@ -31,6 +31,17 @@ Your first remix can be tiny: [Your first remix in ten minutes](#your-first-remi
 
 **Keep the root README a dedication.** It stays short and fun. Technical notes go in [docs/BUILD.md](docs/BUILD.md).
 
+## Respect the rider's time (base rules)
+
+Alex's rules for everything between opening the page and the train pulling away. Keep to them in anything you add.
+
+- **Never a black screen.** Something friendly shows the instant the page opens (the plain board in `index.html`), before any script has run.
+- **Make hay while they dither.** While the rider is still looking for a song or a folder, do everything you can ahead: build shaders, test the machine, fetch models, warm caches. Their thinking time is free time for us.
+- **Never block them.** Until the station stop and the "Departing", we are in control, so the rider can always carry on: a song chosen mid-test stops the test with what it has, and a warning after that is a toast, not a pop-up. Slow them down only when the ride truly needs it.
+- **Every wait has an end.** Any pause says what it is waiting for and roughly how long ("Departs in 12s", "Signal stop: about 6s"), from the best estimate we have, even last time's speed on this machine. A wait with no clear end is horrible.
+- **Keep them informed, in the ride's own words,** on the sign or the board rather than in a modal.
+- **Offer what was switched off.** If something is off by default on their machine (deep listen on a light one), say so and let them start it anyway, and remember the choice.
+
 ## How it works, in one breath
 
 Audio file → **analysis** (in a Web Worker) → a **score**: plain JSON of beats, sections and events, each with time, stem, kind, pitch, velocity and length → **renderers** read the score and schedule things so that each one comes into view, at the leading edge of wherever the viewer is looking, exactly when it sounds. Whatever is sliding away behind is what has already played. Renderers never touch raw audio.
@@ -203,7 +214,7 @@ Rules of thumb:
 - **When something fails,** tell the environment from the project: a sandbox refusing a port or a download, a missing browser, or an old Node is the machine; a TypeScript error or a page error in the smoke test is the project.
 - Debug helpers in the app: D (debug overlay), T (tuning screen), P (frame analyser), X (force an effects look), G (wandering-viewer test).
 - **Few settings, on purpose.** There is no options menu for sizes, palettes or timing: the rider asks you instead ("make the buildings smaller", "a different palette for the chorus"). When they do, explain briefly how it works, then change it. See [Ask for it](docs/VISUALISER.md#ask-for-it-dont-hunt-for-a-setting).
-- **The gatekeeper:** on the landing screen `src/ui/dyno.ts` tests the machine (spec, a CPU burst, three off-screen synthetic scenes) while the sign says so in the ride's words, then warns with a pop-up if there is no 3D acceleration or the frame rate will be poor; a light machine skips deep listen. P, then **Save profile**, downloads it all with the frame log as JSON: ask your human for that file when chasing performance. `?nodyno` skips it; `?dyno` forces it in the `virtual` tests; `?deep` forces deep listen on a light machine. Anything new that spawns lots of things (particles, background scenery) should respect `QUALITY` in `render/quality.ts`, which the frame-rate governor turns down on a struggling machine.
+- **The gatekeeper:** on the landing screen `src/ui/dyno.ts` tests the machine (spec, a CPU burst, the landing's own frames, then a four-second off-screen rehearsal of this very ride on a made-up busy song from `score/synth.ts`) while the sign says so in the ride's words, then warns with a pop-up if there is no 3D acceleration or the frame rate will be poor; a light machine doesn't run deep listen by default but offers it. P, then **Save profile**, downloads it all with the frame log as JSON: ask your human for that file when chasing performance. `?nodyno` skips it; `?dyno` forces it in the `virtual` tests (`?dyno=full` even in a software renderer); `?deep` forces deep listen on a light machine. Anything new that spawns lots of things (particles, background scenery) should respect `QUALITY` in `render/quality.ts`, which the frame-rate governor turns down on a struggling machine.
 - Performance: three builds a shader per InstancedMesh, so a new model costs a shader build the first time it appears. `World.warmup` pre-builds them; keep new models on the shared scenery material.
 - Third-party code keeps its own licence: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). If you add a dependency, add it there.
 
