@@ -43,7 +43,7 @@ export class BranchLines {
     const railMat = new THREE.MeshStandardMaterial({ color: 0xb0b2b4, metalness: 0.85, roughness: 0.35 });
     this.rails = new THREE.InstancedMesh(new THREE.BoxGeometry(SEG + 0.04, 0.16, 0.08), railMat, 2 * per);
     this.ties = new THREE.InstancedMesh(new THREE.BoxGeometry(0.26, 0.1, 2.5), new THREE.MeshStandardMaterial({ color: 0x5a4c3e, roughness: 0.9 }), per);
-    this.bed = new THREE.InstancedMesh(new THREE.BoxGeometry(SEG + 0.05, 0.1, 3.4), new THREE.MeshStandardMaterial({ color: 0x7d766c, roughness: 1 }), per);
+    this.bed = new THREE.InstancedMesh(new THREE.BoxGeometry(SEG + 0.05, 0.14, 4.6), new THREE.MeshStandardMaterial({ color: 0x8a837a, roughness: 1 }), per);
     for (const m of [this.bed, this.ties, this.rails]) { m.frustumCulled = false; m.count = 0; this.group.add(m); }
   }
 
