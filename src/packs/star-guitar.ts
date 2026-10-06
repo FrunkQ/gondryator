@@ -29,7 +29,7 @@ export const STAR_GUITAR: Pack = {
       } },
     // Busy passages: a note close behind the last big object gets a small one (`crowd`), so every
     // beat still shows without a wall of buildings.
-    { id: 'near', depth: 19, depthJitter: 3, scale: 0.62, scaleByVel: 0.3,
+    { id: 'near', depth: 19, depthJitter: 3, scale: 0.62, scaleByVel: 0.3, vary: { bars: 8, borrow: 0.2 },
       crowd: { gap: 14, scale: 0.8, models: { industrial: ['bush', 'hedge'], town: ['bush', 'hedge'], country: ['bush', 'hay-bales'] } },
       models: {
         // Mostly green, with a building now and then (repeats weight the pick: same sound, same object).
