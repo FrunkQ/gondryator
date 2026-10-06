@@ -42,7 +42,7 @@ const LOOKS: Record<FxLook, Weights> = {
 };
 
 const W = {
-  film: uniform(0), dmosh: uniform(0), crt: uniform(0), crtOn: uniform(1), crtPitch: uniform(3), crtRoll: uniform(0), crtMode: uniform(0), fold: uniform(0), hyper: uniform(0), tunnel: uniform(0), warp: uniform(0), kal: uniform(0), liquid: uniform(0), rgb: uniform(0), thermal: uniform(0), echo: uniform(0), bloom: uniform(0.25), punch: uniform(0),
+  film: uniform(0), dmosh: uniform(0), crt: uniform(0), crtOn: uniform(1), crtPitch: uniform(3), crtRoll: uniform(0), crtMode: uniform(0), fold: uniform(0), hyper: uniform(0), tunnel: uniform(0), tunZ: uniform(0), tunTwist: uniform(0), warp: uniform(0), kal: uniform(0), liquid: uniform(0), rgb: uniform(0), thermal: uniform(0), echo: uniform(0), bloom: uniform(0.25), punch: uniform(0),
   glitch: uniform(0), aspect: uniform(16 / 9), kalRot: uniform(0), segments: uniform(6),
   /** Motion blur: screen-space smear per metre of depth (uv * m), from travel speed and shutter. */
   blurK: uniform(0), blurDir: uniform(new THREE.Vector2(1, 0)),
@@ -89,15 +89,20 @@ export function makePipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scene,
     const S = farSide();
     const wAll = mix(S, float(1), W.warpAll);
     // Kick punch: a quick zoom towards the centre.
-    const zoom = float(1).sub(U.kick.mul(W.punch).mul(0.035));
+    // (Not inside the wormhole: there the zoom shoved the rings back and forth on every kick; the
+    // kick surges you down it instead, below.)
+    const zoom = float(1).sub(U.kick.mul(W.punch).mul(0.035).mul(float(1).sub(W.tunnel)));
     let u = uv0.sub(0.5).mul(zoom).add(0.5);
     // Wormhole: angle round the centre and inverse distance become the coordinates, so the
     // scene is wrapped round a tunnel that streams towards you.
     const tc = u.sub(0.5).mul(vec2(W.aspect, 1));
     const tr = length(tc);
-    // (The angle runs -1..1 round the circle: the mirrored wrap below folds it so -1 and 1 land on
-    // the same column, where 0..1 left a seam from the centre to the left edge.)
-    const ut = vec2(atan(tc.y, tc.x).div(3.14159).add(U.showTime.mul(0.02)), float(0.22).div(tr.add(0.04)).add(U.showTime.mul(0.45)));
+    // Its depth runs on tunZ, which only ever moves forward (faster on the kick), and the bass twists
+    // it (deeper rings turn further), so the music surges and twists it, never rocks it back.
+    // The angle is folded (0 at the right, 1 at the left, back to 0) so it is continuous all the way
+    // round: a raw angle jumps from -pi to pi on the left, and the texture lookup drew a seam there.
+    const ang = atan(tc.y, tc.x).add(U.showTime.mul(0.06)).add(W.tunTwist.mul(0.5).div(tr.add(0.12)));
+    const ut = vec2(abs(mod(ang.add(3.14159), 6.28318).sub(3.14159)).div(3.14159), float(0.22).div(tr.add(0.04)).add(W.tunZ));
     u = mix(u, ut, W.tunnel.mul(smoothstep(0.02, 0.2, tr))); // (the tunnel's far end is all aliasing: left plain)
     // Kaleidoscope: fold the angle into mirrored wedges around the centre.
     const c = u.sub(0.5).mul(vec2(W.aspect, 1));
@@ -433,6 +438,10 @@ export class FxDirector {
     W.crtOn.value += (this.crtOn - W.crtOn.value) * (1 - Math.exp(-dt / 0.08));
     W.crtRoll.value = (W.crtRoll.value + dt * (0.15 + this.kick * 0.9)) % 1;
     W.hyper.value = (this.cur.hyper ?? 0) * a; W.tunnel.value = (this.cur.tunnel ?? 0) * a;
+    // The wormhole: forward always, surging on the kick; the bass twists it, smoothly.
+    W.tunZ.value = (W.tunZ.value + dt * (0.45 + this.kick * 1.6)) % 512;
+    const bassNow = sc && running ? sampleEnvelope(sc.envelopes.bass, s) : 0;
+    W.tunTwist.value += (bassNow - W.tunTwist.value) * (1 - Math.exp(-dt / 0.5));
     // A build-up charges the warp: the smear and the field of view swell as it climbs, then the
     // section change fires the full jump.
     const rise = sc && running ? sampleEnvelope(sc.envelopes.rise, s) : 0;
