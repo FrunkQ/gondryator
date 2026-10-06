@@ -28,6 +28,8 @@ export interface Rehearsal {
   camera: THREE.Camera;
   /** Song time to start from (just before the drop). */
   from: number;
+  /** Build its shaders without it ever showing on screen (frames keep drawing while they build). */
+  compile(): Promise<void>;
   step(s: number, dt: number): void;
   show(on: boolean): void;
   /** Objects on show now (instances), for the profile. */
@@ -144,8 +146,7 @@ export class Dyno {
       let s = reh.from;
       const c0 = performance.now();
       reh.step(s, 1 / 60);
-      reh.show(true);
-      try { await r.compileAsync(reh.scene, reh.camera); } finally { reh.show(false); }
+      await reh.compile();
       await draw(true, 1);
       const compileMs = performance.now() - c0;
       onProgress(0.15);

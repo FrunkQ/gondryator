@@ -496,6 +496,14 @@ class App {
         for (const d of drivers) d.update(s, dt, gaze, Infinity, true);
         other?.update(s, dt, this.look, Infinity, true, rig.travel(s));
       },
+      compile: async () => {
+        // Shrunk to nothing while it compiles: the station keeps drawing frames meanwhile, and a
+        // full-size rehearsal once stood a giant building in front of the landing board.
+        const pos = group.position.clone();
+        group.scale.setScalar(1e-6); group.position.set(0, -1e4, 0); group.visible = true;
+        try { await this.world.renderer.compileAsync(group, cam, this.world.scene); }
+        finally { group.visible = false; group.scale.setScalar(1); group.position.copy(pos); }
+      },
       show: on => {
         group.visible = on;
         if (on) { for (const o of [this.driver?.group, this.other?.group]) if (o?.visible) { o.visible = false; hidden.push(o); } }
