@@ -827,12 +827,14 @@ function moreElementsBody(V: any, g: any) {
   // 42 Sine scroller: the song's name round the horizon, every letter riding a sine wave that
   // swings wider with the melody, scrolling past.
   on(42, () => {
-    // (az grows to the left, so the text runs the other way round and scrolls with time to the left)
-    const u = az.div(6.28318).mul(2.0).sub(T.mul(0.035));
+    // (Seen from inside the sphere, az grows to the right on screen, as Alex's screens showed: the
+    // text runs with it, and the time term makes it scroll to the left, new letters arriving from
+    // the right, like a demo's.)
+    const u = az.div(6.28318).mul(2.0).add(T.mul(0.035));
     const yc = float(0.22).add(sin(u.mul(40.0).add(T.mul(3.0))).mul(float(0.05).add(V.bands.z.mul(0.08))));
     const v = el.sub(yc).div(0.16).add(0.5);
     const inside = step(0.0, v).mul(step(v, 1.0));
-    const tx = texture(V.scroll, vec2(fract(u).oneMinus(), v));
+    const tx = texture(V.scroll, vec2(fract(u), v));
     const shine = float(0.8).add(U.kick.mul(0.5));
     return tx.rgb.mul(tx.a).mul(inside).mul(shine).mul(1.6).add(paletteAt(u.add(T.mul(0.1))).mul(tx.a).mul(inside).mul(0.3));
   });
