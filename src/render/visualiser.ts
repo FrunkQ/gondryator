@@ -42,7 +42,7 @@ import { fireworkCues } from './cues';
 import type { CardInfo, ShowDriver } from './driver';
 import type { GazeSource } from './spawner';
 import type { FxLookName, Pack } from '../packs/types';
-import { gridAt, sampleEnvelope, sectionAt, type Score, type SoundCue, type SoundKind } from '../score/types';
+import { gridAt, sampleEnvelope, sectionAt, subPartAt, type Score, type SoundCue, type SoundKind } from '../score/types';
 
 type Vec3 = [number, number, number];
 // The palettes are shared with the rides (shaders.ts PALETTES); the show uses them all.
@@ -169,6 +169,15 @@ interface Scene {
   frac: [number, number, number, number];
   /** Which elements show (indices into ELEMENTS). */
   elements: number[];
+  /** The horizon: lean (radians), how fast its axis turns (radians/s), and a ceiling (0 or 1). */
+  tilt?: [number, number, number];
+}
+
+/** A level horizon about half the time; otherwise it leans, now and then right over, turning slowly. */
+function randomTilt(r: () => number): [number, number, number] {
+  const k = r();
+  const lean = k < 0.45 ? 0 : k < 0.85 ? 0.25 + r() * 0.45 : 0.8 + r() * 0.6;
+  return [lean, lean ? (r() < 0.5 ? -1 : 1) * (0.03 + r() * 0.09) : 0, r() < 0.3 ? 1 : 0];
 }
 
 /** Elements that read as a VU meter or concentric rings: picked less often (see freshest). */
@@ -393,6 +402,8 @@ export class Visualiser implements ShowDriver {
     /** Slow copies for shapes: bass loudness and other loudness eased over a third of a second, and
      * a turn that steps on each beat but never swings back (the rotozoomer). */
     soft: uniform(new THREE.Vector3()),
+    /** The horizon's lean (radians), the turn of the axis it leans about, and floor-to-ceiling mirror (0..1). */
+    tilt: uniform(new THREE.Vector3()),
     /** The glitterball: spin speed (radians/s), flash, and its tint. */
     glitter: uniform(new THREE.Vector2(0.6, 0)), glitterTint: uniform(new THREE.Vector3(0.35, 0.3, 0.5)),
     fold: uniform(new THREE.Vector4(0, 0.6, 1.3, 0.5)), frac: uniform(new THREE.Vector4(6, 1.2, 0.7, 0.5)),
@@ -440,6 +451,8 @@ export class Visualiser implements ShowDriver {
   private lastUsed = new Float64Array(64).fill(-1e9);
   private phraseIdx = -1;
   private twists = 0;
+  private subIdx = 0;
+  private tiltTarget: [number, number, number] = [0, 0, 0];
   /** The song's arc: intensity at 2 Hz over the analysed part of the song (see buildArc). */
   private arcI = new Float32Array(0);
   private arcPeakT = 0;
@@ -566,6 +579,7 @@ export class Visualiser implements ShowDriver {
       elements: [0],
       poly: [3 + Math.floor(r() * 6), Math.floor(r() * 5), (r() - 0.5) * 1.6, r() < 0.4 ? r() : 0],
       pulse: randomPulse(r),
+      tilt: randomTilt(r),
       bassMode: randomBassMode(r),
       // Deep kaleidoscope in about half the scenes, sometimes absurdly deep.
       fold: [r() < 0.5 ? 0 : 1 + Math.floor(r() * r() * 5), 0.3 + r() * 1.2, 1.1 + r() * 0.5, 0.2 + r() * 0.9],
@@ -590,10 +604,14 @@ export class Visualiser implements ShowDriver {
     this.V.mixes.value.set(...sc.mixes);
     this.V.layers.value.set(...sc.layers);
     this.V.pulseShape.value.set(...(sc.pulse ?? [0, 0, 0, 0]));
+    this.tiltTarget = sc.tilt ?? [0, 0, 0];
     this.V.bassMode.value.set(...(sc.bassMode ?? [0, 1]));
     // ?bass=3 (or 2,4 for four circles) pins the bass style, for trying one out.
     const pinBass = new URLSearchParams(location.search).get('bass')?.split(',').map(Number);
     if (pinBass) this.V.bassMode.value.set(pinBass[0], pinBass[1] ?? 4);
+    // ?tilt=0.9,1 pins the horizon's lean (and the ceiling).
+    const pinTilt = new URLSearchParams(location.search).get('tilt')?.split(',').map(Number);
+    if (pinTilt) this.tiltTarget = [pinTilt[0], 0.06, pinTilt[1] ?? 0];
     // ?viz=16,17 pins the elements (for trying one out); ?fb=0 turns the feedback trails off.
     const q = new URLSearchParams(location.search);
     const pinned = q.get('viz')?.split(',').map(Number).filter(n => n >= 0 && n < NE);
@@ -668,13 +686,13 @@ export class Visualiser implements ShowDriver {
         if (pick === MEGADEMO) Object.assign(sc, { look: 'prism', layers: [0, 0, 0, 0], fold: [0, sc.fold[1], sc.fold[2], sc.fold[3]] });
         if (pick === OUTRUN) {
             Object.assign(sc, {
-            bassMode: [1, 1], look: 'crt', palette: [2, 3, 10][Math.floor(r() * 3)],
+            bassMode: [1, 1], look: 'crt', tilt: [0, 0, 0], palette: [2, 3, 10][Math.floor(r() * 3)],
             shape: [sc.shape[0], 0.6 + r() * 1.2, sc.shape[2], sc.shape[3]],
             feedback: { amount: 0.55, zoom: 1.006, turn: (r() - 0.5) * 0.01, hue: 0.04 },
           });
         }
       }
-      if (sectionStart) this.patterns.set(key, { scene: plain, seen: 0 });
+      if (sectionStart || key.includes('/')) this.patterns.set(key, { scene: plain, seen: 0 });
     }
     // An exhale: a section clearly quieter than the last (a breakdown) thins out to one or two
     // elements with long, slow trails, so the next lift has somewhere to go.
@@ -767,6 +785,7 @@ export class Visualiser implements ShowDriver {
         fold: [Math.max(0, Math.min(5, cur.fold[0] + (r() < 0.5 ? -1 : 1) * (1 + Math.floor(r() * 2)))), 0.3 + r() * 1.2, cur.fold[2], cur.fold[3]],
         poly: [3 + Math.floor(r() * 6), cur.poly[1], -cur.poly[2], r() < 0.4 ? r() : 0],
         pulse: randomPulse(r),
+        tilt: r() < 0.5 ? cur.tilt : randomTilt(r),
         bassMode: r() < 0.5 ? cur.bassMode : randomBassMode(r),
         look: r() < 0.5 ? cur.look : LOOKS[Math.floor(r() * LOOKS.length)],
       };
@@ -802,7 +821,16 @@ export class Visualiser implements ShowDriver {
       // Scene changes: every section, and every new melody phrase (after a breath of 1.5 s).
       const { section: sec, index: idx } = sectionAt(sc, s);
       if (this.outroOn) this.secIdx = idx;
-      if (idx !== this.secIdx && sec) { this.secIdx = idx; this.newScene(s, sec.label, sectionKey(sec), true); }
+      if (idx !== this.secIdx && sec) { this.secIdx = idx; this.subIdx = 0; this.newScene(s, sec.label, sectionKey(sec), true); }
+      // A long section changes as it goes, in sub-parts of eight bars (C1a, C1b...): new colours
+      // and shapes on each, a whole new scene on every other one. A returning part gets the same
+      // run of scenes back.
+      const { sub } = subPartAt(sc, s);
+      if (sec && sub !== this.subIdx && !this.outroOn) {
+        this.subIdx = sub;
+        if (sub % 2 === 0) this.newScene(s, sec.label, sectionKey(sec) + '/' + String.fromCharCode(97 + sub), false);
+        else { this.twists = 1; this.twist(s); }
+      }
       // Twists: on each new phrase (four bars) once the picture has held for a few seconds, and
       // in any case before it has sat still for MAX_STILL seconds.
       let pi = this.phraseIdx;
@@ -877,6 +905,11 @@ export class Visualiser implements ShowDriver {
     else this.V.bands.value.set(0, 0, 0);
     this.updateArc(s, dt, running);
     this.updatePitches(sc, s, dt, running);
+    // The horizon leans over a couple of seconds, its axis turning all the while.
+    const TL = this.V.tilt.value, kt = 1 - Math.exp(-dt / 2.0);
+    TL.x += ((this.far ? 0 : this.tiltTarget[0]) - TL.x) * kt;
+    TL.y += this.tiltTarget[1] * dt;
+    TL.z += ((this.far ? 0 : this.tiltTarget[2]) - TL.z) * kt;
     this.updateGlitterball(s, dt, running);
     this.updateWave(s, frontier, running);
     // The spawners are the notes themselves, so they stay bright even early in the arc.

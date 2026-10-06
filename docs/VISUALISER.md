@@ -132,6 +132,8 @@ flowchart TB
 Between sections, things keep moving:
 - **Twists:** on each new four-bar phrase (once a picture has held for about 6 seconds), and in any case before it has sat still for 14, either one element is swapped for a fresh one, or the scene is re-dressed (palette, mirrors, shapes, look) with a flash.
 - **New melody phrases:** when the lead comes back in after a breath, the scene changes.
+- **Sub-parts:** a long section (16 bars or more) is split into eight-bar sub-parts, C1a, C1b, C1c... (ticks on the debug strip). Each brings new colours; every other one brings a whole new scene. A returning part gets the same run of scenes back. On the rides, each sub-part swaps the palette, and every other one moves the far side on to its next look.
+- **No horizon:** there is no ground here, so about half the scenes lean the horizon over (now and then right over your head) about an axis that turns slowly. The spectrum, fire, mountains, the sun and the scroller swing up and round. Some scenes mirror the floor into a ceiling, so you ride a corridor.
 - **Exhales:** a section clearly quieter than the last thins out to one or two elements with long, slow trails, so the next lift has somewhere to go.
 
 ## Reading the song's shape
@@ -208,6 +210,7 @@ The far window of the train and the starship stays recognisably the ride. On a b
 | `&viz=45,32` | pin those elements (indexes from `ELEMENTS` in `visualiser.ts`) |
 | `&decade=1980` | pin a decade's closer |
 | `&bass=3` | pin a bass style |
+| `&tilt=0.8,1` | pin the horizon's lean in radians (and, with `,1`, the ceiling) |
 | `&fb=0` | turn the feedback trails off |
 | `?side=disco` | on the train or starship, hold the far-side takeover on (`?side=provence` or `cosmos` pins a world) |
 | `?rare` | on the train, make every building a rare find, to look at them |

@@ -480,12 +480,24 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   const m = new THREE.MeshBasicNodeMaterial({ side: far?.floor ? THREE.DoubleSide : THREE.BackSide, fog: false, depthWrite: !!far?.floor });
   const d = far ? positionWorld.sub(cameraPosition).normalize() : positionLocal.normalize();
   if (far) { m.transparent = true; m.opacityNode = far.reveal; }
-  const az = atan(d.x, d.z.negate());             // 0 ahead (-z), +/- pi behind
+  // In the show all round you there is no ground, so the horizon need not stay level: tilt.x leans
+  // it (radians) about a level axis that turns slowly (tilt.y), so the horizon-hugging elements
+  // (spectrum, fire, mountains, the sun, the scroller, the floor) swing up over your head and down
+  // again. tilt.z mirrors the floor into a ceiling, so you ride a corridor. Gaze-centred elements
+  // keep the true direction (d); the horizon frame is dH.
+  const tkx = cos(V.tilt.y), tkz = sin(V.tilt.y), ct = cos(V.tilt.x), st = sin(V.tilt.x);
+  const kd = tkx.mul(d.x).add(tkz.mul(d.z));
+  const dT = far ? d : vec3(
+    d.x.mul(ct).sub(tkz.mul(d.y).mul(st)).add(tkx.mul(kd).mul(ct.oneMinus())),
+    d.y.mul(ct).add(tkz.mul(d.x).sub(tkx.mul(d.z)).mul(st)),
+    d.z.mul(ct).add(tkx.mul(d.y).mul(st)).add(tkz.mul(kd).mul(ct.oneMinus())));
+  const dH = far ? d : vec3(dT.x, mix(dT.y, abs(dT.y).negate(), V.tilt.z), dT.z);
+  const az = atan(dT.x, dT.z.negate());             // 0 ahead (-z), +/- pi behind
   // Patterns use the azimuth mirrored about the front-back line: the raw angle jumps from +pi to
   // -pi right behind you, which showed as a seam; |az| meets itself there, so nothing can tear.
   // A soft fold (not a hard abs) so the mirror line straight ahead is not a crease either.
   const azP = sqrt(az.mul(az).add(0.0016)).sub(0.04);
-  const el = asin(clamp(d.y, -1.0, 1.0));          // -pi/2 .. pi/2
+  const el = asin(clamp(dT.y, -1.0, 1.0));          // -pi/2 .. pi/2
   // The pattern's clock: visualiser.ts advances it, faster as the song winds up for a lift.
   const t = V.phase;
   const F = V.shape.x;
@@ -573,9 +585,9 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   // Road (bassMode 3): a road on the floor running off to the horizon where you look; each bass
   // note is a bar of light racing down it towards you, and the kerbs glow with the bass.
   const gdir = normalize(vec2(V.gaze.x, V.gaze.z).add(vec2(0.0001, 0.0)));
-  const gp = d.xz.div(max(d.y.negate(), 0.015)).mul(2.7);
+  const gp = dH.xz.div(max(dH.y.negate(), 0.015)).mul(2.7);
   const along = dot(gp, gdir), across = gp.x.mul(gdir.y).sub(gp.y.mul(gdir.x));
-  const onRoad = smoothstep(-0.01, -0.06, d.y).mul(step(0.0, along));
+  const onRoad = smoothstep(-0.01, -0.06, dH.y).mul(step(0.0, along));
   const bar = (p: any) => { const x = along.sub(float(60.0).mul(exp(p.mul(-2.6)))).div(along.mul(0.04).add(0.2)); return exp(x.mul(x).negate()).mul(exp(p.mul(-1.0))); };
   const road = bar(V.pulse0).add(bar(V.pulse1)).add(bar(V.pulse2)).add(bar(V.pulse3)).mul(smoothstep(1.6, 1.2, abs(across)))
     .add(smoothstep(0.12, 0.0, abs(abs(across).sub(1.6))).mul(V.bands.y.mul(0.8).add(0.15)))
@@ -646,12 +658,12 @@ export function makeVisualiserMaterial(V: any, far?: { reveal: any; floor?: bool
   const kickRing = exp(kx.mul(kx).negate()).mul(exp(V.kickT.mul(-1.8))).add(exp(kx2.mul(kx2).negate()).mul(exp(V.kickT.mul(-2.5))).mul(0.5));
   const kickCol = paletteAt(V.kickT.add(U.hue)).mul(kickRing).mul(1.5).mul(step(0.0, dot(d, V.gaze)));
   // Drum floor (7): a grid on the ground streaming towards you; cells flash with the drums.
-  const below = smoothstep(-0.02, -0.12, d.y);
-  const fp = d.xz.div(max(d.y.negate(), 0.02)).mul(2.0).add(vec2(0.0, U.showTime.mul(3.0)));
+  const below = smoothstep(-0.02, -0.12, dH.y);
+  const fp = dH.xz.div(max(dH.y.negate(), 0.02)).mul(2.0).add(vec2(0.0, U.showTime.mul(3.0)));
   const fl = fract(fp), fc = floor(fp);
   const lines = smoothstep(0.06, 0.0, min(min(fl.x, fl.y), min(fl.x.oneMinus(), fl.y.oneMinus())));
   const lit = step(float(1.0).sub(V.bands.x.mul(0.6)).sub(U.kick.mul(0.25)), hash(fc.dot(vec2(1.0, 57.0)).add(floor(U.showTime.mul(4.0)))));
-  const fade = smoothstep(-0.02, -0.4, d.y);
+  const fade = smoothstep(-0.02, -0.4, dH.y);
   const floorCol = paletteAt(hash(fc.dot(vec2(7.0, 3.0))).add(U.hue)).mul(lit.mul(0.8).add(lines.mul(0.6))).mul(below).mul(fade.mul(0.8).add(0.2));
   // Bass mountains (9): a wireframe range on the horizon as tall as the bass is loud.
   const hgt = float(0.03).add(V.bands.y.mul(float(0.12).add(mx_noise_float(vec2(azP.mul(3.0), U.showTime.mul(0.15))).mul(0.5).add(0.5).mul(0.3))));
@@ -803,11 +815,12 @@ function moreElementsBody(V: any, g: any) {
   // 42 Sine scroller: the song's name round the horizon, every letter riding a sine wave that
   // swings wider with the melody, scrolling past.
   on(42, () => {
-    const u = az.div(6.28318).mul(2.0).add(T.mul(0.035));
+    // (az grows to the left, so the text runs the other way round and scrolls with time to the left)
+    const u = az.div(6.28318).mul(2.0).sub(T.mul(0.035));
     const yc = float(0.22).add(sin(u.mul(40.0).add(T.mul(3.0))).mul(float(0.05).add(V.bands.z.mul(0.08))));
     const v = el.sub(yc).div(0.16).add(0.5);
     const inside = step(0.0, v).mul(step(v, 1.0));
-    const tx = texture(V.scroll, vec2(fract(u), v.oneMinus()));
+    const tx = texture(V.scroll, vec2(fract(u).oneMinus(), v));
     const shine = float(0.8).add(U.kick.mul(0.5));
     return tx.rgb.mul(tx.a).mul(inside).mul(shine).mul(1.6).add(paletteAt(u.add(T.mul(0.1))).mul(tx.a).mul(inside).mul(0.3));
   });

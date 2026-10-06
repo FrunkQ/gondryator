@@ -14,7 +14,7 @@ import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { U, palette, PALETTES, DEFAULT_PALETTES } from './shaders';
 import { clean, feedback } from './feedback';
-import { sampleEnvelope, type Score } from '../score/types';
+import { sampleEnvelope, subPartAt, type Score } from '../score/types';
 
 export type FxLook = 'clean' | 'prism' | 'trip' | 'kaleido' | 'liquid' | 'thermal' | 'echo' | 'fold' | 'hyper' | 'tunnel' | 'crt' | 'film' | 'glitch';
 export const FX_LOOKS: FxLook[] = ['clean', 'prism', 'trip', 'kaleido', 'liquid', 'thermal', 'echo', 'fold', 'hyper', 'tunnel', 'crt', 'film', 'glitch'];
@@ -290,7 +290,7 @@ export class FxDirector {
    * The palette for a section: a returning part of the song (same group) gets its colours back, a
    * new part the next palette along from a song-seeded start, so a song keeps its own colours.
    */
-  private paletteFor(sc: Score, idx: number) {
+  private paletteFor(sc: Score, idx: number, sub = 0) {
     const P = this.palettes, seed = (sc.track.hash ?? '').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
     const byGroup = new Map<number, number>();
     let fresh = 0, pick = seed % P.length;
@@ -299,10 +299,13 @@ export class FxDirector {
       if (g !== undefined && byGroup.has(g)) pick = byGroup.get(g)!;
       else { pick = (seed + fresh++ * 5) % P.length; if (g !== undefined) byGroup.set(g, pick); }
     }
-    return PALETTES[P[pick]];
+    // Sub-parts step on through the palettes from the section's own, so a returning part brings
+    // back the same run of colours.
+    return PALETTES[P[(pick + sub * 3) % P.length]];
   }
 
-  setScore(score: Score | null) { this.score = score; this.ptr = 0; this.lastS = -Infinity; this.secIdx = -1; }
+  setScore(score: Score | null) { this.score = score; this.ptr = 0; this.lastS = -Infinity; this.secIdx = -1; this.subIdx = 0; }
+  private subIdx = 0;
 
   /** A returning part of the song (same group) gets its look back; a new part, the next in the cycle. */
   private lookFor(secs: Score['sections'], idx: number): FxLook {
@@ -361,8 +364,21 @@ export class FxDirector {
       if (idx !== this.secIdx) {
         if (this.secIdx >= 0) { this.glitch = 1; this.warp = 1; }
         this.secIdx = idx;
+        this.subIdx = 0;
         this.look = this.lookFor(sc.sections, idx);
         this.palTarget = this.paletteFor(sc, idx);
+      }
+      // A long section changes as it goes (sub-parts of eight bars): new colours on each, and on
+      // every other one the next look along as well, with a little glitch to mark it.
+      const { sub } = subPartAt(sc, s);
+      if (sub !== this.subIdx) {
+        this.subIdx = sub;
+        this.palTarget = this.paletteFor(sc, idx, sub);
+        if (sub % 2 === 0 && !this.bySection[label]) {
+          const i = this.cycle.indexOf(this.lookFor(sc.sections, idx));
+          this.look = this.cycle[(Math.max(0, i) + sub / 2) % this.cycle.length];
+          this.glitch = 0.6;
+        }
       }
     } else this.look = 'clean';
     if (this.override && running) this.look = this.override;

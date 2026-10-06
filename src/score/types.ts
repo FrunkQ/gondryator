@@ -281,6 +281,39 @@ export function sectionAt(score: Score, t: number): { section: Section | null; i
 }
 
 /**
+ * Long sections split into sub-parts of SUB_BARS bars (C1 becomes C1a, C1b, C1c...), so a long,
+ * samey stretch still changes: a palette swap on each, a bigger change every other one. A section
+ * shorter than two sub-parts stays whole; a short tail joins the last sub-part.
+ */
+export const SUB_BARS = 8;
+const subCache = new WeakMap<Score, Map<string, number[]>>();
+/** Start times of the sub-parts of section `idx` (just its own start when it is short). */
+export function subPartsOf(score: Score, idx: number): number[] {
+  const sec = score.sections[idx];
+  if (!sec) return [];
+  const end = score.sections[idx + 1]?.t ?? (score.final ? score.track.durationSec : score.frontierSec);
+  const key = `${idx}:${end.toFixed(2)}:${score.beats.length}`;
+  let m = subCache.get(score);
+  if (!m) subCache.set(score, m = new Map());
+  const hit = m.get(key);
+  if (hit) return hit;
+  const downs = score.beats.filter(b => b.downbeat && b.t >= sec.t - 0.05 && b.t < end - 0.05);
+  const n = downs.length >= 2 * SUB_BARS ? Math.floor(downs.length / SUB_BARS) : 1;
+  const out = Array.from({ length: n }, (_, k) => (k === 0 ? sec.t : downs[k * SUB_BARS].t));
+  m.set(key, out);
+  return out;
+}
+/** Which sub-part of which section t is in (sub 0 = the section's start; subs = how many). */
+export function subPartAt(score: Score, t: number): { index: number; sub: number; subs: number } {
+  const { index } = sectionAt(score, t);
+  if (index < 0) return { index, sub: 0, subs: 1 };
+  const parts = subPartsOf(score, index);
+  let sub = 0;
+  while (sub + 1 < parts.length && parts[sub + 1] <= t + 1e-6) sub++;
+  return { index, sub, subs: parts.length };
+}
+
+/**
  * The song's shape in one line, like "intro · A A · B B · breakdown · drop (A) · C · A · outro":
  * sections that sound alike share a letter, in order of first appearance. `current` (a section
  * index) is shown in brackets.

@@ -1,6 +1,6 @@
 // Debug overlay: event timeline per stem/kind, beats, sections, phrases, the look-ahead
 // frontier, and live numbers (fps, backend, analysis speed, refocus metric).
-import { sampleEnvelope, type Score } from '../score/types';
+import { sampleEnvelope, subPartAt, subPartsOf, type Score } from '../score/types';
 
 const ROWS: { label: string; test: (e: Score['events'][number]) => boolean; color: string }[] = [
   { label: 'kick', test: e => e.kind === 'kick', color: '#ff8a5b' },
@@ -190,6 +190,13 @@ export class DebugOverlay {
         if (same(i - 1) || same(i + 1)) { let run = 0; while (same(i - run - 1)) run++; tag += (run % 2) + 1; }
       }
       if (!tag) tag = sec.label;
+      // Long sections run in sub-parts (C1a, C1b...): a tick at each, and the one playing named.
+      const parts = subPartsOf(score, i);
+      if (parts.length > 1) {
+        g.fillStyle = 'rgba(255,255,255,0.55)';
+        for (const pt of parts.slice(1)) g.fillRect(x(pt), y + 2, 1, h - 4);
+        tag += String.fromCharCode(97 + (i === cur ? subPartAt(score, s).sub : 0)) + (i === cur ? '' : '…');
+      }
       if (x1 - x0 > g.measureText(tag).width + 4) { g.fillStyle = '#fff'; g.fillText(tag, x0 + 3, y + h / 2); }
       if (i === cur) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.strokeRect(x0 + 0.75, y + 0.75, x1 - x0 - 2.5, h - 1.5); }
     });
