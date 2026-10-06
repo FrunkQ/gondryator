@@ -1,8 +1,8 @@
 # Visualising the music, explained
 
-This is the human guide to how the Gondryator turns a song into pictures, on every ride: what it listens to, how a note becomes something you see at the right moment, how a song becomes a journey, and how to change any of it by asking. Most of it is told through *"The non-Gondry view :("*, the ride with no vehicle, where you sit still at the centre of a sphere of light and the world around you plays the song, because there the music drives everything. It is not a separate world any more: the disco lives inside the Gondry rides too, taking over their far window on breaks and drops. The rides (the train, the starship, the ghost train) follow the same rules with real scenery, and the later sections cover them: [On the rides, out of the other window](#on-the-rides-out-of-the-other-window), [When does a note hit?](#when-does-a-note-hit) (which follows your gaze, and could one day follow your eyes in a headset) and [Ask for it, don't hunt for a setting](#ask-for-it-dont-hunt-for-a-setting). For the general architecture see [TECHNOLOGY.md](TECHNOLOGY.md); for the code, `src/render/visualiser.ts`, `src/render/spawner.ts` and `src/render/shaders.ts`.
+How the Gondryator turns a song into pictures, on every ride and in every view: what it listens to, how each sound becomes something you see at the right moment, how a song becomes a journey, and how to change any of it by asking. For the general architecture see [TECHNOLOGY.md](TECHNOLOGY.md); for the code, `src/render/visualiser.ts`, `src/render/spawner.ts` and `src/render/shaders.ts`.
 
-Try the non-Gondry view: <https://gondryator.starsystemx.com/?pack=non-gondry>, or `?pack=non-gondry&demo` locally.
+Try it: <https://gondryator.starsystemx.com/>, or `?demo` locally.
 
 ## One instrument, one kind of reaction
 
