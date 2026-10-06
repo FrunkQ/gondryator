@@ -332,9 +332,9 @@ export class World {
       const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
       for (let i = 0; i < N; i++) {
         // Denser near the line, thinning out into the field; a gap for the neighbouring track, and
-        // none over the branch lines' gravel (render/branches.ts), so their rails read clearly.
+        // only the odd tuft over the branch lines' gravel (render/branches.ts), so their rails read clearly.
         let d = 5.9 + Math.pow(rnd(), 1.6) * 16;
-        if (d > 8.3) d += 7.4;
+        if (d > 8.3 && rnd() > 0.12) d += 7.4;
         const z = -d;
         p.set(rnd() * 60, 0, z);
         q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI);
