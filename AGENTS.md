@@ -40,7 +40,7 @@ Alex's rules for everything between opening the page and the train pulling away.
 - **Never block them.** Until the station stop and the "Departing", we are in control, so the rider can always carry on: a song chosen mid-test stops the test with what it has, and a warning after that is a toast, not a pop-up. Slow them down only when the ride truly needs it.
 - **Every wait has an end.** Any pause says what it is waiting for and roughly how long ("Departs in 12s", "Signal stop: about 6s"), from the best estimate we have, even last time's speed on this machine. A wait with no clear end is horrible.
 - **Keep them informed, in the ride's own words,** on the sign or the board rather than in a modal.
-- **Let them choose to wait for better.** Deep listen reads the whole song at the station while the strip shows its progress and time left, and "Depart now" (after two seconds) lets the rider go at once; it then keeps just ahead of the music, easing off so the frames come first.
+- **Let them choose to wait for better.** Deep listen reads the whole song at the station while the strip shows its progress and time left, and "Depart early" (after two seconds) lets the rider go at once; it then keeps just ahead of the music, easing off so the frames come first.
 - **Offer what was switched off.** If something is off by default on their machine (deep listen on a light one), say so and let them start it anyway, and remember the choice.
 
 ## How it works, in one breath

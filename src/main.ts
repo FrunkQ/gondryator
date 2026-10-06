@@ -60,7 +60,7 @@ type Phase = 'landing' | 'title' | 'run' | 'ended';
 
 const MIN_LOOKAHEAD = 10; // seconds the score must be ahead of the playhead before the music starts (at most)
 const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
-/** Seconds into deep listen's station wait before "Depart now" is offered. */
+/** Seconds into deep listen's station wait before "Depart early" is offered. */
 const DEPART_OFFER = 2;
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
@@ -97,7 +97,7 @@ class App {
   signalStop = false;
   /** When everything but deep listen's head start was ready at the station. */
   private readyAt: number | null = null;
-  /** The rider pressed "Depart now" rather than wait for deep listen. */
+  /** The rider pressed "Depart early" rather than wait for deep listen. */
   private departNow = false;
   worker: Worker | null = null;
   analysedSec = 0;
@@ -945,7 +945,7 @@ class App {
       let ready = ahead >= need && (params.has('quick') || (this.p >= this.titleCross + 1.2 && warm && heard));
       // Deep listen at the station: once everything else is ready, the train waits for it to read
       // the whole song with the GPU to itself (so the ride's frames never share it), saying how
-      // far it has got and how long is left; DEPART_OFFER seconds in, "Depart now" lets the rider
+      // far it has got and how long is left; DEPART_OFFER seconds in, "Depart early" lets the rider
       // go at once instead (it then keeps just ahead of the music).
       let dep: string | null = null, deepBar: number | null = null;
       const departBtn = $<HTMLButtonElement>('#depart');
