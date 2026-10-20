@@ -1163,7 +1163,7 @@ class App {
     $('#endcard .lead').textContent = this.world.mode === 'train' ? 'Terminus.' : 'Curtain.';
     // At the end of a train ride, invite people to hear the same song again with no train at all.
     $('#tonon').classList.toggle('hidden', this.pack.id === 'non-gondry');
-    if (!this.playlist) $('#endcard').classList.remove('hidden');
+    if (!this.playlist) { $('#endcard').classList.remove('hidden'); this.pausedMenu('ended'); }
   }
 
   private buildEndStation() {
@@ -1202,17 +1202,24 @@ class App {
     }
   }
 
-  /** Paused mid-ride: the departure board comes back, so you can change course to another song. */
-  private pausedMenu(on: boolean) {
-    if (document.body.classList.contains('paused') === on) return;
-    document.body.classList.toggle('paused', on);
-    $('#drop').classList.toggle('hidden', !on);
+  /**
+   * The one song picker: the departure board's choices (a file, a folder, a tab, the demo) come
+   * back whenever the ride asks what next, paused mid-ride or at the end of the line, so every
+   * new song starts the same way from wherever you are.
+   */
+  private pausedMenu(on: boolean | 'ended') {
+    const mode = on === true ? 'paused' : on || '';
+    if ((document.body.dataset.picker ?? '') === mode) return;
+    document.body.dataset.picker = mode;
+    document.body.classList.toggle('paused', !!mode);
+    $('#drop').classList.toggle('hidden', !mode);
     const lead = $('#drop .lead'), small = $('#drop .small');
-    if (on) {
+    if (mode) {
       lead.dataset.orig ??= lead.textContent ?? '';
       small.dataset.orig ??= small.textContent ?? '';
-      lead.textContent = 'Paused. Change course?';
-      small.textContent = 'Drop or pick another song, a folder or the demo, or press space to ride on.';
+      const tab = $('#listen').hidden ? '' : ', listen along to a tab';
+      lead.textContent = mode === 'ended' ? 'Where next?' : 'Paused. Change course?';
+      small.textContent = `Drop or pick another song, shuffle a folder${tab} or play the demo, or press space to ${mode === 'ended' ? 'ride this one again' : 'ride on'}.`;
     } else {
       if (lead.dataset.orig) lead.textContent = lead.dataset.orig;
       if (small.dataset.orig) small.textContent = small.dataset.orig;
@@ -1330,6 +1337,9 @@ class App {
     $('#listen').addEventListener('click', async () => {
       const l = await ListenAlong.start(this.player.ctx);
       if (typeof l === 'string') { this.toast(l, 4500); return; }
+      // From the pause or the end of a ride, back to the station to wait for the tab's first song.
+      this.pausedMenu(false);
+      if (this.phase !== 'landing') this.resetForNewTrack();
       $('#drop').classList.add('hidden');
       $('#next').classList.remove('hidden');
       // Each song is parsed as soon as it has finished recording, so its ride can start at once.
@@ -1357,7 +1367,6 @@ class App {
       $<HTMLSelectElement>('#pack').value = 'non-gondry';
       this.seek(0);
     });
-    $('#another').addEventListener('click', () => input.click());
     $('#door').addEventListener('click', async e => {
       e.stopPropagation();
       const to = this.pack.id === 'non-gondry' ? 'star-guitar' : 'non-gondry';
