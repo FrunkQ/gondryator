@@ -27,7 +27,7 @@ To stop it, press Ctrl+C in the terminal. To start it again later: `cd gondryato
 
 ### Optional: the full headless check
 
-`npm run smoke` checks Node, builds, and plays the demo in a hidden browser on the train and in the non-Gondry view, reporting progress as it goes. It's for contributors and for checking a change didn't break anything, not a step you need before playing. It renders without a GPU, so it can take a few minutes, and gives up after five minutes per ride (`npm run smoke -- --timeout 900` for longer).
+`npm run smoke` checks Node, builds, and plays the demo in a hidden browser on the train and in the Minterator, reporting progress as it goes. It's for contributors and for checking a change didn't break anything, not a step you need before playing. It renders without a GPU, so it can take a few minutes, and gives up after five minutes per ride (`npm run smoke -- --timeout 900` for longer).
 
 It needs a Chromium. Either install Playwright's once with `npx playwright-core install chromium`, or point it at the Chrome you have:
 

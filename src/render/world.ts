@@ -1228,7 +1228,7 @@ export class World {
    */
   adaptQuality(fps: number, dt: number) {
     if (fps < 45) { this.slowFor += dt; this.fastFor = 0; } else if (fps > 58) { this.fastFor += dt; this.slowFor = 0; } else { this.slowFor = this.fastFor = 0; }
-    // The stage (the non-Gondry view) is one big shader over the whole sky: soft patterns that need
+    // The stage (the Minterator) is one big shader over the whole sky: soft patterns that need
     // no more than one pixel per CSS pixel, so it never goes above 1.
     const max = Math.min(window.devicePixelRatio, this.mode === 'stage' ? 1 : 1.5);
     let next = this.pixelRatio;

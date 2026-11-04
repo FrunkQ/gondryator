@@ -23,7 +23,7 @@ import { makeDemoTrack } from './audio/demo';
 import { applyDelta, emptyScore, gridAt, sampleEnvelope, type Score, type ScoreDelta } from './score/types';
 import { hashFile, loadScore, saveScore } from './score/cache';
 import { parseMidi, scoreToMidi, type MidiImport } from './score/midi';
-import { PACKS, HIDDEN_PACKS } from './packs';
+import { PACKS, findPack } from './packs';
 import type { Pack } from './packs/types';
 import AnalysisWorker from './analysis/worker?worker&inline';
 import { Analyzer } from './analysis/analyzer';
@@ -64,11 +64,14 @@ const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
 const DEPART_OFFER = 2;
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
+/** The ride the URL asks for: ?pack=<id>, or the short forms ?minterator and /minterator (a redirect to it). */
+const packParam = () => params.has('minterator') || /\/minterator\/?$/.test(location.pathname) ? 'minterator' : params.get('pack');
+
 /** Where you look when the ride starts (?yaw=150 overrides it, for testing the far window). */
 const startYaw = (pack: Pack) => params.has('yaw') ? Number(params.get('yaw')) : pack.rig.startYaw ?? 0;
 
 class App {
-  pack: Pack = [...PACKS, ...HIDDEN_PACKS].find(p => p.id === params.get('pack')) ?? PACKS[0];
+  pack: Pack = findPack(packParam()) ?? PACKS[0];
   world!: World;
   rig!: CameraRig;
   /** The pack's spawn mode: pass-by scenery (Spawner) or a cast on a stage (Performer). */
@@ -229,7 +232,7 @@ class App {
 
   /** The words the landing sign uses for the test, in each ride's own language. */
   private dynoWords() {
-    if (this.pack.id === 'non-gondry') return 'Venue sound test';
+    if (this.pack.id === 'minterator') return 'Venue sound test';
     const tpl = this.pack.title?.template;
     return tpl === 'launch-screen' ? 'Test firing rockets' : tpl === 'ghost-gate' ? 'Rattling the chains' : 'Train on the dynamometer';
   }
@@ -299,10 +302,14 @@ class App {
   private async buildWorld(pack: Pack) {
     const prev = this.world;
     this.pack = pack;
-    // The door on the start screen leads to the discothèque, and back out to the trains from it.
-    document.body.classList.toggle('disco', pack.id === 'non-gondry');
-    const sign = document.querySelector('#door .sign');
-    if (sign) sign.textContent = pack.id === 'non-gondry' ? 'To the trains' : 'Discothèque';
+    // The door on the start screen leads into the Minterator, and back out to the fields (with a llama) from it.
+    const mint = pack.id === 'minterator';
+    document.body.classList.toggle('disco', mint);
+    document.title = mint ? 'Minterator' : 'Gondryator';
+    const door = $<HTMLButtonElement>('#door');
+    door.title = mint ? 'Back out to the fields and the trains' : 'Step into the Minterator: a world of light all round you, in honour of Jeff Minter';
+    const sign = door.querySelector('.sign');
+    if (sign) sign.textContent = mint ? 'Back to the fields' : 'Minterator';
     this.world = new World(pack);
     if (prev) this.world.detailCap = prev.detailCap;
     await this.world.init(this.canvas, params.has('webgl'), prev?.renderer);
@@ -341,7 +348,7 @@ class App {
     if (pack.inspiration) {
       const a = document.createElement('a');
       a.href = pack.inspiration.url; a.target = '_blank'; a.rel = 'noopener';
-      a.textContent = `Watch the original ↗`;
+      a.textContent = `${pack.inspiration.label ?? 'Watch the original'} ↗`;
       cr.appendChild(a);
     }
   }
@@ -1162,7 +1169,7 @@ class App {
     if (this.deep) this.deep.riding = false; // (free to finish the cached copy now)
     $('#endcard .lead').textContent = this.world.mode === 'train' ? 'Terminus.' : 'Curtain.';
     // At the end of a train ride, invite people to hear the same song again with no train at all.
-    $('#tonon').classList.toggle('hidden', this.pack.id === 'non-gondry');
+    $('#tonon').classList.toggle('hidden', this.pack.id === 'minterator');
     if (!this.playlist) { $('#endcard').classList.remove('hidden'); this.pausedMenu('ended'); }
   }
 
@@ -1227,7 +1234,7 @@ class App {
   }
 
   async switchPack(id: string) {
-    const pack = [...PACKS, ...HIDDEN_PACKS].find(p => p.id === id);
+    const pack = findPack(id);
     if (!pack || pack === this.pack) return;
     const wasRunning = this.phase === 'run' || this.phase === 'ended';
     const s = this.player.time;
@@ -1363,13 +1370,13 @@ class App {
     $('#deep').addEventListener('click', () => this.toggleDeep());
     $('#depart').addEventListener('click', () => { this.departNow = true; $<HTMLButtonElement>('#depart').hidden = true; });
     $('#tonon').addEventListener('click', async () => {
-      await this.switchPack('non-gondry');
-      $<HTMLSelectElement>('#pack').value = 'non-gondry';
+      await this.switchPack('minterator');
+      $<HTMLSelectElement>('#pack').value = 'minterator';
       this.seek(0);
     });
     $('#door').addEventListener('click', async e => {
       e.stopPropagation();
-      const to = this.pack.id === 'non-gondry' ? 'star-guitar' : 'non-gondry';
+      const to = this.pack.id === 'minterator' ? 'star-guitar' : 'minterator';
       await this.switchPack(to);
       $<HTMLSelectElement>('#pack').value = to;
     });

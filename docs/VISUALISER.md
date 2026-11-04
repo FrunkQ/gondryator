@@ -240,7 +240,7 @@ Ask it to explain first if you are curious; it can read the whole thing faster t
 
 | URL parameter | Does |
 |---|---|
-| `?pack=non-gondry` | open the non-Gondry view |
+| `/minterator`, `?minterator` or `?pack=minterator` | open the Minterator (the old `?pack=non-gondry` still works) |
 | `&demo` | play the generated demo song |
 | `&viz=45,32` | pin those elements (indexes from `ELEMENTS` in `visualiser.ts`) |
 | `&decade=1980` | pin a decade's closer |

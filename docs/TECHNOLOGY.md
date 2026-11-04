@@ -1,6 +1,6 @@
 # How the Gondryator works
 
-This is the plain-English tour of the technology: what happens between dropping a song and riding it, which parts do what, and why it is built this way. The diagrams render on GitHub. For setup and commands see [START.md](START.md); for the detailed reference see [BUILD.md](BUILD.md); for the non-Gondry view see [VISUALISER.md](VISUALISER.md).
+This is the plain-English tour of the technology: what happens between dropping a song and riding it, which parts do what, and why it is built this way. The diagrams render on GitHub. For setup and commands see [START.md](START.md); for the detailed reference see [BUILD.md](BUILD.md); for the Minterator see [VISUALISER.md](VISUALISER.md).
 
 ## The big idea
 
@@ -10,7 +10,7 @@ A normal music visualiser hears the music at the same moment you do, so all it c
 flowchart LR
     A[🎵 Your music file<br/>never leaves your machine] --> B[Listening passes<br/>in background workers]
     B --> C[📜 The score<br/>plain JSON: beats, sections,<br/>events, envelopes]
-    C --> D[Renderers<br/>train, starship, non-Gondry view]
+    C --> D[Renderers<br/>train, starship, Minterator]
     D --> E[🖥️ What you see<br/>each thing arrives on its beat]
     C --> F[(Score cache<br/>IndexedDB)]
     C --> G[MIDI / JSON export]
@@ -156,7 +156,7 @@ flowchart TB
     TL --> SS
 ```
 
-The text lines above it report each pass: the fast parser's speed, the sound pass (`sounds 56× · 12 cues`), deep listen, and, in the non-Gondry view, which elements are on screen, which sounds it is reacting to (`hearing siren, crowd`) and whether the outro has begun.
+The text lines above it report each pass: the fast parser's speed, the sound pass (`sounds 56× · 12 cues`), deep listen, and, in the Minterator, which elements are on screen, which sounds it is reacting to (`hearing siren, crowd`) and whether the outro has begun.
 
 ## Lead time: how far ahead it reads
 
@@ -194,14 +194,14 @@ flowchart TB
     S[(score)] --> T[🚆 Star Guitar train<br/>main window: the homage<br/>other window: invented worlds]
     S --> SH[🚀 Starship<br/>open cockpit, space on one side,<br/>a space reef and a crystal canyon on the other]
     S --> G[🎃 Ghost train<br/>an open fairground cart that climbs and plunges,<br/>hell on one side, Halloween on the other]
-    S --> V[✨ The non-Gondry view<br/>no vehicle: a sphere of light<br/>all round you]
+    S --> V[✨ The Minterator<br/>no vehicle: a sphere of light<br/>all round you]
     V -. breaks and drops, far side only .-> T
     V -. breaks and drops, far side only .-> SH
 ```
 
-The train, the starship and the ghost train are scheduled scenery. The ghost train also moves up and down: its track's height follows the song's sections, plunging on the drop, and a storm (blood rain, lightning on the big hits, the sky throbbing on the kick) runs over both sides. The non-Gondry view is a different kind of show, a director picking effects for each part of the song. It has its own guide: [VISUALISER.md](VISUALISER.md).
+The train, the starship and the ghost train are scheduled scenery. The ghost train also moves up and down: its track's height follows the song's sections, plunging on the drop, and a storm (blood rain, lightning on the big hits, the sky throbbing on the kick) runs over both sides. The Minterator (in honour of Jeff Minter; it was the non-Gondry view) is a different kind of show, a director picking effects for each part of the song. It has its own guide: [VISUALISER.md](VISUALISER.md).
 
-The two shows feed each other. The far window stays the ride (Provence and Cosmos on the train), but on breakdowns and drops **the disco** takes over that whole side: the non-Gondry show's backdrops on the sky and the ground, with the scenery still passing in trippy paint. It never does in the intro or the last stretch (`?side=disco` holds it on). The starship's other side flies through its own invented worlds, a reef adrift in space and a crystal canyon, and the disco takes over there on breaks and drops too. It waits for launch beside a floating screen with a T-minus countdown, and turns up its own rare finds: a derelict, a listening post, a solar sail, a space whale. The main window stays the homage, but now and then it turns up a **rare find**: a windmill, a fairground big wheel, a ruined abbey, an observatory, a glasshouse, a dovecote or a radio mast. These are seeded by the song, so a song always shows its own (`?rare` makes every building one, to look at them). The main window hears the sound pass and the moments too, in ways that stay photographic: animals in the track startle the starlings, an impact or a cheering crowd sends up a firework, and a drop sends up a volley.
+The two shows feed each other. The far window stays the ride (Provence and Cosmos on the train), but on breakdowns and drops **the disco** takes over that whole side: the Minterator's backdrops on the sky and the ground, with the scenery still passing in trippy paint. It never does in the intro or the last stretch (`?side=disco` holds it on). The starship's other side flies through its own invented worlds, a reef adrift in space and a crystal canyon, and the disco takes over there on breaks and drops too. It waits for launch beside a floating screen with a T-minus countdown, and turns up its own rare finds: a derelict, a listening post, a solar sail, a space whale. The main window stays the homage, but now and then it turns up a **rare find**: a windmill, a fairground big wheel, a ruined abbey, an observatory, a glasshouse, a dovecote or a radio mast. These are seeded by the song, so a song always shows its own (`?rare` makes every building one, to look at them). The main window hears the sound pass and the moments too, in ways that stay photographic: animals in the track startle the starlings, an impact or a cheering crowd sends up a firework, and a drop sends up a volley.
 
 ## Around the edges
 

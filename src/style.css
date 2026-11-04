@@ -184,7 +184,7 @@ body.fullscreen #bar, body.fullscreen #credits, body.fullscreen #fork, body.full
 body.fullscreen #endcard, body.fullscreen.running #drop, body.fullscreen .debug, body.fullscreen #tuning, body.fullscreen #frames { display: none !important; }
 body.fullscreen #stage { cursor: none; }
 
-/* The door to the discothèque on the start screen (the non-Gondry view): a dark doorway above the
+/* The door to the Minterator on the start screen: a dark doorway above the
    card whose neon edges pulse at about 125 bpm and wander through the colours. Hover and the door
    swings open on the light inside. */
 #door {
@@ -219,13 +219,17 @@ body.fullscreen #stage { cursor: none; }
 @keyframes door-hue { to { filter: hue-rotate(360deg); } }
 @keyframes door-spin { to { transform: rotate(360deg) scale(1.4); } }
 @keyframes door-flicker { 0%, 100% { opacity: 1; } 71% { opacity: 0.35; } 72% { opacity: 1; } 89% { opacity: 0.6; } 90% { opacity: 1; } }
-/* Leaving the discothèque: the same doorway in daylight colours, no strobe. */
+/* Leaving the Minterator ("Back to the fields"): the same doorway in daylight colours, no strobe, and a llama in the field. */
 body.disco #door { animation: none; }
 body.disco #door .frame { border-color: #e8c86a; animation: none; box-shadow: 0 0 10px rgba(232,200,106,0.5); }
 body.disco #door .sign { color: #f4f1ea; text-shadow: 0 0 6px rgba(232,200,106,0.8); animation: none; }
 body.disco #door .glow { background: linear-gradient(#9fb6cf, #ecdccb 60%, #a8aa68 60%); animation: none; filter: none; }
+/* The llama: hidden behind the door's leaf until the door opens, standing in the field, nodding to the beat. */
+#door .llama { position: absolute; left: 50%; bottom: 4px; width: 36px; height: auto; margin-left: -16px; display: none; transform-origin: 50% 100%; }
+body.disco #door .llama { display: block; animation: llama-nod 0.96s ease-in-out infinite; }
+@keyframes llama-nod { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-1.5px) rotate(-3deg); } }
 @media (max-width: 640px) { #door { right: 10px; } #door .frame { width: 44px; height: 70px; } }
-@media (prefers-reduced-motion: reduce) { #door, #door .frame, #door .glow, #door .sign { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #door, #door .frame, #door .glow, #door .sign, #door .llama { animation: none; } }
 
 /* Listen along: a level meter while the next song records, and plain words if the signal is wrong. */
 #meter {

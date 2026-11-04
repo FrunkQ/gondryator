@@ -61,14 +61,14 @@ src/
               star-guitar.ts  the train (homage to the video)
               starship.ts     an open cockpit in space; ship-other-side.ts its far side, a space reef and a crystal canyon
               halloween.ts    the ghost train: an open fairground cart on a track that rises and falls, hell on one side, every Halloween cliché on the other
-              non-gondry.ts   "the non-Gondry view :(": no vehicle, a 360° visualiser around you
+              minterator.ts   the Minterator (in honour of Jeff Minter): no vehicle, a 360° visualiser around you (/minterator)
               other-side.ts   the train's other window: Provence and Cosmos (the disco takes over on breaks and drops)
               types.ts        what a pack can say: layers, mapping rules, themes, light, fx, window
               views.ts        viewing profiles: out of a side window, or facing forward
               around-the-world.ts  hidden until it gets its twist (?pack=around-the-world)
   render/     world.ts     sky, ground, carriage, stations, render loop, shader warm-up
               spawner.ts   the scheduler: score events → models placed to enter your view on the beat
-              visualiser.ts  the non-Gondry view: a seeded sphere of plasma, flowers, waves and lightning
+              visualiser.ts  the Minterator: a seeded sphere of plasma, flowers, waves and lightning
               otherside.ts the mirrored second window (and the far-side disco takeover; `?side=disco` holds it on)
               models.ts    every model, built from boxes, cylinders and lathes; `T(SURF.x, ...)` picks the surface
                            (helpers in model-kit.ts; the ghost train's in models-spooky.ts and models-fair.ts: a new ride can keep its own file)
@@ -94,7 +94,7 @@ Four analysers build the score in layers, all in the browser, and each swaps its
 | **Sound pass** (`analysis/sounds.ts`) | from the first second, alongside the fast parser | `sounds`: cues for what isn't the music (speech, shout, laugh, sing, crowd, animal, nature, siren, engine, impact, whoosh, tick, beep), each with `t`, `dur`, the classifier's `label` and `score`; and `envelopes.voice` (someone singing or talking, 0..1) |
 | **Deep listen** (`analysis/deep.ts`) | after the fast parse, on machines that can take it | sharper melody, bass and pad notes from a neural transcriber |
 
-A MIDI file of the same song, dropped alongside it, beats all three for the parts it covers. The friendly tour with diagrams is [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md); the guide to visualising the music (the non-Gondry view, note timing on the rides) is [docs/VISUALISER.md](docs/VISUALISER.md). The full field-by-field table is in [Build a visualiser](#build-a-visualiser-reading-the-score) below.
+A MIDI file of the same song, dropped alongside it, beats all three for the parts it covers. The friendly tour with diagrams is [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md); the guide to visualising the music (the Minterator, note timing on the rides) is [docs/VISUALISER.md](docs/VISUALISER.md). The full field-by-field table is in [Build a visualiser](#build-a-visualiser-reading-the-score) below.
 
 ## Your first remix in ten minutes
 
@@ -169,9 +169,9 @@ Keep the golden rule: **everything that moves must land on its beat** (where on 
 
 ## Build a visualiser (reading the score)
 
-Not everything has to be a ride. `src/render/visualiser.ts` is a whole show with no vehicle: you sit still and the world reacts. If you want to make another one, or remix it, this is how the score reads. Every field is in `src/score/types.ts`.
+Not everything has to be a ride. `src/render/visualiser.ts` is the Minterator (named for Jeff Minter, whose light synths did this first; it was "the non-Gondry view :(" until it earned a better name), a whole show with no vehicle: you sit still and the world reacts. It opens at `/minterator`, `?minterator` or `?pack=minterator`. If you want to make another one, or remix it, this is how the score reads. Every field is in `src/score/types.ts`.
 
-| Data | Where | What it feels like | How the non-Gondry view uses it |
+| Data | Where | What it feels like | How the Minterator uses it |
 |---|---|---|---|
 | Kick | `events` with `kind: 'kick'` (also `U.kick`, a 0..1 value that decays after each hit) | the pulse | the whole sky pumps |
 | Snare | `kind: 'snare'` (`U.snare`) | a crack | a lightning strike, or a starburst |
@@ -209,7 +209,7 @@ Rules of thumb:
 
 - **Prerequisites:** Node 22.12 or newer (Vite 8 needs it; `.nvmrc` says 22, Node 24 works too), npm, and a browser with WebGPU or WebGL2 (any recent Chrome, Edge, Firefox or Safari). The headless checks also need a Chromium: `npx playwright-core install chromium`, or set `CHROME` to a Chrome you have (`CHROME=/path/to/chrome npm run smoke`; in PowerShell, `$env:CHROME = 'C:\Program Files\Google\Chrome\Application\chrome.exe'` then `npm run smoke`).
 - `npm install`, then `npm run dev` (open the printed URL, add `?demo` for the generated demo song) or `npm run build`. Use `npm run build:single` for one self-contained HTML file.
-- **`npm run smoke`** checks the prerequisites, builds, and plays the demo headless on the train and in the non-Gondry view, reporting progress every 10 s and failing on any page or console error. Exit code 2 means something is missing on the machine (install it); 1 means the project is broken; 3 means it timed out with no errors (slow software rendering: `-- --timeout 900`, or check by eye). It is for checking changes and CI, not a newcomer's first step.
+- **`npm run smoke`** checks the prerequisites, builds, and plays the demo headless on the train and in the Minterator, reporting progress every 10 s and failing on any page or console error. Exit code 2 means something is missing on the machine (install it); 1 means the project is broken; 3 means it timed out with no errors (slow software rendering: `-- --timeout 900`, or check by eye). It is for checking changes and CI, not a newcomer's first step.
 - `npm run typecheck` before you commit. `shaders.ts` and `fx.ts` are `@ts-nocheck` because TSL typing is loose, so test by running.
 - Screenshots at chosen moments: `npm run build`, then `node tools/e2e.mjs --webgl --virtual --query "start=30" --shots 33 --out shots` (add `--strict` to fail on errors). The `--virtual` flag steps the clock 1/30 s per frame, so software rendering still produces exact frames.
 - **When something fails,** tell the environment from the project: a sandbox refusing a port or a download, a missing browser, or an old Node is the machine; a TypeScript error or a page error in the smoke test is the project.
@@ -252,7 +252,7 @@ what it looks like) so the idea is something you could build this afternoon.
 
 Real prompts that shaped this project:
 
-- "Add a glitterball to the non-Gondry view. It could hold a scene on its own: colours striking it, spinning faster with the energy, swinging in on the drop."
+- "Add a glitterball to the Minterator. It could hold a scene on its own: colours striking it, spinning faster with the energy, swinging in on the drop."
 - "The rainbow palette is overused. Give me palettes of two or three colours that feel like embers, ocean, ice."
 - "Flowers never show up on Star Guitar. Find out why." (It was one wrong coordinate in a shader.)
 - "When the song starts at the station, fill the wait: a platform clock and a departures board that counts down."
@@ -269,7 +269,7 @@ Rides and worlds:
 
 Shows, journeys, drops and outros:
 
-- **A totally new journey** for the non-Gondry view: a song that starts as a pencil sketch and ends in full neon, or one that freezes over and thaws.
+- **A totally new journey** for the Minterator: a song that starts as a pencil sketch and ends in full neon, or one that freezes over and thaws.
 - **Extend the effects that are there now:** give the fireworks a finale, let the twister tie itself in a knot on the drop, make the LED wall spell out the song title.
 - **Epic drops:** the screen shatters like glass, everything holds its breath in black and white for a bar, then the colour comes back all at once.
 - **Crazy outros:** the world folds up like origami, the credits roll as a Star-Wars-style crawl (your own words, not theirs), the train pulls into a station made of the song's waveform.

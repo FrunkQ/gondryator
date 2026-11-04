@@ -327,7 +327,7 @@ export class OrbitRig implements CameraRig {
   timeAtTravel(_x: number) { return -1; }
 }
 
-/** Sitting still at the origin (the non-Gondry view): nothing travels, you only look around. */
+/** Sitting still at the origin (the Minterator): nothing travels, you only look around. */
 export class StaticRig implements CameraRig {
   readonly spec: RigSpec;
   private departAt: number | null = null;

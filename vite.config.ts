@@ -53,6 +53,21 @@ const singleFile = (): Plugin => ({
   },
 });
 
+// The short way in: /minterator opens the Minterator. On the site, public/_redirects does this; here the
+// dev and preview servers do the same, so the URL works everywhere.
+const shortcuts = (): Plugin => {
+  // (A hook that returns something is taken for a post hook, so this one returns nothing.)
+  const redirect = (server: { middlewares: { use(fn: (req: any, res: any, next: () => void) => void): void } }): void => {
+    server.middlewares.use((req, res, next) => {
+      if (/^\/minterator\/?(\?.*)?$/.test(req.url ?? '')) {
+        const q = req.url!.includes('?') ? '&' + req.url!.split('?')[1] : '';
+        res.statusCode = 302; res.setHeader('Location', '/?minterator' + q); res.end();
+      } else next();
+    });
+  };
+  return { name: 'shortcuts', configureServer: redirect, configurePreviewServer: redirect };
+};
+
 // `npm run build` -> dist/ (normal multi-file build)
 // `npm run build:single` -> dist-single/index.html (everything inlined, for sharing as one file)
 export default defineConfig(({ mode }) => ({
@@ -61,7 +76,7 @@ export default defineConfig(({ mode }) => ({
   resolve: { alias: [{ find: /^three$/, replacement: 'three/webgpu' }] },
   worker: { format: 'es' },
   define: { __BUILD__: JSON.stringify(BUILD) },
-  plugins: mode === 'single' ? [singleFile(), notices] : [notices],
+  plugins: mode === 'single' ? [singleFile(), notices, shortcuts()] : [notices, shortcuts()],
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist',
     target: 'es2022',

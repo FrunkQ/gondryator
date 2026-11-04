@@ -1,0 +1,3 @@
+# Short ways in (Cloudflare static assets reads this file; the dev server does the same in vite.config.ts).
+/minterator   /?minterator   302
+/minterator/  /?minterator   302

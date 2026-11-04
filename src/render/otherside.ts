@@ -1,7 +1,7 @@
 // The other window. A second pass-by spawner, mirrored to the far side of the carriage, plays the
 // same score into invented worlds that alternate by section (see packs/other-side.ts). When the
 // world is space, a starfield dissolves in over the real sky on that side, with a floor of stars.
-// On breakdowns and drops the disco takes over: the non-Gondry view's backdrops (render/visualiser.ts)
+// On breakdowns and drops the disco takes over: the Minterator's backdrops (render/visualiser.ts)
 // fill that side of the sky and the floor, on the same score, while the scenery keeps passing in
 // trippy paint. The intro and the last stretch stay the ride itself.
 // Only ever on the far side: the main window never sees any of it.
@@ -73,7 +73,7 @@ export class OtherSide {
     this.disco = this.makeDisco(score, camera);
   }
 
-  /** The disco: a non-Gondry show on the far half of the sky (and a floor wearing it, on the train). */
+  /** The disco: a Minterator show on the far half of the sky (and a floor wearing it, on the train). */
   private makeDisco(score: Score, camera: THREE.PerspectiveCamera) {
     const v = new Visualiser(this.pack, score, camera, { reveal: this.discoReveal });
     this.group.add(v.group);

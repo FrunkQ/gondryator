@@ -1,5 +1,5 @@
 // Smoke test from a fresh clone: checks what you need, builds, then plays the generated demo song
-// on the train and in the non-Gondry view in a headless browser, and fails on any error.
+// on the train and in the Minterator in a headless browser, and fails on any error.
 //   npm run smoke            (after npm install)
 //   npm run smoke -- --quick (the train only)   npm run smoke -- --timeout 600 (seconds per ride)
 // Exit codes: 0 fine, 1 the project is broken, 2 something is missing on this machine (not the
@@ -44,7 +44,7 @@ const build = spawnSync('npm', ['run', 'build'], { stdio: 'inherit', shell: proc
 if (build.status !== 0) fail('the build failed (see the TypeScript or Vite errors above).');
 
 // 3. Play the generated demo song.
-const rides = quick ? [['train', '']] : [['train', ''], ['non-Gondry view', 'pack=non-gondry']];
+const rides = quick ? [['train', '']] : [['train', ''], ['Minterator', 'pack=minterator']];
 for (const [name, q] of rides) {
   step(`Playing the generated demo on the ${name} (software rendering: this can take a few minutes; giving up after ${perRide} s)`);
   const r = spawnSync(process.execPath, ['tools/e2e.mjs', '--webgl', '--virtual', '--nodebug', '--strict', '--w', '320', '--h', '180',

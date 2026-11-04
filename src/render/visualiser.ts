@@ -1,4 +1,4 @@
-// The non-Gondry view :( -- no train, no window, no travel. You sit still at the centre of a
+// The Minterator (once the non-Gondry view :( ) -- no train, no window, no travel. You sit still at the centre of a
 // sphere of light and every kind of data in the score drives something different:
 //
 //   melody notes      flowers that splash open at their pitch (higher = higher up), coloured by
@@ -1552,7 +1552,7 @@ export class Visualiser implements ShowDriver {
     c.width = 1024; c.height = 576;
     this.cardCanvas = c;
     const plain = kind === 'landing' && info.name === 'Gondryator';
-    this.cardText = { name: plain ? 'The non-Gondry view :(' : info.name, line2: plain ? 'Drop a music file' : info.line2, status: kind === 'title' ? 'Tuning in' : '' };
+    this.cardText = { name: plain ? 'The Minterator' : info.name, line2: plain ? 'Drop a music file' : info.line2, status: kind === 'title' ? 'Tuning in' : '' };
     this.cardProgress = null;
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;

@@ -48,7 +48,7 @@ const two = (x: Vec3, y: Vec3): [Vec3, Vec3, Vec3, Vec3] => [
  * Cosine palettes (Inigo Quilez): colour = a + b * cos(2pi * (c * t + d)). Mostly two- and
  * three-colour harmonies (c at 0.5 sweeps half the hue circle, not all of it): a full rainbow on
  * every scene reads as one look. The rainbow is kept, as one of many. Packs pick theirs by name
- * (pack.palettes); the non-Gondry view uses them all.
+ * (pack.palettes); the Minterator uses them all.
  */
 export const PALETTES: Record<string, [Vec3, Vec3, Vec3, Vec3]> = {
   embers: [[0.5, 0.25, 0.15], [0.5, 0.3, 0.15], [0.5, 0.5, 0.5], [0, 0.1, 0.2]],
@@ -458,7 +458,7 @@ export function makeConsoleMaterial(): THREE.MeshStandardNodeMaterial {
 }
 
 /**
- * The non-Gondry view's sky: a whole sphere of classic 2D effects in angle space (azimuth,
+ * The Minterator's sky: a whole sphere of classic 2D effects in angle space (azimuth,
  * elevation), each fed by a different stream of the score. `V` holds the scene's uniforms (see
  * render/visualiser.ts, which writes them every frame):
  *   palette a, b, c, d   cosine palette of the current scene

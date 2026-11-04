@@ -27,9 +27,9 @@
         <button id="demo" class="ghost">Play a generated demo</button>
       </div>
       <input id="dir" type="file" webkitdirectory multiple hidden />
-      <button id="door" title="Step into the discothèque: the non-Gondry view, a world of light all round you">
-        <span class="sign">Discothèque</span>
-        <span class="frame"><span class="glow"></span><span class="leaf"><span class="knob"></span></span></span>
+      <button id="door" title="Step into the Minterator: a world of light all round you, in honour of Jeff Minter">
+        <span class="sign">Minterator</span>
+        <span class="frame"><span class="glow"></span><!-- The llama in the field, seen from inside the Minterator when the door swings open. --><svg class="llama" viewBox="0 0 40 52" aria-hidden="true"><g fill="#f6ecd8" stroke="#8a6a4a" stroke-width="1.2" stroke-linejoin="round"><path d="M9 30 q-3 10 0 18 h3 l2-8 h8 l2 8 h3 q3-8 0-18 q-2-5 -9-5 t-9 5z"/><path d="M24 27 l2-13 q1-5 6-4 l1 3 h3 q3 0 3 4 l-3 2 q-1 6 -7 6 l-1 2z"/><path d="M30 9 l-2-6 l3 3z M36 10 l3-5 l-1 6z"/></g><circle cx="34" cy="13" r="1" fill="#2a1a10"/><path d="M38 17 q-2 1 -4 0" fill="none" stroke="#2a1a10" stroke-width="1"/><path d="M19 28 q1 2 0 3" fill="none" stroke="#e0b8c8" stroke-width="2" stroke-linecap="round"/><circle cx="13" cy="33" r="1.4" fill="#ff8fd0"/><circle cx="22" cy="31" r="1.2" fill="#8fd0ff"/></svg><span class="leaf"><span class="knob"></span></span></span>
       </button>
       <input id="file" type="file" accept="audio/*,.mid,.midi,.flac,.m4a" multiple hidden />
     </div>
@@ -37,6 +37,13 @@
       // Decide before the first paint whether "Listen along" shows (same test as audio/listen.ts),
       // so the card does not grow under the rider's first click once the scripts arrive.
       if (typeof navigator.mediaDevices?.getDisplayMedia === 'function' && !/Android|iPhone|iPad/i.test(navigator.userAgent)) document.getElementById('listen').hidden = false;
+      // Opened as the Minterator (?minterator, /minterator or ?pack=minterator): say so on the board at once.
+      if (/[?&](minterator|pack=(minterator|non-gondry))(&|$)/.test(location.search) || /\/minterator\/?$/.test(location.pathname)) {
+        document.title = 'Minterator';
+        document.body.classList.add('disco');
+        document.querySelector('#boot .board b').textContent = 'MINTERATOR';
+        document.querySelector('#boot .strip').innerHTML = 'VENUE · <span>Opening the doors</span>';
+      }
     </script>
 
     <div id="fork" class="ui">
@@ -63,7 +70,7 @@
       <p class="small">Free, open source and public domain. <a href="https://github.com/FrunkQ/gondryator" target="_blank" rel="noopener">Grab it on GitHub</a>, remaster it in your favourite AI, and <a href="https://discord.gg/xhHcDVfDwQ" target="_blank" rel="noopener">show us on Discord</a>.</p>
       <div class="row">
         <button id="again">Ride again</button>
-        <button id="tonon" class="hidden" title="The same song, with no train: a world of light all round you">Now sit still: the non-Gondry view :(</button>
+        <button id="tonon" class="hidden" title="The same song, with no train: a world of light all round you, in honour of Jeff Minter">Now sit still: the Minterator</button>
       </div>
     </div>
 

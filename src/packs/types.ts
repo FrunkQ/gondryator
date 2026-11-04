@@ -182,7 +182,8 @@ export interface Pack {
   name: string;
   credits: string;
   /** The music video this pack pays homage to (official upload). */
-  inspiration?: { title: string; url: string };
+  /** What the ride bows to, linked from the credits; `label` replaces the default "Watch the original". */
+  inspiration?: { title: string; url: string; label?: string };
   viewpoint: 'fixed-window' | 'wraparound' | 'cockpit';
   rig: RigSpec;
   /** pass-by: scenery scheduled past a window; perform: a cast on a stage; visualise: a 360° abstract world (render/visualiser.ts). */
