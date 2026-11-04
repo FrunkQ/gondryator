@@ -1,0 +1,31 @@
+{
+  "name": "Minterator",
+  "short_name": "Minterator",
+  "id": "./?minterator",
+  "description": "A music visualiser in honour of Jeff Minter: no train, no window, a world of light all round you, keeping time with your own songs.",
+  "start_url": "./?minterator",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#0a0514",
+  "theme_color": "#0a0514",
+  "categories": ["music", "entertainment"],
+  "shortcuts": [
+    { "name": "Gondryator", "description": "Back to the fields: the train, the starship and the ghost train", "url": "./?pack=star-guitar" }
+  ],
+  "icons": [
+    { "src": "icon-minterator-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-minterator-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-minterator-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-minterator.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./?minterator",
+      "accept": {
+        "audio/*": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
+        "audio/midi": [".mid", ".midi"]
+      }
+    }
+  ]
+}

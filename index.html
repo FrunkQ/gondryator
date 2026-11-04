@@ -37,12 +37,19 @@
       // Decide before the first paint whether "Listen along" shows (same test as audio/listen.ts),
       // so the card does not grow under the rider's first click once the scripts arrive.
       if (typeof navigator.mediaDevices?.getDisplayMedia === 'function' && !/Android|iPhone|iPad/i.test(navigator.userAgent)) document.getElementById('listen').hidden = false;
-      // Opened as the Minterator (?minterator, /minterator or ?pack=minterator): say so on the board at once.
-      if (/[?&](minterator|pack=(minterator|non-gondry))(&|$)/.test(location.search) || /\/minterator\/?$/.test(location.pathname)) {
+      // Opened as the Minterator (?minterator, /minterator, a minterator.* host, ?pack=minterator, or no ride
+      // named and the Minterator was the last ride chosen): say so on the board at once, and wear its icon.
+      // (The same rule is packParam() in src/main.ts; keep the two together.)
+      var named = /[?&](minterator|pack=[^&]+)(&|$)/.test(location.search) || /\/minterator\/?$/.test(location.pathname) || /^minterator\./.test(location.hostname);
+      var remembered = ''; try { remembered = localStorage.getItem('gondryator.pack') || ''; } catch (e) {}
+      if (/[?&](minterator|pack=(minterator|non-gondry))(&|$)/.test(location.search) || /\/minterator\/?$/.test(location.pathname) || /^minterator\./.test(location.hostname) || (!named && remembered === 'minterator')) {
         document.title = 'Minterator';
         document.body.classList.add('disco');
         document.querySelector('#boot .board b').textContent = 'MINTERATOR';
         document.querySelector('#boot .strip').innerHTML = 'VENUE · <span>Opening the doors</span>';
+        document.querySelector('link[rel="icon"]').href = './icon-minterator.svg';
+        document.querySelector('link[rel="apple-touch-icon"]').href = './apple-touch-icon-minterator.png';
+        document.querySelector('meta[name="theme-color"]').content = '#0a0514';
       }
     </script>
 

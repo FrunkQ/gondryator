@@ -64,8 +64,19 @@ const GUARD_LOOKAHEAD = 4; // below this, stop at a signal and wait
 const DEPART_OFFER = 2;
 const RUN_IN = 4; // seconds of acceleration between the title block and the first note
 
-/** The ride the URL asks for: ?pack=<id>, or the short forms ?minterator and /minterator (a redirect to it). */
-const packParam = () => params.has('minterator') || /\/minterator\/?$/.test(location.pathname) ? 'minterator' : params.get('pack');
+/**
+ * The ride the URL asks for: ?pack=<id>; the Minterator's short forms ?minterator and /minterator (a
+ * redirect to it) and a minterator.* host (the same site under its own name); or, when no ride is
+ * named, the last ride chosen in the app (so an installed app opens where you left it). The boot
+ * board in index.html follows the same rule; keep the two together.
+ */
+const packParam = () => {
+  if (params.has('minterator') || /\/minterator\/?$/.test(location.pathname) || /^minterator\./.test(location.hostname)) return 'minterator';
+  if (params.has('pack')) return params.get('pack');
+  try { return localStorage.getItem('gondryator.pack'); } catch { return null; }
+};
+/** Remembers a ride chosen in the app (the door, the menu, the end card), for next time. */
+function rememberPack(id: string) { try { localStorage.setItem('gondryator.pack', id); } catch { /* private window */ } }
 
 /** Where you look when the ride starts (?yaw=150 overrides it, for testing the far window). */
 const startYaw = (pack: Pack) => params.has('yaw') ? Number(params.get('yaw')) : pack.rig.startYaw ?? 0;
@@ -306,6 +317,11 @@ class App {
     const mint = pack.id === 'minterator';
     document.body.classList.toggle('disco', mint);
     document.title = mint ? 'Minterator' : 'Gondryator';
+    // The tab icon, the install offer and its manifest follow the door too (the browser may or may
+    // not re-read a swapped manifest; opening the Minterator by its own URL is the sure way to install it).
+    document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.setAttribute('href', mint ? './icon-minterator.svg' : './icon.svg');
+    document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.setAttribute('href', mint ? './minterator.webmanifest' : './manifest.webmanifest');
+    $('#install').title = `Install the ${mint ? 'Minterator' : 'Gondryator'} as an app: its own window, works offline, opens music files`;
     const door = $<HTMLButtonElement>('#door');
     door.title = mint ? 'Back out to the fields and the trains' : 'Step into the Minterator: a world of light all round you, in honour of Jeff Minter';
     const sign = door.querySelector('.sign');
@@ -1236,6 +1252,7 @@ class App {
   async switchPack(id: string) {
     const pack = findPack(id);
     if (!pack || pack === this.pack) return;
+    if (PACKS.includes(pack)) rememberPack(pack.id);
     const wasRunning = this.phase === 'run' || this.phase === 'ended';
     const s = this.player.time;
     this.world.dispose();
@@ -1536,15 +1553,18 @@ const started = app.start().catch(e => {
 installable(app, started);
 
 /**
- * Install as an app (a PWA): the manifest and service worker live in public/. Skipped in the
+ * Install as an app (a PWA): the manifests and service worker live in public/. Skipped in the
  * single-file build, which has nowhere to serve them from. Once installed, music files can be
  * opened with the Gondryator straight from the desktop (file_handlers in the manifest).
+ * The Minterator is its own app, with its own manifest, name and llama icon: opened as the
+ * Minterator, Install installs that, so people install whichever one they like.
  */
 function installable(app: App, started: Promise<unknown>) {
   if (import.meta.env.MODE === 'single' || !/^https?:$/.test(location.protocol)) return;
+  const mint = app.pack.id === 'minterator';
   const link = document.createElement('link');
   link.rel = 'manifest';
-  link.href = './manifest.webmanifest';
+  link.href = mint ? './minterator.webmanifest' : './manifest.webmanifest';
   document.head.appendChild(link);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(e => console.warn('service worker', e));
   // The browser offers installing when it is ready; show a quiet button for it.

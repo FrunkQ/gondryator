@@ -5,7 +5,7 @@
 const CACHE = 'gondryator-v1';
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', './manifest.webmanifest', './icon-192.png'])).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', './manifest.webmanifest', './minterator.webmanifest', './icon-192.png', './icon-minterator-192.png'])).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
